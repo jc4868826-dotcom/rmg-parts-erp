@@ -5,7 +5,6 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const { initDB } = require('../config/database');
-initDB();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -87,15 +86,22 @@ app.use((err, req, res, next) => {
 });
 
 // ─── Start ──────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`
+initDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`
   ╔══════════════════════════════════════╗
   ║  RMG Auto Parts — API               ║
   ║  Puerto: ${PORT}                        ║
   ║  Entorno: ${process.env.NODE_ENV || 'development'}             ║
-  ║  DB: SQLite (better-sqlite3)         ║
+  ║  DB: SQLite (sql.js)                 ║
   ╚══════════════════════════════════════╝
-  `);
-});
+      `);
+    });
+  })
+  .catch(err => {
+    console.error('Error iniciando DB:', err);
+    process.exit(1);
+  });
 
 module.exports = app;

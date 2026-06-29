@@ -1,4 +1,4 @@
-const Database = require('better-sqlite3')
+const initSqlJs = require('sql.js')
 const path = require('path')
 const fs = require('fs')
 const { v4: uuidv4 } = require('uuid')
@@ -11,10 +11,94 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true })
 }
 
-const db = new Database(DB_PATH)
-db.pragma('journal_mode = WAL')
-db.pragma('foreign_keys = ON')
+// ─────────────────────────────────────────────────────────────────────────────
+// Wrapper de compatibilidad: expone la misma API síncrona que better-sqlite3
+// usando sql.js (WASM, in-memory) con persistencia manual en disco.
+// ─────────────────────────────────────────────────────────────────────────────
+class SQLiteWrapper {
+  constructor() {
+    this._db = null
+    this._inTx = false
+  }
 
+  _save() {
+    if (this._inTx) return
+    fs.writeFileSync(DB_PATH, Buffer.from(this._db.export()))
+  }
+
+  pragma(str) {
+    if (/journal_mode/i.test(str)) return  // WAL no aplica a sql.js (in-memory)
+    this._db.run(`PRAGMA ${str}`)
+  }
+
+  // Ejecuta SQL multi-statement sin parámetros (DDL, schema)
+  exec(sql) {
+    this._db.run(sql)
+    this._save()
+  }
+
+  // Prepara un statement y devuelve { all, get, run } — idéntico a better-sqlite3
+  prepare(sql) {
+    const w = this
+    return {
+      all(...params) {
+        const stmt = w._db.prepare(sql)
+        try {
+          if (params.length) stmt.bind(params)
+          const rows = []
+          while (stmt.step()) rows.push(stmt.getAsObject())
+          return rows
+        } finally {
+          stmt.free()
+        }
+      },
+      get(...params) {
+        const stmt = w._db.prepare(sql)
+        try {
+          if (params.length) stmt.bind(params)
+          return stmt.step() ? stmt.getAsObject() : undefined
+        } finally {
+          stmt.free()
+        }
+      },
+      run(...params) {
+        const stmt = w._db.prepare(sql)
+        try {
+          if (params.length) stmt.bind(params)
+          stmt.step()
+        } finally {
+          stmt.free()
+        }
+        w._save()
+        return { changes: w._db.getRowsModified() }
+      },
+    }
+  }
+
+  // Envuelve una función en una transacción atómica — guarda en disco al commit
+  transaction(fn) {
+    const w = this
+    return function (...args) {
+      w._inTx = true
+      w._db.run('BEGIN TRANSACTION')
+      try {
+        const result = fn(...args)
+        w._db.run('COMMIT')
+        w._inTx = false
+        w._save()
+        return result
+      } catch (e) {
+        try { w._db.run('ROLLBACK') } catch (_) {}
+        w._inTx = false
+        throw e
+      }
+    }
+  }
+}
+
+const db = new SQLiteWrapper()
+
+// ─── Schema ───────────────────────────────────────────────────────────────────
 function initSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS usuarios (
@@ -29,7 +113,6 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS clientes (
       id TEXT PRIMARY KEY,
       razon_social TEXT NOT NULL,
@@ -54,7 +137,6 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS productos (
       id TEXT PRIMARY KEY,
       codigo TEXT UNIQUE NOT NULL,
@@ -76,7 +158,6 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS cotizaciones (
       id TEXT PRIMARY KEY,
       numero TEXT UNIQUE NOT NULL,
@@ -99,7 +180,6 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS cotizacion_items (
       id TEXT PRIMARY KEY,
       cotizacion_id TEXT REFERENCES cotizaciones(id) ON DELETE CASCADE,
@@ -111,7 +191,6 @@ function initSchema() {
       subtotal REAL,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS pedidos (
       id TEXT PRIMARY KEY,
       numero TEXT UNIQUE NOT NULL,
@@ -133,7 +212,6 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS actividades_pipeline (
       id TEXT PRIMARY KEY,
       cliente_id TEXT REFERENCES clientes(id) ON DELETE CASCADE,
@@ -145,7 +223,6 @@ function initSchema() {
       usuario_id TEXT REFERENCES usuarios(id),
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS movimientos_stock (
       id TEXT PRIMARY KEY,
       producto_id TEXT,
@@ -160,7 +237,6 @@ function initSchema() {
       usuario_id TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS conversaciones_whatsapp (
       id TEXT PRIMARY KEY,
       telefono TEXT UNIQUE NOT NULL,
@@ -170,7 +246,6 @@ function initSchema() {
       sin_leer INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS mensajes_whatsapp (
       id TEXT PRIMARY KEY,
       wa_message_id TEXT UNIQUE,
@@ -183,7 +258,6 @@ function initSchema() {
       estado TEXT DEFAULT 'enviado',
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS proveedores (
       id TEXT PRIMARY KEY,
       razon_social TEXT NOT NULL,
@@ -201,7 +275,6 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS ordenes_compra (
       id TEXT PRIMARY KEY,
       numero TEXT UNIQUE NOT NULL,
@@ -218,7 +291,6 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS oc_items (
       id TEXT PRIMARY KEY,
       oc_id TEXT REFERENCES ordenes_compra(id) ON DELETE CASCADE,
@@ -228,7 +300,6 @@ function initSchema() {
       precio_unitario REAL NOT NULL,
       subtotal REAL
     );
-
     CREATE TABLE IF NOT EXISTS facturas_cxc (
       id TEXT PRIMARY KEY,
       numero TEXT UNIQUE NOT NULL,
@@ -244,7 +315,6 @@ function initSchema() {
       notas TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS facturas_cxp (
       id TEXT PRIMARY KEY,
       numero TEXT UNIQUE NOT NULL,
@@ -259,7 +329,6 @@ function initSchema() {
       fecha_pago TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE INDEX IF NOT EXISTS idx_clientes_segmento ON clientes(segmento);
     CREATE INDEX IF NOT EXISTS idx_clientes_etapa ON clientes(etapa_pipeline);
     CREATE INDEX IF NOT EXISTS idx_productos_codigo ON productos(codigo);
@@ -273,28 +342,23 @@ function initSchema() {
   `)
 }
 
+// ─── Seed ─────────────────────────────────────────────────────────────────────
 function seedData() {
-  const { n } = db.prepare('SELECT COUNT(*) as n FROM productos').get()
-  if (n > 0) return
+  const row = db.prepare('SELECT COUNT(*) as n FROM productos').get()
+  if (row && row.n > 0) return
 
   const seed = db.transaction(() => {
-    // ── Usuario admin ──────────────────────────────────────────
     db.prepare(`INSERT INTO usuarios (id,email,password_hash,nombre,telefono,rol) VALUES (?,?,?,?,?,?)`).run(
       'a1b2c3d4-0000-0000-0000-000000000001',
       'admin@rmgautoparts.cl',
       bcrypt.hashSync('rmg2026', 10),
-      'Gerente RMG',
-      '+56 9 1234 5678',
-      'admin'
+      'Gerente RMG', '+56 9 1234 5678', 'admin'
     )
 
-    // ── Clientes ───────────────────────────────────────────────
     const insCliente = db.prepare(`INSERT INTO clientes
       (id,razon_social,rut,segmento,etapa_pipeline,contacto_nombre,contacto_cargo,
        telefono,whatsapp,email,direccion,comuna,credito_activo,dias_credito,
-       limite_credito,saldo_pendiente,created_at) VALUES
-      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-
+       limite_credito,saldo_pendiente,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     const clientes = [
       ['c001','Taller Hermanos Díaz','76.543.210-1','taller','cliente','Carlos Díaz','Jefe de taller','+56 9 8765 4321','+56 9 8765 4321','taller.diaz@gmail.com','Av. Matta 1234','Santiago Centro',1,30,2000000,487000,'2026-01-15T10:00:00Z'],
       ['c002','Transportes Norte S.A.','96.100.200-K','flota','cliente','Rodrigo Muñoz','Jefe de mantención','+56 2 2345 6789','+56 9 7654 3210','mantención@transnorte.cl','Av. Concón 567','Quilicura',1,30,10000000,1240000,'2026-01-20T08:00:00Z'],
@@ -307,12 +371,10 @@ function seedData() {
     ]
     for (const c of clientes) insCliente.run(...c)
 
-    // ── Productos ──────────────────────────────────────────────
     const insProducto = db.prepare(`INSERT INTO productos
       (id,codigo,marca,descripcion,categoria,unidad,precio_costo,precio_b2b_base,
        precio_taller,precio_flota,precio_concesionario,precio_construccion,stock_actual,stock_minimo) VALUES
       (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-
     const productos = [
       [uuidv4(),'352410','YOKO G&B','BATERIA YOKO KR 35AMP NS40ZL','bateria','unidad',31311,42000,42000,40000,null,null,370,30],
       [uuidv4(),'352420','YOKO G&B','BATERIA YOKO KR 55AMP 55559','bateria','unidad',48450,64000,64000,61000,null,null,408,40],
@@ -350,13 +412,11 @@ function seedData() {
     ]
     for (const p of productos) insProducto.run(...p)
 
-    // ── Cotizaciones ───────────────────────────────────────────
     const insCot = db.prepare(`INSERT INTO cotizaciones
       (id,numero,cliente_id,cliente,estado,neto,iva,total,condicion_pago,canal_origen,created_at,aprobada_at) VALUES
       (?,?,?,?,?,?,?,?,?,?,?,?)`)
     const insItem = db.prepare(`INSERT INTO cotizacion_items
       (id,cotizacion_id,codigo,descripcion,cantidad,precio_unitario,subtotal) VALUES (?,?,?,?,?,?,?)`)
-
     const cots = [
       ['cot001','COT-2026-001','c001','Taller Hermanos Díaz','aprobada',409244,77757,487001,'Crédito 30 días','whatsapp','2026-06-01T10:00:00Z','2026-06-02T14:00:00Z'],
       ['cot002','COT-2026-002','c002','Transportes Norte S.A.','enviada',1042017,197983,1240000,'Crédito 30 días','presencial','2026-06-10T09:00:00Z',null],
@@ -365,7 +425,6 @@ function seedData() {
       ['cot005','COT-2026-005','c004','Constructora Mediterráneo','enviada',630252,119748,750000,'Contado','presencial','2026-06-18T11:00:00Z',null],
     ]
     for (const c of cots) insCot.run(...c)
-
     const cotItems = [
       ['cot001','352420','BATERIA YOKO KR 55AMP 55559',4,64000,256000],
       ['cot001','7000049','AUSTER MAXTECH PRO RX 5W30 4LT',10,15500,155000],
@@ -381,7 +440,6 @@ function seedData() {
       insItem.run(uuidv4(), cid, codigo, desc, cant, pu, sub)
     }
 
-    // ── Pedidos ────────────────────────────────────────────────
     const insPed = db.prepare(`INSERT INTO pedidos
       (id,numero,cotizacion_id,cliente_id,cliente,estado,neto,iva,total,condicion_pago,
        fecha_entrega_programada,fecha_entrega_real,guia_despacho,created_at) VALUES
@@ -390,7 +448,6 @@ function seedData() {
     insPed.run('ped002','PED-2026-002','cot002','c002','Transportes Norte S.A.','en_preparacion',1042017,197983,1240000,'Crédito 30 días','2026-06-27',null,null,'2026-06-10T14:00:00Z')
     insPed.run('ped003','PED-2026-003','cot004','c006','MetroMov Buses S.A.','despachado',1764706,335294,2100000,'Crédito 30 días','2026-06-25',null,'GD-002','2026-05-22T10:30:00Z')
 
-    // ── Movimientos de stock ───────────────────────────────────
     const insMov = db.prepare(`INSERT INTO movimientos_stock
       (id,producto_id,codigo,descripcion,tipo,cantidad,stock_anterior,stock_nuevo,motivo,referencia,created_at) VALUES
       (?,?,?,?,?,?,?,?,?,?,?)`)
@@ -405,16 +462,13 @@ function seedData() {
     ]
     for (const m of movs) insMov.run(...m)
 
-    // ── Actividades pipeline ───────────────────────────────────
     const insAct = db.prepare(`INSERT INTO actividades_pipeline
-      (id,cliente_id,tipo,descripcion,resultado,proxima_accion,fecha_proxima,created_at) VALUES
-      (?,?,?,?,?,?,?,?)`)
+      (id,cliente_id,tipo,descripcion,resultado,proxima_accion,fecha_proxima,created_at) VALUES (?,?,?,?,?,?,?,?)`)
     insAct.run('a1','c001','cotizacion','Cotización COT-2026-001 aprobada por $487.001','positivo',null,null,'2026-06-02T14:00:00Z')
     insAct.run('a2','c001','whatsapp','Pedido confirmado por WhatsApp','positivo',null,null,'2026-06-02T14:30:00Z')
     insAct.run('a3','c001','visita','Visita a taller — negociación de volumen mensual','en seguimiento','Enviar propuesta mensual','2026-07-01','2026-05-15T10:00:00Z')
     insAct.run('a4','c002','llamada','Llamada con jefe de mantención — cotización en proceso','enviada',null,null,'2026-06-10T09:30:00Z')
 
-    // ── Proveedores ────────────────────────────────────────────
     const insProv = db.prepare(`INSERT INTO proveedores
       (id,razon_social,rut,contacto,cargo,telefono,email,categorias,plazo_pago,condicion,banco,cuenta,created_at) VALUES
       (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -423,17 +477,15 @@ function seedData() {
     insProv.run('prov003','KUMHO Tire Chile S.A.','96.400.300-9','James Kim','Country Manager','+56 2 2890 3333','jkim@kumho.cl','["neumatico"]',30,'Crédito 30 días','BCI','222-3456-78','2026-01-15T08:00:00Z')
     insProv.run('prov004','Double Star Trading Chile Ltda.','77.500.400-2','Pedro Castillo','Representante','+56 9 8765 4444','pcastillo@dstar.cl','["neumatico"]',60,'Crédito 60 días','Banco Estado','333-4567-89','2026-01-20T08:00:00Z')
 
-    // ── Órdenes de compra ──────────────────────────────────────
     const insOC = db.prepare(`INSERT INTO ordenes_compra
       (id,numero,proveedor_id,proveedor,estado,fecha_emision,fecha_entrega,neto,iva,total,pagada,factura_proveedor) VALUES
       (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    const insOCItem = db.prepare(`INSERT INTO oc_items (id,oc_id,codigo,descripcion,cantidad,precio_unitario,subtotal) VALUES (?,?,?,?,?,?,?)`)
-
+    const insOCItem = db.prepare(`INSERT INTO oc_items
+      (id,oc_id,codigo,descripcion,cantidad,precio_unitario,subtotal) VALUES (?,?,?,?,?,?,?)`)
     insOC.run('oc001','OC-2026-001','prov001','Distribuidora YOKO Chile S.A.','recibida','2026-05-15','2026-05-22',3943380,749242,4692622,1,'FP-2026-12345')
     insOC.run('oc002','OC-2026-002','prov002','AUSTER Chile Lubricantes S.A.','recibida','2026-05-20','2026-05-27',4910100,932919,5843019,1,'FP-2026-67890')
     insOC.run('oc003','OC-2026-003','prov003','KUMHO Tire Chile S.A.','enviada','2026-06-20','2026-07-05',3684147,699988,4384135,0,null)
     insOC.run('oc004','OC-2026-004','prov001','Distribuidora YOKO Chile S.A.','borrador','2026-06-27',null,1928156,366350,2294506,0,null)
-
     const ocItems = [
       ['oc001','352420','BATERIA YOKO KR 55AMP 55559',50,48450,2422500],
       ['oc001','352430','BATERIA YOKO KR 70AMP N70',20,61769,1235380],
@@ -451,7 +503,6 @@ function seedData() {
       insOCItem.run(uuidv4(), oid, codigo, desc, cant, pu, sub)
     }
 
-    // ── Facturas CxC ───────────────────────────────────────────
     const insCxC = db.prepare(`INSERT INTO facturas_cxc
       (id,numero,pedido_id,cliente_id,cliente,segmento,monto,fecha_emision,fecha_vencimiento,estado,notas) VALUES
       (?,?,?,?,?,?,?,?,?,?,?)`)
@@ -462,7 +513,6 @@ function seedData() {
     insCxC.run('fac005','F-2031','ped002','c002','Transportes Norte S.A.','flota',1240000,'2026-06-02','2026-07-02','al_dia','')
     insCxC.run('fac006','F-2033',null,'c004','Constructora Mediterráneo','construccion',340000,'2026-05-29','2026-06-29','al_dia','')
 
-    // ── Facturas CxP ───────────────────────────────────────────
     const insCxP = db.prepare(`INSERT INTO facturas_cxp
       (id,numero,proveedor_id,proveedor,oc_id,oc_numero,monto,fecha_emision,fecha_vencimiento,estado,fecha_pago) VALUES
       (?,?,?,?,?,?,?,?,?,?,?)`)
@@ -470,23 +520,20 @@ function seedData() {
     insCxP.run('cxp002','FP-2026-67890','prov002','AUSTER Chile Lubricantes S.A.','oc002','OC-2026-002',5843019,'2026-05-27','2026-07-11','pagada','2026-07-10')
     insCxP.run('cxp003','FP-2026-22222','prov003','KUMHO Tire Chile S.A.','oc003','OC-2026-003',4384135,'2026-07-05','2026-08-04','pendiente',null)
 
-    // ── Conversaciones WhatsApp ────────────────────────────────
     const insConv = db.prepare(`INSERT INTO conversaciones_whatsapp
       (id,telefono,nombre,ultimo_mensaje,ultimo_at,sin_leer) VALUES (?,?,?,?,?,?)`)
     const insMsgWA = db.prepare(`INSERT INTO mensajes_whatsapp
       (id,conversacion_id,telefono,direccion,contenido,created_at) VALUES (?,?,?,?,?,?)`)
-
     insConv.run('wa001','+56987654321','Carlos Díaz (Taller Díaz)','CONFIRMAR','2026-06-27T09:15:00Z',0)
     insConv.run('wa002','+56976543210','Rodrigo Muñoz (Trans Norte)','Necesito cotizar neumáticos de camión','2026-06-27T08:30:00Z',1)
     insConv.run('wa003','+56954321098','Felipe Soto (Constructora Med.)','¿Tienen el 10W40 en bidón 20L?','2026-06-26T17:45:00Z',1)
-
     const msgs = [
       ['m1','wa001','+56987654321','entrante','hola','2026-06-27T09:00:00Z'],
       ['m2','wa001','+56987654321','saliente','🔩 RMG Auto Parts\n¡Hola! Somos distribuidores mayoristas de repuestos en Santiago RM.\n\n¿Qué tipo de cliente eres?','2026-06-27T09:00:05Z'],
       ['m3','wa001','+56987654321','entrante','Taller mecánico','2026-06-27T09:01:00Z'],
       ['m4','wa001','+56987654321','saliente','📦 Perfecto. ¿Qué línea necesitas cotizar?\n\n• Baterías\n• Lubricantes\n• Neumáticos','2026-06-27T09:01:05Z'],
       ['m5','wa001','+56987654321','entrante','Baterías','2026-06-27T09:02:00Z'],
-      ['m6','wa001','+56987654321','saliente','📋 COTIZACIÓN RMG AUTO PARTS\n🔢 N° COT-2026-001\n\n• BATERIA YOKO 55AMP (x4) = $256.000\n• AUSTER 5W30 4LT (x10) = $155.000\n\nNeto: $411.000 · IVA: $78.090 · TOTAL: $489.090\n\n✅ Entrega 4–24 hrs RM\n\nResponde CONFIRMAR para generar pedido','2026-06-27T09:05:00Z'],
+      ['m6','wa001','+56987654321','saliente','📋 COTIZACIÓN RMG AUTO PARTS\n🔢 N° COT-2026-001\n\nNeto: $411.000 · TOTAL: $489.090\n\nResponde CONFIRMAR para generar pedido','2026-06-27T09:05:00Z'],
       ['m7','wa001','+56987654321','entrante','CONFIRMAR','2026-06-27T09:15:00Z'],
       ['m8','wa002','+56976543210','entrante','Buenos días, Rodrigo de Transportes Norte','2026-06-27T08:25:00Z'],
       ['m9','wa002','+56976543210','saliente','¡Buenos días Rodrigo! ¿En qué te podemos ayudar hoy?','2026-06-27T08:26:00Z'],
@@ -500,7 +547,21 @@ function seedData() {
   console.log('✅ Base de datos SQLite inicializada con datos semilla')
 }
 
-function initDB() {
+// ─── Init async (sql.js requiere carga WASM) ──────────────────────────────────
+async function initDB() {
+  const SQL = await initSqlJs({
+    locateFile: file => path.join(path.dirname(require.resolve('sql.js')), file),
+  })
+
+  let sqlJsDb
+  if (fs.existsSync(DB_PATH)) {
+    sqlJsDb = new SQL.Database(fs.readFileSync(DB_PATH))
+  } else {
+    sqlJsDb = new SQL.Database()
+  }
+
+  db._db = sqlJsDb
+  db.pragma('foreign_keys = ON')
   initSchema()
   seedData()
 }
