@@ -66,6 +66,7 @@ app.use('/api/reportes',               require('./routes/reportes'));
 app.use('/api/compras',                require('./routes/compras'));   // Compras/Proveedores/CxP
 app.use('/api/cxc',                    require('./routes/cxc'));       // Cuentas por cobrar
 app.use('/api/bodega',                 require('./routes/bodega'));    // Bodegas
+app.use('/api/admin',                  require('./routes/admin'));     // TEMP: reset-db
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {
