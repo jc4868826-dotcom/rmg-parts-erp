@@ -16,12 +16,18 @@ const PORT = process.env.PORT || 3001;
 
 // ─── Middleware de seguridad ────────────────────────────────
 app.use(helmet());
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'https://rmg-parts-frontend.onrender.com',
+  'https://rmgautoparts.cl',
+  'https://www.rmgautoparts.cl',
+]
+if (process.env.APP_URL && !ALLOWED_ORIGINS.includes(process.env.APP_URL)) {
+  ALLOWED_ORIGINS.push(process.env.APP_URL)
+}
+
 app.use(cors({
-  origin: [
-    process.env.APP_URL || 'http://localhost:5173',
-    'https://rmgautoparts.cl',
-    'https://www.rmgautoparts.cl',
-  ],
+  origin: ALLOWED_ORIGINS,
   credentials: true,
 }));
 
