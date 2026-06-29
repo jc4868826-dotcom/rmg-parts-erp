@@ -31,6 +31,7 @@ import BodegasPage      from '@pages/BodegasPage'
 import CxCPage          from '@pages/CxCPage'
 import CxPPage          from '@pages/CxPPage'
 import FacturaPage      from '@pages/FacturaPage'
+import PricingTab       from '@components/PricingTab'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +97,7 @@ export default function App() {
               <Route path="cxc"                element={<CxCPage />} />
               <Route path="cxp"                element={<CxPPage />} />
               <Route path="facturas"           element={<FacturaPage />} />
+              <Route path="pricing"            element={<PricingTab />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
