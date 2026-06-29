@@ -1,0 +1,123 @@
+/* ============================================================
+   RMG Auto Parts — Design System
+   Design tokens derivados del V6 (RMG_AutoParts_v6.html)
+   ============================================================ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* ── Paleta principal ── */
+  --rmg-bg:        #050f1c;   /* Fondo oscuro principal */
+  --rmg-surface:   #0a1a2e;   /* Superficie de cards */
+  --rmg-border:    rgba(56, 182, 255, 0.12);
+
+  /* ── Colores de acento ── */
+  --rmg-blue:      #1b8fd4;   /* Azul principal */
+  --rmg-blt:       #38b6ff;   /* Azul claro / highlights */
+  --rmg-teal:      #2dc98a;   /* Verde teal (flotas) */
+  --rmg-purple:    #7b61c4;   /* Púrpura (concesionarios) */
+  --rmg-gold:      #f4a23c;   /* Dorado (construcción) */
+  --rmg-red:       #e05a4e;   /* Rojo (alertas / ERP) */
+  --rmg-green:     #2dc98a;   /* Verde (positivo) */
+
+  /* ── Segmentos ── */
+  --seg-taller:        #38b6ff;
+  --seg-flota:         #2dc98a;
+  --seg-concesionario: #7b61c4;
+  --seg-construccion:  #f4a23c;
+
+  /* ── Tipografía ── */
+  --rmg-text:      #ffffff;
+  --rmg-muted:     rgba(90, 143, 168, 0.7);
+  --rmg-off:       rgba(255, 255, 255, 0.65);
+
+  /* ── Radios ── */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  16px;
+}
+
+/* ── Base ─────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--rmg-bg);
+  color: var(--rmg-text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar personalizado ──────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--rmg-bg); }
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 182, 255, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(56, 182, 255, 0.6); }
+
+/* ── Componentes utilitarios ──────────────────────────────── */
+@layer components {
+  /* Card base */
+  .rmg-card {
+    @apply rounded-xl border;
+    background: rgba(10, 26, 46, 0.9);
+    border-color: rgba(56, 182, 255, 0.15);
+  }
+
+  /* Badge de segmento */
+  .badge-taller        { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300; }
+  .badge-flota         { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300; }
+  .badge-concesionario { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300; }
+  .badge-construccion  { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300; }
+
+  /* Botón primario */
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg font-semibold text-sm transition-all duration-200;
+    background: var(--rmg-blue);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--rmg-blt); transform: translateY(-1px); }
+
+  /* Botón secundario */
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg font-semibold text-sm transition-all duration-200 border;
+    background: transparent;
+    border-color: rgba(56, 182, 255, 0.3);
+    color: var(--rmg-blt);
+  }
+  .btn-secondary:hover { border-color: var(--rmg-blt); background: rgba(56, 182, 255, 0.1); }
+
+  /* KPI card */
+  .kpi-card {
+    @apply rmg-card flex flex-col items-center justify-center gap-1 p-4;
+  }
+  .kpi-value { @apply font-black text-3xl; font-family: 'Inter Tight', sans-serif; }
+  .kpi-label { @apply text-xs uppercase tracking-widest; color: var(--rmg-muted); }
+
+  /* Input */
+  .rmg-input {
+    @apply w-full rounded-lg px-3 py-2 text-sm outline-none transition-all;
+    background: rgba(7, 21, 40, 0.8);
+    border: 1px solid rgba(56, 182, 255, 0.2);
+    color: var(--rmg-text);
+  }
+  .rmg-input:focus { border-color: var(--rmg-blt); box-shadow: 0 0 0 2px rgba(56, 182, 255, 0.1); }
+  .rmg-input::placeholder { color: var(--rmg-muted); }
+}
+
+/* ── Animaciones ──────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+
+/* ── Formato moneda CLP ───────────────────────────────────── */
+.precio-clp {
+  font-family: 'Inter Tight', 'Inter', monospace;
+  font-weight: 700;
+}
