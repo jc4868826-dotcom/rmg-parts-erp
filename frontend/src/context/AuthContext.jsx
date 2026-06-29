@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import axios from 'axios'
+import api from '../utils/api'
 
 const AuthContext = createContext(null)
 
@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   const login = async (email, password) => {
-    const res = await axios.post('/api/auth/login', { email, password })
+    const res = await api.post('/auth/login', { email, password })
     const { token, user } = res.data
     localStorage.setItem('rmg_token', token)
     localStorage.setItem('rmg_user', JSON.stringify(user))
