@@ -1,8 +1,8 @@
 # Entorno
 .env
 .env.local
-.env.production
 .env.*.local
+# .env.production se sube: solo contiene VITE_API_URL (URL pública, no secreto)
 
 # Node
 node_modules/
