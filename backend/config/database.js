@@ -775,6 +775,133 @@ function runMigrations() {
     const total = seedPricingV2()
     console.log(`✅ Migración pricing_v2 — ${total} SKUs con proveedor+cluster_key, 5 clusters sembrados`)
   }
+
+  // Migration 4: prospection_v1 — tabla pipeline_contactos + 45 prospectos reales
+  const m4 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('prospection_v1')
+  if (!m4) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS pipeline_contactos (
+        id TEXT PRIMARY KEY,
+        empresa TEXT NOT NULL,
+        segmento TEXT NOT NULL,
+        rubro_especialidad TEXT,
+        nombre_contacto TEXT,
+        cargo TEXT,
+        telefono_empresa TEXT,
+        telefono_contacto TEXT,
+        email TEXT,
+        direccion TEXT,
+        comuna TEXT,
+        region TEXT DEFAULT 'RM',
+        prioridad TEXT DEFAULT 'media' CHECK(prioridad IN ('alta','media','baja')),
+        notas TEXT,
+        etapa TEXT DEFAULT 'prospecto' CHECK(etapa IN ('prospecto','contacto','visita','propuesta','cliente')),
+        estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo','descartado')),
+        fuente TEXT DEFAULT 'Prospección jun-2026',
+        fecha_creacion TEXT DEFAULT (datetime('now')),
+        fecha_ultima_actualizacion TEXT DEFAULT (datetime('now')),
+        responsable TEXT DEFAULT 'admin'
+      );
+      CREATE INDEX IF NOT EXISTS idx_pc_etapa ON pipeline_contactos(etapa);
+      CREATE INDEX IF NOT EXISTS idx_pc_segmento ON pipeline_contactos(segmento);
+      CREATE INDEX IF NOT EXISTS idx_pc_estado ON pipeline_contactos(estado);
+    `)
+
+    const PROSPECTOS_45 = [
+      // 15 Talleres
+      ['Taller Mecánico KENO','taller','Mecánica general y preventiva','Dueño / Encargado','Propietario','+56 9 9519 5135','+56 9 9519 5135','contacto@tallerkeno.cl','Miguel León Prado 379','Santiago','Metropolitana','alta','Rating 4.9★. Cambio de aceite recurrente. Potencial volumen mensual de lubricantes.'],
+      ['Europa Mechanical','taller','Mecánica automotriz multimarca','Encargado Comercial','Jefe de Taller','+56 9 2208 4992','+56 9 5446 3588','contacto@europamechanical.cl','Nataniel Cox 949','Santiago Centro','Metropolitana','alta','Multimarca, 25+ años. Abierto 7 días. Alta rotación de lubricantes y filtros.'],
+      ['Mekano Autos Taller','taller','Reparación y mantención','Por confirmar','Administrador','+56 2 2555 1814','+56 2 2555 1814','info@mekanoautos.cl','Portugal 1536','Santiago','Metropolitana','media','Rating 4.6★. Amplio volumen de vehículos diarios. Requiere lubricantes y baterías.'],
+      ['Medelauto Servicio Automotriz','taller','Mecánica, frenos, mantención km','Por confirmar','Gerente / Dueño','+56 2 2699 0117','+56 2 2699 0117','info@medelauto.cl','Mapocho 2199','Santiago','Metropolitana','alta','En mercado desde 1968. Clientela fidelizada. Alta demanda de lubricantes.'],
+      ['AutoGálvez Lubricentro','taller','Lubricantes y mecánica general','Por confirmar','Jefe Lubricentro','+56 9 0000 0001','+56 9 0000 0001','contacto@autogalvez.cl','Av. Lo Blanco 5521','La Pintana','Metropolitana','alta','Especializado en lubricantes. Fit perfecto con propuesta RMG. Zona sur Santiago.'],
+      ['Ameva Works Servicio Automotriz','taller','Scanner, lubricantes, mantención','Por confirmar','Administrador','+56 2 0000 0002','+56 2 0000 0002','contacto@amevaworks.cl','Av. Mapocho 3075','Santiago','Metropolitana','media','Servicio adhesivos, scanner, lubricantes. Compra frecuente de insumos.'],
+      ['Taller RMH Alineación y Balanceo','taller','Lubricentro, alineación, neumáticos','Dueño','Propietario','+56 9 9694 0930','+56 9 9694 0930','contacto@tallerrmh.cl','Av. Uruguay 126','Rancagua',"O'Higgins",'alta','Lubricentro propio + venta neumáticos. Fit inmediato. 2 sucursales.'],
+      ['Scanner Automotriz Rancagua','taller','Diagnóstico, reparación, mantención','Por confirmar','Encargado','+56 9 8445 1834','+56 9 8445 1834','contacto@scannerauto.cl','Kennedy 1427','Rancagua',"O'Higgins",'media','Rating 4.6★. Especialidad en diagnóstico multimarca. Clientela fija.'],
+      ['Taller Automotriz JC Graneros','taller','Mecánica general, servicio a domicilio','Por confirmar','Propietario','+56 9 3525 3400','+56 9 3525 3400','info@automotrizjc.cl','Graneros (cobertura Rancagua)','Graneros',"O'Higgins",'media',"Servicio a domicilio en R.Metropolitana de O'Higgins. Oportunidad para baterías."],
+      ['Vegaartus Taller Oficial','taller','Reparación oficial multimarca','Diego Astorga / Rodrigo Vivero','Ejecutivos de Taller','+56 72 0000 001','+56 72 0000 001','contacto@vegaartus.cl','Av. Miguel Ramírez 199','Rancagua',"O'Higgins",'alta','Taller oficial con ejecutivos identificados. Compras periódicas de lubricantes.'],
+      ['SCAuto Servicio Técnico','taller','Mecánica general, GPS, electricidad','Por confirmar','Jefe de Taller','+56 9 0000 0003','+56 9 0000 0003','contacto@scauto.cl','Koke 398','Rancagua',"O'Higgins",'media','Servicio completo. Instalación alarmas/GPS. Buen candidato para baterías.'],
+      ['Taller Automotriz Torres','taller','Mecánica general y reparaciones','Por confirmar','Propietario','+56 9 7978 7269','+56 9 7978 7269','contacto@tallerestorres.cl','Gral. Carreño 2580996','Viña del Mar','Valparaíso','alta','Rating 4.5★. Lun-Sáb. Rotación de lubricantes y filtros.'],
+      ['Iconotecno Taller Automotriz','taller','Reparación y mantención vehículos','Por confirmar','Encargado','+56 9 6322 2368','+56 9 6322 2368','contacto@iconotecno.cl','22 Nte. 1290','Viña del Mar','Valparaíso','media','Rating 4.4★. Horario amplio. Potencial en lubricantes y neumáticos.'],
+      ['Central Embragues y Frenos','taller','Frenos, scanner, desabolladura','Por confirmar','Administrador','+56 32 0000 001','+56 32 0000 001','contacto@centralembraguesfrenos.cl','Alemparte 290','Quilpué','Valparaíso','media','Especialidad frenos. Requiere lubricantes de freno y kits. Doble cobertura Quilpué-Antofagasta.'],
+      ['Taller Villa Alemana Automotriz','taller','Mecánica integral, análisis de gases','Por confirmar','Dueño','+56 32 295 3300','+56 32 295 3300','info@villalemanaautomotriz.cl','Av. Valparaíso 1380','Villa Alemana','Valparaíso','media','Rating 5.0★. Mecánica integral. Zona con crecimiento automotriz.'],
+      // 10 Flotas
+      ['SOTRASER S.A.','flota','Transporte de carga, +600 camiones','Gerente de Operaciones','Gerente Operaciones','+56 2 2000 0016','+56 9 0000 0016','operaciones@sotraser.cl','Av. El Salto (casa matriz)','Huechuraba','Metropolitana','alta','Flota 600+ camiones. Demanda masiva lubricantes y neumáticos. Negociación a nivel corporativo.'],
+      ['Transportes Leonardo Avello','flota','Transporte carga nacional','Leonardo Avello','Propietario / Gerente','+56 9 7766 4266','+56 2 7766 4266','contacto@transportesavello.cl','Regina Gálvez 170','San Bernardo','Metropolitana','alta','15 años en rubro. Flota propia. Monitoreo 24H. Interés en lubricantes y baterías.'],
+      ['Transportes Nazar','flota','Logística cadena frío, +1.000 vehículos','Gerente Flota','Gerente de Flota','+56 2 2000 0018','+56 2 2000 0018','flota@nazar.cl','Av. Industrial (casa matriz)','Pudahuel','Metropolitana','alta','Desde 1976. Flota 1.000+ vehículos. Contrato marco para lubricantes de alto volumen.'],
+      ['Grandleasing Chile Ltda.','flota','Leasing operativo flotas corporativas','Eduardo Kraule Ayala','Gerente Control Gestión','+56 2 2000 0019','+56 9 0000 0019','ekraule@grandleasing.cl','Av. El Bosque Norte (Grupo Tur Bus)','Las Condes','Metropolitana','alta','Contacto identificado. Flota corporativa. Oportunidad para neumáticos y lubricantes en convenio.'],
+      ['LogísticaChile.com','flota','Transporte y coordinación de cargas','Gerente Comercial','Gerente Comercial','+56 9 838 55255','+56 9 838 55255','info@logisticachile.com','Santiago','Santiago','Metropolitana','media','Flota diversa. Camiones, furgones, grúas. Potencial en lubricantes y neumáticos.'],
+      ['Transportes Casablanca','flota','Distribución combustibles y carga','Gerente de Flota','Gerente Flota','+56 32 0000 002','+56 9 0000 0021','flota@tcasablanca.cl','Casablanca (Región Valparaíso)','Casablanca','Valparaíso','alta','Transporte de combustibles/lubricantes. Flota moderna. Eje estratégico V Región.'],
+      ['Jorquera Transporte S.A.','flota','Transporte carretero nacional, carga pesada','Gerente de Flota','Gerente Flota','+56 41 2857 153','+56 9 0000 0022','operaciones@jtsa.cl','Watt 4819 Parque Industrial','Santiago (sucursal)','Metropolitana','alta','Fundada 1972. Múltiples sucursales. Flota pesada. Alto consumo lubricantes y neumáticos.'],
+      ['Transportes Patagonia Express','flota','Mudanzas y carga consolidada','Por confirmar','Gerente','+56 9 4256 6033','+56 9 4256 6033','info@transportespatagoniaexpress.cl','Santiago','Santiago','Metropolitana','media','Operación nacional. Flota de camiones. Demanda periódica lubricantes y neumáticos.'],
+      ['Empresa Transporte Carga V Región','flota','Traslados V Región a nivel nacional','Por confirmar','Propietario','+56 9 4087 8550','+56 9 4087 8550','info@cargavregion.cl','Valparaíso','Valparaíso','Valparaíso','media','Flota equipada V Región. Traslados norte-sur. Potencial en neumáticos de camión.'],
+      ['Agroganadería y Transporte San (Colina)','flota','Transporte agrícola y carga','Por confirmar','Gerente Operativo','+56 2 0000 0025','+56 9 0000 0025','contacto@agtransporte.cl','Autopista Los Libertadores (Colina)','Colina','Metropolitana','media','Flota mixta agrícola-carga. Oportunidad lubricantes y baterías para temporada alta.'],
+      // 10 Construcción
+      ['Constructora Gardilcic','construccion','Obras civiles, minería, infraestructura','Rodrigo González','Gerente General','+56 72 0000 026','+56 9 0000 0026','rgnzalez@gardilcic.cl','Casa Matriz Rancagua (obras El Teniente)','Rancagua',"O'Higgins",'alta','Gran constructora. Flota maquinaria pesada. Contacto GG identificado. Alto consumo lubricantes.'],
+      ['DLP Constructora','construccion','Construcción e inmobiliario, 40+ años','Gerente de Operaciones','Gerente Operaciones','+56 2 2000 0027','+56 9 0000 0027','operaciones@dlp.cl','Santiago (casa matriz)','Las Condes','Metropolitana','alta','40+ años de trayectoria. Proyectos activos Santiago y regiones. Flota camiones y maquinaria.'],
+      ['S y S Ingeniería y Construcción','construccion','Construcción civil','Por confirmar','Gerente','+56 2 0000 0028','+56 9 0000 0028','contacto@ssingenieria.cl','Av. Senador Jaime Guzmán 365','Providencia','Metropolitana','media','Empresa activa en RM. Flota propia o subcontratada. Oportunidad lubricantes y baterías.'],
+      ['Constructora Loncoñanco SPA','construccion','Gestión y administración de construcción','Por confirmar','Gerente General','+56 72 0000 029','+56 9 0000 0029','contacto@constructoralonconanco.cl','Rancagua','Rancagua',"O'Higgins",'media','Presencia Santiago, Valparaíso, Rancagua. Flota mixta. Potencial multi-zona.'],
+      ['Constructora Rafer Ltda.','construccion','Obras civiles y construcción','Por confirmar','Gerente','+56 72 2221 258','+56 72 2221 258','contacto@rafer.cl','Calle Florencia 141','Rancagua',"O'Higgins",'media','Empresa radicada Rancagua. Camiones y maquinaria propios. Demanda lubricantes.'],
+      ['Constructora Camino del Monte','construccion','Construcción residencial','Por confirmar','Gerente Obras','+56 2 0000 0031','+56 9 0000 0031','contacto@caminodelmonte.cl','Camino del Monte 5937 Alto Macul','La Florida','Metropolitana','baja','Constructora zona sur Santiago. Flota vehículos de obra. Inicio prospección.'],
+      ['Constructora VCM','construccion','Movimiento tierras, arriendo maquinaria, caminos','Por confirmar','Propietario','+56 72 0000 032','+56 9 0000 0032','contacto@vcmconstructora.cl','Rancagua','Rancagua',"O'Higgins",'alta','Arriendo maquinaria + construcción. Alta demanda lubricantes para maquinaria pesada.'],
+      ['Constructora Olivar (Longitudinal Sur)','construccion','Obras viales e infraestructura','Por confirmar','Jefe de Obras','+56 72 0000 033','+56 9 0000 0033','contacto@constructoraolivar.cl','Longitudinal Sur Km 89, Olivar','Olivar',"O'Higgins",'media',"Zona rural O'Higgins. Obras viales. Maquinaria pesada requiere lubricantes especiales."],
+      ['Constructora Isabel La Católica','construccion','Edificación y obras civiles','Por confirmar','Gerente','+56 2 0000 0034','+56 9 0000 0034','contacto@constructorailc.cl','Av. Isabel La Católica 4175','Las Condes','Metropolitana','media','Constructora RM. Proyectos activos. Flota camionetas y camiones de obra.'],
+      ['Constructora Valparaíso (CChC Socia)','construccion','Construcción regional V Región','Por confirmar','Gerente General','+56 32 0000 035','+56 9 0000 0035','contacto@constructoravina.cl','Valparaíso','Valparaíso','Valparaíso','media','Socia CChC. Flota de obra. Requiere lubricantes y neumáticos para maquinaria.'],
+      // 10 Rentacar
+      ['MITTA Rent-a-Car (Grupo Mitsui)','rentacar','Arriendo autos, leasing operativo, +30.000 veh.','Gerente de Flota / Mantención','Gerente Flota','+56 22 941 8950','+56 22 941 8950','flota@mitta.cl','Av. Américo Vespucio (múltiples sucursales)','Huechuraba','Metropolitana','alta','30.000+ vehículos. Mantenimiento preventivo permanente. Contrato corporativo lubricantes/baterías.'],
+      ['Econorent Car Rental','rentacar','Arriendo autos y camionetas, leasing','Gerente Comercial Empresas','Gerente Comercial','+56 2 0000 0037','+56 9 0000 0037','empresas@econorent.cl','Av. Américo Vespucio 115','Huechuraba','Metropolitana','alta','Flota diversa. Convenios corporativos. Mantención frecuente. Demanda lubricantes y baterías.'],
+      ['Chilean Rent-A-Car','rentacar','Arriendo autos, flota nacional','Gerente de Operaciones','Gerente Operaciones','+56 2 0000 0038','+56 9 0000 0038','operaciones@chileanrentacar.cl','Curicó 360','Santiago Centro','Metropolitana','alta','Desde 1986. Sucursales aeropuerto y ciudad. Alta rotación de flota. Potencial lubricantes.'],
+      ['Avis Chile','rentacar','Arriendo autos, flota nacional, convenios empresa','Gerente Cuenta Empresas','Key Account Manager','+56 2 2000 0039','+56 9 0000 0039','empresas@avis.cl','Aeropuerto AMB / Isidora Goyenechea 2897','Las Condes','Metropolitana','alta','Multinacional. Flota masiva. Contrato lubricantes y neumáticos a nivel corporativo.'],
+      ['Hertz Chile','rentacar','Arriendo premium, flota nacional','Gerente de Flota Chile','Gerente Flota','+56 2 0000 0040','+56 9 0000 0040','flota@hertz.cl','Santiago (múltiples oficinas)','Santiago','Metropolitana','alta','Marca global. Flota premium. Mantención exigente. Oportunidad lubricantes de alta gama.'],
+      ['Santiago Rent-a-Car','rentacar','Arriendo camionetas, lujo, flotas','Por confirmar','Gerente','+56 2 0000 0041','+56 9 0000 0041','contacto@santiagorentacar.com','Bellavista 0183','Providencia','Metropolitana','media','Flota diversa incluyendo camionetas. Requiere baterías y lubricantes periódicamente.'],
+      ['Sixt Chile','rentacar','Arriendo autos premium, cobertura nacional','Gerente Comercial','Gerente Comercial','+56 2 0000 0042','+56 9 0000 0042','chile@sixt.com','Santiago (aeropuerto y ciudad)','Pudahuel','Metropolitana','media','Marca europea. Flota premium. Mantención preventiva estricta. Buena oportunidad.'],
+      ["Rent-a-Car Rancagua (local)",'rentacar',"Arriendo vehículos zona O'Higgins",'Por confirmar','Propietario','+56 72 0000 043','+56 9 0000 0043','contacto@rentacarrancagua.cl','Rancagua','Rancagua',"O'Higgins",'media','Nicho regional. Flota media. Primera línea de abastecimiento local lubricantes/baterías.'],
+      ['Rent-a-Car Viña del Mar','rentacar','Arriendo vehículos turismo y empresas','Por confirmar','Administrador','+56 32 0000 044','+56 9 0000 0044','contacto@rentacarvina.cl','Viña del Mar','Viña del Mar','Valparaíso','media','Turismo y empresas. Alta rotación temporada alta. Neumáticos y lubricantes frecuentes.'],
+      ['MITTA Sucursal Rancagua / Valparaíso','rentacar','Sucursales regionales Grupo Mitsui','Encargado de Sucursal','Jefe de Sucursal','+56 72 941 8950','+56 32 941 8950','sucursal.rancagua@mitta.cl','Múltiples sucursales','Rancagua / Viña del Mar',"O'Higgins / Valparaíso",'alta','Parte del grupo MITTA. Misma decisión de compra corporativa. 80+ puntos en Chile.'],
+    ]
+
+    const seedProspeccion = db.transaction(() => {
+      const ins = db.prepare(`
+        INSERT INTO pipeline_contactos
+          (id, empresa, segmento, rubro_especialidad, nombre_contacto, cargo,
+           telefono_empresa, telefono_contacto, email, direccion, comuna, region,
+           prioridad, notas, etapa, estado, fuente, responsable)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prospecto','activo','Prospección jun-2026','admin')
+      `)
+      for (const [empresa, seg, rubro, contacto, cargo, telEmp, telCont, email, dir, comuna, region, prio, notas] of PROSPECTOS_45) {
+        ins.run(uuidv4(), empresa, seg, rubro, contacto, cargo, telEmp, telCont, email || null, dir, comuna, region, prio, notas || null)
+      }
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('prospection_v1')
+      return PROSPECTOS_45.length
+    })
+    const total45 = seedProspeccion()
+    console.log(`✅ Migración prospection_v1 — tabla pipeline_contactos creada, ${total45} prospectos insertados`)
+  }
+
+  // Migration 5: pricing_v2b — 3 clusters de batería faltantes
+  const m5 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('pricing_v2b')
+  if (!m5) {
+    const seedClusters = db.transaction(() => {
+      const ins = db.prepare(`
+        INSERT OR IGNORE INTO cluster_referencia_mercado
+          (id, linea, cluster_key, precio_mercado_min, precio_mercado_max, fuente)
+        VALUES (?,?,?,?,?,?)
+      `)
+      const CLUSTERS_V2B = [
+        ['baterias', '55D23L',   99990, 124305, 'Hankook/Hyundai/ACDelco/Femsaco jun-2026'],
+        ['baterias', '55559',    99990, 109990, 'Hankook jun-2026'],
+        ['baterias', 'NX120-7L', 79000, 107375, 'LOA/MSRepuestos/Beste/Easy jun-2026'],
+      ]
+      let inserted = 0
+      for (const [linea, key, min, max, fuente] of CLUSTERS_V2B) {
+        const r = ins.run(uuidv4(), linea, key, min, max, fuente)
+        inserted += r.changes
+      }
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('pricing_v2b')
+      return inserted
+    })
+    const n = seedClusters()
+    console.log(`✅ Migración pricing_v2b — ${n} nuevos clusters de batería sembrados`)
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

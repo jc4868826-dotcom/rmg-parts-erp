@@ -6,12 +6,14 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@context/AuthContext'
+import { useQuery } from '@tanstack/react-query'
+import api from '@utils/api'
 import {
   LayoutDashboard, Package, Users, GitBranch, FileText,
   ShoppingCart, Warehouse, MessageCircle, BarChart3,
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
-  CreditCard, Building2, BookOpen, Tag
+  CreditCard, Building2, BookOpen, Tag, Crosshair
 } from 'lucide-react'
 
 const NAV_SECTIONS = [
@@ -19,6 +21,7 @@ const NAV_SECTIONS = [
     label: 'Ventas',
     items: [
       { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard',       badge: null },
+      { to: '/prospeccion',  icon: Crosshair,       label: 'Prospección',     badge: 'prospeccion' },
       { to: '/pipeline',     icon: GitBranch,       label: 'Pipeline CRM',    badge: '3' },
       { to: '/agenda',       icon: CalendarDays,    label: 'Agenda',          badge: null },
       { to: '/clientes',     icon: Users,           label: 'Clientes',        badge: null },
@@ -61,6 +64,13 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+
+  const { data: prospecStats } = useQuery({
+    queryKey: ['prospeccion-stats'],
+    queryFn: () => api.get('/prospeccion/stats').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const prospeccionCount = prospecStats?.total_activos ?? null
 
   const handleLogout = async () => {
     await logout()
@@ -115,7 +125,11 @@ export default function Layout() {
                 </div>
               )}
               <div className="space-y-0.5">
-                {section.items.map(({ to, icon: Icon, label, badge }) => (
+                {section.items.map(({ to, icon: Icon, label, badge }) => {
+                  const badgeValue = badge === 'prospeccion'
+                    ? (prospeccionCount !== null ? String(prospeccionCount) : null)
+                    : badge
+                  return (
                   <NavLink
                     key={to}
                     to={to}
@@ -133,9 +147,9 @@ export default function Layout() {
                     {sidebarOpen && (
                       <>
                         <span className="text-sm font-medium flex-1">{label}</span>
-                        {badge && (
+                        {badgeValue && (
                           <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--rmg-blue)', color: '#fff' }}>
-                            {badge}
+                            {badgeValue}
                           </span>
                         )}
                       </>
@@ -147,7 +161,8 @@ export default function Layout() {
                       </div>
                     )}
                   </NavLink>
-                ))}
+                )
+                })}
               </div>
             </div>
           ))}

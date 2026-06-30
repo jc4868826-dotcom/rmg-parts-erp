@@ -68,6 +68,7 @@ app.use('/api/cxc',                    require('./routes/cxc'));       // Cuenta
 app.use('/api/bodega',                 require('./routes/bodega'));    // Bodegas
 app.use('/api/admin',                  require('./routes/admin'));     // TEMP: reset-db
 app.use('/api/pricing',                require('./routes/pricing'));   // Pricing multi-proveedor + benchmarks
+app.use('/api/prospeccion',            require('./routes/prospeccion')); // Pipeline Prospección
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {

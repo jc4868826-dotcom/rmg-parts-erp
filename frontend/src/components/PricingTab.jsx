@@ -4,6 +4,19 @@ import api from "@utils/api";
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const clp = (n) => "$" + Math.round(n).toLocaleString("es-CL");
 
+// ─── Dark theme constants ─────────────────────────────────────────────────────
+const DARK = {
+  surface: "#0a1a2e",
+  border: "rgba(56,182,255,0.15)",
+  borderLight: "rgba(56,182,255,0.1)",
+  textPrimary: "rgba(255,255,255,0.9)",
+  textSecondary: "rgba(90,143,168,0.8)",
+  textMuted: "rgba(90,143,168,0.7)",
+  inputBg: "rgba(255,255,255,0.06)",
+  rowHover: "rgba(255,255,255,0.04)",
+  headBg: "rgba(255,255,255,0.03)",
+};
+
 const LINEA_CONFIG = {
   NEUMATICOS: { label: "Neumáticos", color: "#2a78d6", bg: "#e6f1fb", text: "#185fa5" },
   BATERIAS:   { label: "Baterías",   color: "#1baf7a", bg: "#e1f5ee", text: "#0f6e56" },
@@ -16,9 +29,10 @@ const BANDA_CONFIG = {
   revisar:         { label: "Revisar",           bg: "#e6f1fb", color: "#185fa5" },
 };
 
-function calcIndice(precioB2b, min, max) {
+// Benchmark = costo × 1.25 (fixed markup for competitiveness measurement only)
+function calcIndice(costo, min, max) {
   if (!min || !max) return null;
-  return precioB2b / ((min + max) / 2);
+  return Math.round(costo * 1.25) / ((min + max) / 2);
 }
 
 function getBanda(indice) {
@@ -33,11 +47,11 @@ const LINEAS = ["Todas", "NEUMATICOS", "BATERIAS", "LUBRICANTES"];
 // ─── Modal base ───────────────────────────────────────────────────────────────
 function Modal({ title, onClose, children }) {
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#fff", borderRadius: 12, padding: 24, minWidth: 360, maxWidth: 480, width: "90vw", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: DARK.surface, borderRadius: 12, padding: 24, minWidth: 360, maxWidth: 480, width: "90vw", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", border: "0.5px solid " + DARK.border }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: "#0b0b0b" }}>{title}</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#888", lineHeight: 1 }}>×</button>
+          <span style={{ fontSize: 15, fontWeight: 600, color: DARK.textPrimary }}>{title}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: DARK.textMuted, lineHeight: 1 }}>×</button>
         </div>
         {children}
       </div>
@@ -54,8 +68,18 @@ function ModalProveedor({ sku, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const inp = { padding: "7px 11px", fontSize: 13, borderRadius: 6, border: "0.5px solid #d3d1c7", outline: "none", background: "#fff", color: "#0b0b0b", width: "100%", fontFamily: "inherit" };
-  const lbl = { fontSize: 12, color: "#888", display: "block", marginBottom: 4 };
+  const inp = {
+    padding: "7px 11px",
+    fontSize: 13,
+    borderRadius: 6,
+    border: "0.5px solid " + DARK.border,
+    outline: "none",
+    background: DARK.inputBg,
+    color: DARK.textPrimary,
+    width: "100%",
+    fontFamily: "inherit",
+  };
+  const lbl = { fontSize: 12, color: DARK.textMuted, display: "block", marginBottom: 4 };
 
   const handleSave = async () => {
     if (!nombre.trim() || !costo) { setErr("Completa nombre y costo"); return; }
@@ -78,7 +102,7 @@ function ModalProveedor({ sku, onClose, onSaved }) {
 
   return (
     <Modal title={`Agregar proveedor — ${sku.codigo}`} onClose={onClose}>
-      <p style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{sku.descripcion}</p>
+      <p style={{ fontSize: 12, color: DARK.textMuted, marginBottom: 16 }}>{sku.descripcion}</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div>
           <label style={lbl}>Proveedor *</label>
@@ -95,14 +119,14 @@ function ModalProveedor({ sku, onClose, onSaved }) {
             <option value="contado">Contado</option>
           </select>
         </div>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "#0b0b0b" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: DARK.textPrimary }}>
           <input type="checkbox" checked={activar} onChange={e => setActivar(e.target.checked)} />
           Usar como proveedor activo (actualiza costo base)
         </label>
       </div>
-      {err && <p style={{ fontSize: 12, color: "#a32d2d", marginTop: 12 }}>{err}</p>}
+      {err && <p style={{ fontSize: 12, color: "#e05c5c", marginTop: 12 }}>{err}</p>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
-        <button onClick={onClose} style={{ padding: "7px 16px", fontSize: 13, borderRadius: 6, border: "0.5px solid #d3d1c7", background: "#fff", color: "#52514e", cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
+        <button onClick={onClose} style={{ padding: "7px 16px", fontSize: 13, borderRadius: 6, border: "0.5px solid " + DARK.border, background: DARK.inputBg, color: DARK.textSecondary, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
         <button onClick={handleSave} disabled={saving} style={{ padding: "7px 16px", fontSize: 13, borderRadius: 6, border: "none", background: "#2a78d6", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>
           {saving ? "Guardando…" : "Guardar"}
         </button>
@@ -119,8 +143,18 @@ function ModalCluster({ sku, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const inp = { padding: "7px 11px", fontSize: 13, borderRadius: 6, border: "0.5px solid #d3d1c7", outline: "none", background: "#fff", color: "#0b0b0b", width: "100%", fontFamily: "inherit" };
-  const lbl = { fontSize: 12, color: "#888", display: "block", marginBottom: 4 };
+  const inp = {
+    padding: "7px 11px",
+    fontSize: 13,
+    borderRadius: 6,
+    border: "0.5px solid " + DARK.border,
+    outline: "none",
+    background: DARK.inputBg,
+    color: DARK.textPrimary,
+    width: "100%",
+    fontFamily: "inherit",
+  };
+  const lbl = { fontSize: 12, color: DARK.textMuted, display: "block", marginBottom: 4 };
   const lineaLower = sku.linea?.toLowerCase() || "neumaticos";
 
   const handleSave = async () => {
@@ -144,8 +178,8 @@ function ModalCluster({ sku, onClose, onSaved }) {
 
   return (
     <Modal title="Actualizar precio de mercado" onClose={onClose}>
-      <p style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>Cluster: <strong style={{ color: "#0b0b0b" }}>{sku.cluster_key || "Sin cluster"}</strong></p>
-      <p style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>Este precio aplica a todos los SKUs con el mismo cluster key.</p>
+      <p style={{ fontSize: 12, color: DARK.textMuted, marginBottom: 4 }}>Cluster: <strong style={{ color: DARK.textPrimary }}>{sku.cluster_key || "Sin cluster"}</strong></p>
+      <p style={{ fontSize: 12, color: DARK.textMuted, marginBottom: 16 }}>Este precio aplica a todos los SKUs con el mismo cluster key.</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ display: "flex", gap: 12 }}>
           <div style={{ flex: 1 }}>
@@ -162,9 +196,9 @@ function ModalCluster({ sku, onClose, onSaved }) {
           <input style={inp} value={fuente} onChange={e => setFuente(e.target.value)} placeholder="Ej: Autoplanet/Salfa jun-2026" />
         </div>
       </div>
-      {err && <p style={{ fontSize: 12, color: "#a32d2d", marginTop: 12 }}>{err}</p>}
+      {err && <p style={{ fontSize: 12, color: "#e05c5c", marginTop: 12 }}>{err}</p>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
-        <button onClick={onClose} style={{ padding: "7px 16px", fontSize: 13, borderRadius: 6, border: "0.5px solid #d3d1c7", background: "#fff", color: "#52514e", cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
+        <button onClick={onClose} style={{ padding: "7px 16px", fontSize: 13, borderRadius: 6, border: "0.5px solid " + DARK.border, background: DARK.inputBg, color: DARK.textSecondary, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
         <button onClick={handleSave} disabled={saving} style={{ padding: "7px 16px", fontSize: 13, borderRadius: 6, border: "none", background: "#1baf7a", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>
           {saving ? "Guardando…" : "Guardar"}
         </button>
@@ -174,7 +208,7 @@ function ModalCluster({ sku, onClose, onSaved }) {
 }
 
 // ─── Panel de proveedores (sub-fila) ─────────────────────────────────────────
-function ProveedoresPanel({ sku, colSpan, onAddProveedor, onActivar, onRefresh }) {
+function ProveedoresPanel({ sku, colSpan, onAddProveedor, onRefresh }) {
   const [activating, setActivating] = useState(null);
 
   const handleActivar = async (pvId) => {
@@ -201,37 +235,37 @@ function ProveedoresPanel({ sku, colSpan, onAddProveedor, onActivar, onRefresh }
 
   return (
     <tr>
-      <td colSpan={colSpan} style={{ padding: "0 0 8px 0", background: "#f8f7f3" }}>
-        <div style={{ padding: "12px 16px", borderTop: "1px solid #e1e0d9" }}>
+      <td colSpan={colSpan} style={{ padding: "0 0 8px 0", background: "rgba(255,255,255,0.02)" }}>
+        <div style={{ padding: "12px 16px", borderTop: "1px solid " + DARK.borderLight }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#52514e", letterSpacing: "0.04em" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: DARK.textSecondary, letterSpacing: "0.04em" }}>
               PROVEEDORES — {sku.descripcion}
             </span>
             <button
               onClick={() => onAddProveedor(sku)}
-              style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "0.5px solid #2a78d6", background: "#e6f1fb", color: "#185fa5", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
+              style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "0.5px solid #2a78d6", background: "rgba(42,120,214,0.12)", color: "#5aabf0", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
             >
               + Agregar proveedor
             </button>
           </div>
 
           {sku.proveedores.length === 0 ? (
-            <p style={{ fontSize: 12, color: "#888" }}>Sin proveedores registrados.</p>
+            <p style={{ fontSize: 12, color: DARK.textMuted }}>Sin proveedores registrados.</p>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ background: "#f0efe8" }}>
+                <tr style={{ background: "rgba(255,255,255,0.04)" }}>
                   {["Proveedor", "Costo neto", "Condición", "Estado", ""].map(h => (
-                    <th key={h} style={{ padding: "5px 10px", textAlign: h === "Costo neto" ? "right" : "left", color: "#888", fontWeight: 500, borderBottom: "0.5px solid #e1e0d9", whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h} style={{ padding: "5px 10px", textAlign: h === "Costo neto" ? "right" : "left", color: DARK.textMuted, fontWeight: 500, borderBottom: "0.5px solid " + DARK.borderLight, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {sku.proveedores.map(pv => (
                   <tr key={pv.id} style={{ background: pv.es_activo ? "rgba(27,175,122,0.06)" : "transparent" }}>
-                    <td style={{ padding: "6px 10px", color: "#0b0b0b", fontWeight: pv.es_activo ? 600 : 400 }}>{pv.proveedor_nombre}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#52514e" }}>{clp(pv.costo_neto)}</td>
-                    <td style={{ padding: "6px 10px", color: "#52514e", textTransform: "capitalize" }}>{pv.condicion_pago}</td>
+                    <td style={{ padding: "6px 10px", color: DARK.textPrimary, fontWeight: pv.es_activo ? 600 : 400 }}>{pv.proveedor_nombre}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right", color: DARK.textSecondary }}>{clp(pv.costo_neto)}</td>
+                    <td style={{ padding: "6px 10px", color: DARK.textSecondary, textTransform: "capitalize" }}>{pv.condicion_pago}</td>
                     <td style={{ padding: "6px 10px" }}>
                       {pv.es_activo
                         ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "#e1f5ee", color: "#0f6e56", fontWeight: 600 }}>● Activo</span>
@@ -250,7 +284,7 @@ function ProveedoresPanel({ sku, colSpan, onAddProveedor, onActivar, onRefresh }
                           </button>
                           <button
                             onClick={() => handleDelete(pv.id)}
-                            style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "0.5px solid #f7c1c1", background: "none", color: "#a32d2d", cursor: "pointer", fontFamily: "inherit" }}
+                            style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "0.5px solid rgba(231,100,100,0.4)", background: "none", color: "#e05c5c", cursor: "pointer", fontFamily: "inherit" }}
                           >
                             ×
                           </button>
@@ -270,12 +304,13 @@ function ProveedoresPanel({ sku, colSpan, onAddProveedor, onActivar, onRefresh }
 
 // ─── Fila SKU ─────────────────────────────────────────────────────────────────
 function SkuRow({ sku, margenOverride, expanded, onToggle, onAddProveedor, onEditCluster, onRefresh }) {
-  const margen   = margenOverride ?? sku.margen_pct;
-  const precio   = Math.round(sku.costo * (1 + margen / 100));
+  const margen    = margenOverride ?? sku.margen_pct;
+  const precio    = Math.round(sku.costo * (1 + margen / 100));
   const margenCLP = precio - sku.costo;
-  const indice   = calcIndice(precio, sku.mercado_min, sku.mercado_max);
-  const banda    = getBanda(indice);
-  const bandaCfg = banda ? BANDA_CONFIG[banda] : null;
+  // Index uses benchmark (costo × 1.25), not operational price
+  const indice    = calcIndice(sku.costo, sku.mercado_min, sku.mercado_max);
+  const banda     = getBanda(indice);
+  const bandaCfg  = banda ? BANDA_CONFIG[banda] : null;
 
   const tdBase = { padding: "9px 10px" };
 
@@ -283,15 +318,15 @@ function SkuRow({ sku, margenOverride, expanded, onToggle, onAddProveedor, onEdi
     <>
       <tr
         onClick={onToggle}
-        style={{ borderBottom: expanded ? "none" : "0.5px solid #f0efe8", cursor: "pointer", background: expanded ? "#f8f7f3" : "transparent" }}
+        style={{ borderBottom: expanded ? "none" : "0.5px solid " + DARK.borderLight, cursor: "pointer", background: expanded ? DARK.rowHover : "transparent" }}
       >
-        <td style={{ ...tdBase, fontFamily: "monospace", fontSize: 12, color: "#888" }}>
+        <td style={{ ...tdBase, fontFamily: "monospace", fontSize: 12, color: DARK.textMuted }}>
           <span style={{ marginRight: 4, opacity: 0.5, fontSize: 10 }}>{expanded ? "▾" : "▸"}</span>
           {sku.codigo}
         </td>
-        <td style={{ ...tdBase, fontSize: 13, color: "#0b0b0b", maxWidth: 260 }}>{sku.descripcion}</td>
-        <td style={{ ...tdBase, textAlign: "right", fontSize: 13, color: "#52514e" }}>{clp(sku.costo)}</td>
-        <td style={{ ...tdBase, textAlign: "right", fontSize: 13, fontWeight: 500, color: "#0b0b0b" }}>{clp(precio)}</td>
+        <td style={{ ...tdBase, fontSize: 13, color: DARK.textPrimary, maxWidth: 260 }}>{sku.descripcion}</td>
+        <td style={{ ...tdBase, textAlign: "right", fontSize: 13, color: DARK.textSecondary }}>{clp(sku.costo)}</td>
+        <td style={{ ...tdBase, textAlign: "right", fontSize: 13, fontWeight: 500, color: DARK.textPrimary }}>{clp(precio)}</td>
         <td style={{ ...tdBase, textAlign: "right" }}>
           <span style={{ fontSize: 12, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: margen >= 30 ? "#eaf3de" : margen >= 25 ? "#faeeda" : "#e6f1fb", color: margen >= 30 ? "#3b6d11" : margen >= 25 ? "#854f0b" : "#185fa5" }}>
             {margen}%
@@ -302,7 +337,7 @@ function SkuRow({ sku, margenOverride, expanded, onToggle, onAddProveedor, onEdi
           {sku.mercado_min && sku.mercado_max ? (
             <span
               onClick={e => { e.stopPropagation(); onEditCluster(sku); }}
-              style={{ color: "#52514e", cursor: "pointer", textDecoration: "underline dotted" }}
+              style={{ color: DARK.textSecondary, cursor: "pointer", textDecoration: "underline dotted" }}
               title="Editar precio mercado"
             >
               {clp(sku.mercado_min)} – {clp(sku.mercado_max)}
@@ -310,7 +345,7 @@ function SkuRow({ sku, margenOverride, expanded, onToggle, onAddProveedor, onEdi
           ) : (
             <span
               onClick={e => { e.stopPropagation(); onEditCluster(sku); }}
-              style={{ fontSize: 11, padding: "2px 7px", borderRadius: 12, background: "#f0efe8", color: "#888", cursor: "pointer" }}
+              style={{ fontSize: 11, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.07)", color: DARK.textSecondary, cursor: "pointer" }}
               title="Agregar precio mercado"
             >
               Sin referencia
@@ -323,7 +358,7 @@ function SkuRow({ sku, margenOverride, expanded, onToggle, onAddProveedor, onEdi
               {Math.round(indice * 100)}% — {bandaCfg.label}
             </span>
           ) : (
-            <span style={{ fontSize: 11, color: "#ccc" }}>—</span>
+            <span style={{ fontSize: 11, color: DARK.textMuted }}>—</span>
           )}
         </td>
         <td style={{ ...tdBase, textAlign: "right" }}>
@@ -354,29 +389,29 @@ function MarcaAccordion({ marca, skus, margenOverride, expandedSku, onToggleSku,
   const avgMargen = margenOverride ?? Math.round(skus.reduce((a, s) => a + s.margen_pct, 0) / skus.length);
 
   return (
-    <div style={{ borderRadius: 8, border: "0.5px solid #e1e0d9", marginBottom: 8, overflow: "hidden" }}>
+    <div style={{ borderRadius: 8, border: "0.5px solid " + DARK.borderLight, marginBottom: 8, overflow: "hidden" }}>
       <button
         onClick={() => setOpen(!open)}
-        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: open ? "#f8f7f3" : "#fff", border: "none", cursor: "pointer", gap: 12 }}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: open ? DARK.rowHover : "transparent", border: "none", cursor: "pointer", gap: 12 }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", padding: "3px 10px", borderRadius: 20, background: cfg?.bg || "#f1efe8", color: cfg?.text || "#444" }}>
             {marca}
           </span>
-          <span style={{ fontSize: 13, color: "#52514e" }}>
+          <span style={{ fontSize: 13, color: DARK.textSecondary }}>
             {skus.length} SKUs · {totalStock.toLocaleString("es-CL")} unidades · margen {avgMargen}%
           </span>
         </div>
-        <span style={{ fontSize: 18, color: "#888", lineHeight: 1, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>›</span>
+        <span style={{ fontSize: 18, color: DARK.textMuted, lineHeight: 1, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>›</span>
       </button>
 
       {open && (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
             <thead>
-              <tr style={{ background: "#fafaf8" }}>
+              <tr style={{ background: DARK.headBg }}>
                 {TABLE_HEADERS.map(h => (
-                  <th key={h} style={{ padding: "7px 10px", fontSize: 11, fontWeight: 500, color: "#888", textAlign: ["Código", "Descripción"].includes(h) ? "left" : "right", borderBottom: "0.5px solid #e1e0d9", whiteSpace: "nowrap" }}>
+                  <th key={h} style={{ padding: "7px 10px", fontSize: 11, fontWeight: 500, color: DARK.textMuted, textAlign: ["Código", "Descripción"].includes(h) ? "left" : "right", borderBottom: "0.5px solid " + DARK.borderLight, whiteSpace: "nowrap" }}>
                     {h}
                   </th>
                 ))}
@@ -431,7 +466,7 @@ function LineaAccordion({ linea, skus, margenOverride, marcaFiltro, proveedorFil
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", marginBottom: 10, background: cfg.color + "12", border: `1px solid ${cfg.color}30`, borderLeft: `4px solid ${cfg.color}`, borderRadius: 8, cursor: "pointer" }}
       >
         <span style={{ fontSize: 15, fontWeight: 600, color: cfg.text }}>{cfg.label}</span>
-        <span style={{ fontSize: 13, color: "#52514e", flex: 1, textAlign: "left" }}>
+        <span style={{ fontSize: 13, color: DARK.textSecondary, flex: 1, textAlign: "left" }}>
           {skusFiltrados.length} SKUs · {totalUnidades.toLocaleString("es-CL")} unid · valor {clp(valorStock)}
         </span>
         <span style={{ fontSize: 18, color: cfg.text, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
@@ -458,21 +493,141 @@ function LineaAccordion({ linea, skus, margenOverride, marcaFiltro, proveedorFil
   );
 }
 
+// ─── Vista Comparativa de mercado ─────────────────────────────────────────────
+function ComparativaView({ clustersData, soloConRef, onToggleSoloConRef }) {
+  const shown = soloConRef ? clustersData.filter(c => c.mercado_avg !== null) : clustersData;
+
+  const thStyle = (align = "right") => ({
+    padding: "9px 12px",
+    fontSize: 11,
+    fontWeight: 500,
+    color: DARK.textMuted,
+    textAlign: align,
+    borderBottom: "0.5px solid " + DARK.borderLight,
+    whiteSpace: "nowrap",
+    background: DARK.headBg,
+  });
+
+  const tdStyle = (align = "right") => ({
+    padding: "9px 12px",
+    fontSize: 13,
+    textAlign: align,
+    borderBottom: "0.5px solid " + DARK.borderLight,
+    color: DARK.textPrimary,
+  });
+
+  return (
+    <div>
+      {/* filter toggle */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
+        <span style={{ fontSize: 12, color: DARK.textMuted }}>Mostrar:</span>
+        <button
+          onClick={() => onToggleSoloConRef(false)}
+          style={{ padding: "5px 14px", fontSize: 12, borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: "0.5px solid " + (!soloConRef ? "#2a78d6" : DARK.border), background: !soloConRef ? "rgba(42,120,214,0.15)" : DARK.inputBg, color: !soloConRef ? "#5aabf0" : DARK.textSecondary, fontWeight: !soloConRef ? 500 : 400 }}
+        >
+          Todos
+        </button>
+        <button
+          onClick={() => onToggleSoloConRef(true)}
+          style={{ padding: "5px 14px", fontSize: 12, borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: "0.5px solid " + (soloConRef ? "#2a78d6" : DARK.border), background: soloConRef ? "rgba(42,120,214,0.15)" : DARK.inputBg, color: soloConRef ? "#5aabf0" : DARK.textSecondary, fontWeight: soloConRef ? 500 : 400 }}
+        >
+          Solo con referencia
+        </button>
+        <span style={{ fontSize: 12, color: DARK.textMuted, marginLeft: 8 }}>
+          {shown.length} cluster{shown.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {/* table */}
+      <div style={{ overflowX: "auto", borderRadius: 8, border: "0.5px solid " + DARK.border }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 960 }}>
+          <thead>
+            <tr>
+              <th style={thStyle("left")}>Cluster</th>
+              <th style={thStyle("left")}>Línea</th>
+              <th style={thStyle("left")}>Marcas</th>
+              <th style={thStyle()}>&#35; SKU</th>
+              <th style={thStyle()}>Costo prom.</th>
+              <th style={thStyle()}>Benchmark</th>
+              <th style={thStyle()}>P. Mercado</th>
+              <th style={thStyle()}>Dif. $</th>
+              <th style={thStyle()}>Dif. %</th>
+              <th style={{ ...thStyle("center") }}>Competitividad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((c) => {
+              const bandaCfg = c.banda ? BANDA_CONFIG[c.banda] : null;
+              const difPctPos = c.diferencia_pct !== null && c.diferencia_pct > 0;
+              const difPctNeg = c.diferencia_pct !== null && c.diferencia_pct < 0;
+              const lineCfg = LINEA_CONFIG[c.linea];
+              return (
+                <tr key={c.cluster_key} style={{ background: "transparent" }}>
+                  <td style={{ ...tdStyle("left"), fontFamily: "monospace", fontSize: 12, color: DARK.textMuted }}>{c.cluster_key}</td>
+                  <td style={{ ...tdStyle("left") }}>
+                    {lineCfg ? (
+                      <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: lineCfg.bg, color: lineCfg.text }}>{lineCfg.label}</span>
+                    ) : (
+                      <span style={{ color: DARK.textMuted, fontSize: 12 }}>{c.linea}</span>
+                    )}
+                  </td>
+                  <td style={{ ...tdStyle("left"), fontSize: 12, color: DARK.textSecondary }}>{c.marcas}</td>
+                  <td style={tdStyle()}>{c.sku_count}</td>
+                  <td style={{ ...tdStyle(), color: DARK.textSecondary }}>{clp(c.costo_avg)}</td>
+                  <td style={{ ...tdStyle(), fontWeight: 500 }}>{clp(c.benchmark)}</td>
+                  <td style={{ ...tdStyle(), fontSize: 12, color: DARK.textSecondary }}>
+                    {c.mercado_avg !== null
+                      ? <>{clp(c.mercado_min)} – {clp(c.mercado_max)}</>
+                      : <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.07)", color: DARK.textSecondary }}>—</span>
+                    }
+                  </td>
+                  <td style={{ ...tdStyle(), fontWeight: 500, color: c.diferencia_clp === null ? DARK.textMuted : difPctPos ? "#1baf7a" : difPctNeg ? "#e05c5c" : DARK.textPrimary }}>
+                    {c.diferencia_clp !== null
+                      ? (c.diferencia_clp >= 0 ? "+" : "") + clp(c.diferencia_clp)
+                      : "—"
+                    }
+                  </td>
+                  <td style={{ ...tdStyle(), fontWeight: 500, color: c.diferencia_pct === null ? DARK.textMuted : difPctPos ? "#1baf7a" : difPctNeg ? "#e05c5c" : DARK.textPrimary }}>
+                    {c.diferencia_pct !== null
+                      ? (c.diferencia_pct >= 0 ? "+" : "") + c.diferencia_pct.toFixed(1) + "%"
+                      : "—"
+                    }
+                  </td>
+                  <td style={{ ...tdStyle("center") }}>
+                    {bandaCfg ? (
+                      <span style={{ fontSize: 11, padding: "2px 9px", borderRadius: 20, background: bandaCfg.bg, color: bandaCfg.color, fontWeight: 500, whiteSpace: "nowrap" }}>
+                        {Math.round(c.indice * 100)}% — {bandaCfg.label}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: DARK.textMuted }}>Sin ref.</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function PricingTab() {
-  const [skuData,       setSkuData]       = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState(null);
-  const [busqueda,      setBusqueda]      = useState("");
-  const [lineaFiltro,   setLineaFiltro]   = useState("Todas");
-  const [marcaFiltro,   setMarcaFiltro]   = useState("Todas");
+  const [skuData,         setSkuData]         = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [error,           setError]           = useState(null);
+  const [busqueda,        setBusqueda]        = useState("");
+  const [lineaFiltro,     setLineaFiltro]     = useState("Todas");
+  const [marcaFiltro,     setMarcaFiltro]     = useState("Todas");
   const [proveedorFiltro, setProveedorFiltro] = useState("Todos");
-  const [ordenar,       setOrdenar]       = useState("linea");
-  const [margenCustom,  setMargenCustom]  = useState(null);
-  const [modoLista,     setModoLista]     = useState(false);
-  const [expandedSku,   setExpandedSku]   = useState(null);
-  const [modalProv,     setModalProv]     = useState(null); // sku object
-  const [modalCluster,  setModalCluster]  = useState(null); // sku object
+  const [ordenar,         setOrdenar]         = useState("linea");
+  const [margenCustom,    setMargenCustom]    = useState(null);
+  const [modoVista,       setModoVista]       = useState("acordeon"); // 'acordeon' | 'lista' | 'comparativa'
+  const [soloConRef,      setSoloConRef]      = useState(false);
+  const [expandedSku,     setExpandedSku]     = useState(null);
+  const [modalProv,       setModalProv]       = useState(null);
+  const [modalCluster,    setModalCluster]    = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
@@ -522,12 +677,72 @@ export default function PricingTab() {
     return data;
   }, [skuData, lineaFiltro, marcaFiltro, proveedorFiltro, busqueda, ordenar]);
 
-  const lineasEnData    = Array.from(new Set(skusFiltrados.map(s => s.linea)));
-  const totalUnidades   = skusFiltrados.reduce((a, s) => a + s.stock, 0);
-  const valorTotal      = skusFiltrados.reduce((a, s) => a + s.costo * s.stock, 0);
+  // Cluster-level data for comparativa view
+  const clustersData = useMemo(() => {
+    const byCluster = {};
+    for (const s of skusFiltrados) {
+      const key = s.cluster_key || "(sin cluster)";
+      if (!byCluster[key]) byCluster[key] = { linea: s.linea, skus: [], marcas: new Set() };
+      byCluster[key].skus.push(s);
+      byCluster[key].marcas.add(s.marca);
+    }
+    return Object.entries(byCluster).map(([key, { linea, skus, marcas }]) => {
+      const costoAvg = skus.reduce((a, s) => a + s.costo, 0) / skus.length;
+      const benchmark = Math.round(costoAvg * 1.25);
+      const skuConRef = skus.find(s => s.mercado_min && s.mercado_max);
+      const mercado_min = skuConRef?.mercado_min ?? null;
+      const mercado_max = skuConRef?.mercado_max ?? null;
+      let mercado_avg = null, diferencia_clp = null, diferencia_pct = null, indice = null;
+      if (mercado_min && mercado_max) {
+        mercado_avg = (mercado_min + mercado_max) / 2;
+        diferencia_clp = mercado_avg - benchmark;
+        diferencia_pct = (diferencia_clp / benchmark) * 100;
+        indice = benchmark / mercado_avg;
+      }
+      return {
+        cluster_key: key,
+        linea,
+        marcas: [...marcas].join(", "),
+        sku_count: skus.length,
+        costo_avg: costoAvg,
+        benchmark,
+        mercado_min,
+        mercado_max,
+        mercado_avg,
+        diferencia_clp,
+        diferencia_pct,
+        indice,
+        banda: getBanda(indice),
+      };
+    }).sort((a, b) => (b.diferencia_pct ?? -Infinity) - (a.diferencia_pct ?? -Infinity));
+  }, [skusFiltrados]);
 
-  const inp = { padding: "7px 11px", fontSize: 13, borderRadius: 6, border: "0.5px solid #d3d1c7", outline: "none", background: "#fff", color: "#0b0b0b", fontFamily: "inherit" };
-  const btn = (active) => ({ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "0.5px solid " + (active ? "#2a78d6" : "#d3d1c7"), background: active ? "#e6f1fb" : "#fff", color: active ? "#185fa5" : "#52514e", cursor: "pointer", fontFamily: "inherit", fontWeight: active ? 500 : 400 });
+  const lineasEnData  = Array.from(new Set(skusFiltrados.map(s => s.linea)));
+  const totalUnidades = skusFiltrados.reduce((a, s) => a + s.stock, 0);
+  const valorTotal    = skusFiltrados.reduce((a, s) => a + s.costo * s.stock, 0);
+
+  const inp = {
+    padding: "7px 11px",
+    fontSize: 13,
+    borderRadius: 6,
+    border: "0.5px solid " + DARK.border,
+    outline: "none",
+    background: DARK.inputBg,
+    color: DARK.textPrimary,
+    fontFamily: "inherit",
+  };
+
+  const btn = (active) => ({
+    padding: "6px 14px",
+    fontSize: 12,
+    borderRadius: 6,
+    border: "0.5px solid " + (active ? "#2a78d6" : DARK.border),
+    background: active ? "rgba(42,120,214,0.15)" : DARK.inputBg,
+    color: active ? "#5aabf0" : DARK.textSecondary,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    fontWeight: active ? 500 : 400,
+  });
 
   const handleToggleSku = (codigo) => setExpandedSku(prev => prev === codigo ? null : codigo);
 
@@ -538,18 +753,19 @@ export default function PricingTab() {
   };
 
   return (
-    <div style={{ fontFamily: "Inter, system-ui, sans-serif", padding: "24px", maxWidth: 1080, background: "#fff", borderRadius: 12, color: "#0b0b0b" }}>
+    <div style={{ fontFamily: "Inter, system-ui, sans-serif", padding: "24px", maxWidth: 1080, color: DARK.textPrimary }}>
       {/* header */}
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 600, color: "#0b0b0b", margin: 0 }}>Pricing</h2>
-          <p style={{ fontSize: 13, color: "#888", margin: "3px 0 0" }}>
+          <h2 style={{ fontSize: 20, fontWeight: 600, color: DARK.textPrimary, margin: 0 }}>Pricing</h2>
+          <p style={{ fontSize: 13, color: DARK.textMuted, margin: "3px 0 0" }}>
             {loading ? "Cargando…" : `${skusFiltrados.length} SKUs · ${totalUnidades.toLocaleString("es-CL")} unidades · valor stock ${clp(valorTotal)} CLP neto`}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button style={btn(!modoLista)} onClick={() => setModoLista(false)}>Acordeón</button>
-          <button style={btn(modoLista)}  onClick={() => setModoLista(true)}>Lista plana</button>
+          <button style={btn(modoVista === "acordeon")}     onClick={() => setModoVista("acordeon")}>Acordeón</button>
+          <button style={btn(modoVista === "lista")}        onClick={() => setModoVista("lista")}>Lista plana</button>
+          <button style={btn(modoVista === "comparativa")}  onClick={() => setModoVista("comparativa")}>Comparativa de mercado</button>
         </div>
       </div>
 
@@ -580,11 +796,11 @@ export default function PricingTab() {
 
         {/* margen global */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-          <span style={{ fontSize: 12, color: "#888" }}>Margen global</span>
+          <span style={{ fontSize: 12, color: DARK.textMuted }}>Margen global</span>
           <input type="number" min={5} max={80} placeholder="auto" value={margenCustom ?? ""} onChange={e => setMargenCustom(e.target.value ? parseInt(e.target.value) : null)} style={{ ...inp, width: 72, textAlign: "center" }} />
-          <span style={{ fontSize: 12, color: "#888" }}>%</span>
+          <span style={{ fontSize: 12, color: DARK.textMuted }}>%</span>
           {margenCustom !== null && (
-            <button onClick={() => setMargenCustom(null)} style={{ ...inp, padding: "6px 10px", cursor: "pointer", fontSize: 11, color: "#a32d2d", borderColor: "#f7c1c1" }}>Reset</button>
+            <button onClick={() => setMargenCustom(null)} style={{ ...inp, padding: "6px 10px", cursor: "pointer", fontSize: 11, color: "#e05c5c", borderColor: "rgba(231,100,100,0.4)" }}>Reset</button>
           )}
         </div>
       </div>
@@ -596,7 +812,7 @@ export default function PricingTab() {
           const active = lineaFiltro === l;
           return (
             <button key={l} onClick={() => { setLineaFiltro(l); setMarcaFiltro("Todas"); }}
-              style={{ padding: "4px 14px", fontSize: 12, borderRadius: 20, border: `1px solid ${active && cfg ? cfg.color : "#d3d1c7"}`, background: active && cfg ? cfg.bg : active ? "#0b0b0b10" : "#fff", color: active && cfg ? cfg.text : active ? "#0b0b0b" : "#52514e", cursor: "pointer", fontFamily: "inherit", fontWeight: active ? 500 : 400 }}>
+              style={{ padding: "4px 14px", fontSize: 12, borderRadius: 20, border: `1px solid ${active && cfg ? cfg.color : DARK.border}`, background: active && cfg ? cfg.bg : active ? "rgba(255,255,255,0.08)" : "transparent", color: active && cfg ? cfg.text : active ? DARK.textPrimary : DARK.textSecondary, cursor: "pointer", fontFamily: "inherit", fontWeight: active ? 500 : 400 }}>
               {l === "Todas" ? "Todas" : cfg.label}
             </button>
           );
@@ -605,27 +821,33 @@ export default function PricingTab() {
 
       {/* estados */}
       {loading && (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "#888", fontSize: 14 }}>Cargando catálogo…</div>
+        <div style={{ textAlign: "center", padding: "60px 0", color: DARK.textMuted, fontSize: 14 }}>Cargando catálogo…</div>
       )}
       {error && (
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#a32d2d", fontSize: 14 }}>
+        <div style={{ textAlign: "center", padding: "40px 0", color: "#e05c5c", fontSize: 14 }}>
           Error: {error}
-          <br /><button onClick={fetchData} style={{ marginTop: 12, padding: "6px 16px", fontSize: 12, borderRadius: 6, border: "0.5px solid #a32d2d", background: "#fcebeb", color: "#a32d2d", cursor: "pointer" }}>Reintentar</button>
+          <br /><button onClick={fetchData} style={{ marginTop: 12, padding: "6px 16px", fontSize: 12, borderRadius: 6, border: "0.5px solid rgba(231,100,100,0.4)", background: "rgba(231,100,100,0.08)", color: "#e05c5c", cursor: "pointer" }}>Reintentar</button>
         </div>
       )}
 
       {/* contenido */}
       {!loading && !error && (
         skusFiltrados.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "60px 0", color: "#888", fontSize: 14 }}>Sin resultados para esa búsqueda</div>
-        ) : modoLista ? (
+          <div style={{ textAlign: "center", padding: "60px 0", color: DARK.textMuted, fontSize: 14 }}>Sin resultados para esa búsqueda</div>
+        ) : modoVista === "comparativa" ? (
+          <ComparativaView
+            clustersData={clustersData}
+            soloConRef={soloConRef}
+            onToggleSoloConRef={setSoloConRef}
+          />
+        ) : modoVista === "lista" ? (
           /* lista plana */
-          <div style={{ overflowX: "auto", borderRadius: 8, border: "0.5px solid #e1e0d9" }}>
+          <div style={{ overflowX: "auto", borderRadius: 8, border: "0.5px solid " + DARK.border }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
               <thead>
-                <tr style={{ background: "#fafaf8" }}>
+                <tr style={{ background: DARK.headBg }}>
                   {["Línea", "Código", "Descripción", "Marca", "Costo", "Precio B2B", "Margen", "Margen $", "P. Mercado", "Índice", "Stock"].map(h => (
-                    <th key={h} style={{ padding: "9px 10px", fontSize: 11, fontWeight: 500, color: "#888", textAlign: ["Línea","Código","Descripción","Marca"].includes(h) ? "left" : "right", borderBottom: "0.5px solid #e1e0d9", whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h} style={{ padding: "9px 10px", fontSize: 11, fontWeight: 500, color: DARK.textMuted, textAlign: ["Línea","Código","Descripción","Marca"].includes(h) ? "left" : "right", borderBottom: "0.5px solid " + DARK.borderLight, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -634,33 +856,34 @@ export default function PricingTab() {
                   const margen = margenCustom ?? s.margen_pct;
                   const precio = Math.round(s.costo * (1 + margen / 100));
                   const cfg    = LINEA_CONFIG[s.linea];
-                  const indice = calcIndice(precio, s.mercado_min, s.mercado_max);
+                  // Index uses benchmark (costo × 1.25), not operational price
+                  const indice = calcIndice(s.costo, s.mercado_min, s.mercado_max);
                   const banda  = getBanda(indice);
                   const bCfg  = banda ? BANDA_CONFIG[banda] : null;
                   return (
-                    <tr key={s.codigo} style={{ borderBottom: "0.5px solid #f0efe8" }}>
+                    <tr key={s.codigo} style={{ borderBottom: "0.5px solid " + DARK.borderLight }}>
                       <td style={{ padding: "8px 10px" }}>
                         <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: cfg?.bg, color: cfg?.text }}>{cfg?.label}</span>
                       </td>
-                      <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12, color: "#888" }}>{s.codigo}</td>
-                      <td style={{ padding: "8px 10px", fontSize: 13, color: "#0b0b0b" }}>{s.descripcion}</td>
-                      <td style={{ padding: "8px 10px", fontSize: 12, color: "#52514e" }}>{s.marca}</td>
-                      <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 13, color: "#52514e" }}>{clp(s.costo)}</td>
-                      <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 13, fontWeight: 500 }}>{clp(precio)}</td>
+                      <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12, color: DARK.textMuted }}>{s.codigo}</td>
+                      <td style={{ padding: "8px 10px", fontSize: 13, color: DARK.textPrimary }}>{s.descripcion}</td>
+                      <td style={{ padding: "8px 10px", fontSize: 12, color: DARK.textSecondary }}>{s.marca}</td>
+                      <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 13, color: DARK.textSecondary }}>{clp(s.costo)}</td>
+                      <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 13, fontWeight: 500, color: DARK.textPrimary }}>{clp(precio)}</td>
                       <td style={{ padding: "8px 10px", textAlign: "right" }}>
                         <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 6px", borderRadius: 10, background: margen >= 30 ? "#eaf3de" : margen >= 25 ? "#faeeda" : "#e6f1fb", color: margen >= 30 ? "#3b6d11" : margen >= 25 ? "#854f0b" : "#185fa5" }}>{margen}%</span>
                       </td>
                       <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12, color: "#1baf7a", fontWeight: 500 }}>{clp(precio - s.costo)}</td>
                       <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12 }}>
                         {s.mercado_min && s.mercado_max
-                          ? <span style={{ color: "#52514e" }}>{clp(s.mercado_min)} – {clp(s.mercado_max)}</span>
-                          : <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 10, background: "#f0efe8", color: "#888" }}>Sin ref.</span>
+                          ? <span style={{ color: DARK.textSecondary }}>{clp(s.mercado_min)} – {clp(s.mercado_max)}</span>
+                          : <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 10, background: "rgba(255,255,255,0.07)", color: DARK.textSecondary }}>Sin ref.</span>
                         }
                       </td>
                       <td style={{ padding: "8px 10px", textAlign: "center" }}>
                         {bCfg
                           ? <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10, background: bCfg.bg, color: bCfg.color, fontWeight: 500 }}>{Math.round(indice * 100)}%</span>
-                          : <span style={{ fontSize: 11, color: "#ccc" }}>—</span>
+                          : <span style={{ fontSize: 11, color: DARK.textMuted }}>—</span>
                         }
                       </td>
                       <td style={{ padding: "8px 10px", textAlign: "right" }}>
