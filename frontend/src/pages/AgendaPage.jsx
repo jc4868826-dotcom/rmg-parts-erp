@@ -276,7 +276,7 @@ export default function AgendaPage() {
                           <div className="text-xs mt-1 ml-5" style={{ color: 'var(--rmg-muted)' }}>{ev.cliente}</div>
                         )}
                         {ev.notas && (
-                          <div className="text-xs mt-1 ml-5" style={{ color: 'rgba(255,255,255,0.4)' }}>{ev.notas}</div>
+                          <div className="text-xs mt-1 ml-5" style={{ color: 'rgba(255,255,255,0.65)' }}>{ev.notas}</div>
                         )}
                       </div>
                     )

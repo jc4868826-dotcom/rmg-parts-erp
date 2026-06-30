@@ -261,7 +261,7 @@ export default function PricingTab() {
   });
 
   return (
-    <div style={{ fontFamily: "Inter, system-ui, sans-serif", padding: "24px 0", maxWidth: 980 }}>
+    <div style={{ fontFamily: "Inter, system-ui, sans-serif", padding: "24px", maxWidth: 980, background: "#fff", borderRadius: 12, color: "#0b0b0b" }}>
       {/* header */}
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 20 }}>
         <div>

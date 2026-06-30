@@ -18,7 +18,7 @@ const INTEGRACIONES = [
 const ESTADO_STYLES = {
   activo:    { color: 'var(--rmg-teal)',  bg: 'rgba(45,201,138,0.12)',  label: '● Activo'         },
   mock:      { color: 'var(--rmg-gold)',  bg: 'rgba(244,162,60,0.12)',  label: '◌ Mock local'     },
-  pendiente: { color: 'var(--rmg-muted)', bg: 'rgba(255,255,255,0.05)', label: '○ No configurado' },
+  pendiente: { color: 'rgba(90,143,168,0.9)', bg: 'rgba(255,255,255,0.08)', label: '○ No configurado' },
 }
 const ROLES = ['admin', 'vendedor', 'bodeguero']
 const ROL_STYLES = {
