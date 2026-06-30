@@ -565,6 +565,83 @@ const CATALOG_223 = [
   ["7000069","AUSTER","AUSTER 75W80 GL-5 1LT","lubricante","unidad",3199,4286,228,34],
 ]
 
+// ─── Extractor de cluster_key por categoría ───────────────────────────────────
+function extractClusterKey(categoria, descripcion) {
+  const d = descripcion.toUpperCase()
+
+  if (categoria === 'neumatico') {
+    // Formato ratio estándar: 215/70R16, 295/80 R22.5
+    let m = d.match(/\b(\d{3}\/\d{2,3}\s*R\d{1,2}(?:\.\d+)?)\b/)
+    if (m) return m[1].replace(/\s+/g, '')
+    // Formato cross: 31X10.5R15, 30X9.5 R15
+    m = d.match(/\b(\d{2}[X×]\d{1,2}(?:\.\d+)?\s*R\d{2})\b/)
+    if (m) return m[1].replace(/\s+/g, '')
+    // Formato camión/bus nominal: 1200 R24, 12 R22.5, 195 R15
+    m = d.match(/^(\d{2,4}(?:\.\d+)?\s*R\d{1,2}(?:\.\d+)?)/)
+    if (m) return m[1].replace(/\s+/g, '')
+    return d.split(' ').slice(0, 2).join(' ')
+  }
+
+  if (categoria === 'bateria') {
+    // NX: NX110-5, NX120-7L, NX100-S6LS
+    let m = d.match(/\b(NX\d{2,3}\S*)\b/)
+    if (m) return m[1]
+    // NS: NS40ZL, NS60L
+    m = d.match(/\b(NS\d{2}[A-Z]*)\b/)
+    if (m) return m[1]
+    // N estándar: N70Z, N100L, N150LSMF
+    m = d.match(/\b(N\d{2,3}[A-Z]*)\b/)
+    if (m) return m[1]
+    // JIS: 55D23R, 55D23L
+    m = d.match(/\b(\d{2}[A-Z]\d{2}[LR])\b/)
+    if (m) return m[1]
+    // Código DIN 5 dígitos: 55559, 73011SHD, 60044
+    m = d.match(/\b(\d{5}[A-Z]*)\b/)
+    if (m) return m[1]
+    // DT: 78DT-760, 75DT-710
+    m = d.match(/\b(\d{2}DT-\d+)\b/)
+    if (m) return m[1]
+    // H series: 30H730, 30H102
+    m = d.match(/\b(\d{2}H\d+)\b/)
+    if (m) return m[1]
+    // Moto: 12N24-4
+    m = d.match(/\b(\d{2}N\d+-\d+)\b/)
+    if (m) return m[1]
+    // 31-930S
+    m = d.match(/\b(\d{2}-\d{3}[A-Z])\b/)
+    if (m) return m[1]
+    // Fallback: amperaje
+    m = d.match(/(\d+)\s*AMP/)
+    if (m) return m[1] + 'AMP'
+    return d.split(' ').slice(0, 2).join(' ')
+  }
+
+  if (categoria === 'lubricante') {
+    const mV = d.match(/\b(\d+W-?\d+)\b/)
+    if (!mV) {
+      if (d.includes('ATF')) return d.includes(' VI') ? 'ATF-VI' : 'ATF-III'
+      if (d.includes('ANTIFREEZE')) return 'ANTIFREEZE'
+      const mISO = d.match(/ISO[\s-]?(\d+)/)
+      if (mISO) return 'HYDRO-ISO' + mISO[1]
+      if (d.includes('GREASE') || d.includes('GRASA')) return d.includes(' EP') ? 'GREASE-LITHIUM-EP' : 'GREASE-LITHIUM-COMPLEX'
+      return d.split(' ').slice(1, 4).join(' ').trim()
+    }
+    const visc = mV[1].replace('-', '')
+    if ((d.includes('ACEA') && d.includes('C3')) || /\bC3\b/.test(d)) return visc + '-ACEA-C3'
+    if (d.includes('CK-4') || d.includes('CK4')) return visc + '-CK4'
+    if (/ SN/.test(d)) return visc + '-SN'
+    if (/ SP/.test(d)) return visc + '-SP'
+    if (/ SL/.test(d)) return visc + '-SL'
+    if (d.includes('LSD')) return visc + '-LSD'
+    if (d.includes('GL-5') || d.includes('GL5')) return visc + '-GL5'
+    if (d.includes('GL-4') || d.includes('GL4')) return visc + '-GL4'
+    if (d.includes('4T')) return '4T-' + visc
+    return visc
+  }
+
+  return d.split(' ').slice(0, 3).join(' ')
+}
+
 // ─── Migraciones idempotentes ─────────────────────────────────────────────────
 function runMigrations() {
   // Migration 1: eliminar todos los datos de prueba
@@ -626,6 +703,78 @@ function runMigrations() {
     const skipped = CATALOG_223.length - inserted
     console.log(`✅ Migración catalog_223_v1 — ${inserted} SKUs nuevos insertados, ${skipped} ya existían`)
   }
+
+  // Migration 3: pricing_v2 — multi-proveedor + benchmarks de mercado
+  const m3 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('pricing_v2')
+  if (!m3) {
+    // DDL: columna cluster_key en productos (idempotente)
+    const cols = db.prepare('PRAGMA table_info(productos)').all()
+    if (!cols.some(c => c.name === 'cluster_key')) {
+      db.exec('ALTER TABLE productos ADD COLUMN cluster_key TEXT')
+    }
+
+    // DDL: nuevas tablas
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS proveedores_sku (
+        id TEXT PRIMARY KEY,
+        sku_codigo TEXT NOT NULL REFERENCES productos(codigo),
+        proveedor_nombre TEXT NOT NULL,
+        costo_neto REAL NOT NULL,
+        condicion_pago TEXT DEFAULT 'credito' CHECK(condicion_pago IN ('contado','credito')),
+        es_activo INTEGER DEFAULT 0,
+        fecha_actualizacion TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_psku_codigo ON proveedores_sku(sku_codigo);
+
+      CREATE TABLE IF NOT EXISTS cluster_referencia_mercado (
+        id TEXT PRIMARY KEY,
+        linea TEXT NOT NULL CHECK(linea IN ('neumaticos','baterias','lubricantes')),
+        cluster_key TEXT NOT NULL UNIQUE,
+        precio_mercado_min REAL,
+        precio_mercado_max REAL,
+        fuente TEXT,
+        fecha_actualizacion TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_crm_key ON cluster_referencia_mercado(cluster_key);
+    `)
+
+    // DML: datos dentro de una transacción
+    const seedPricingV2 = db.transaction(() => {
+      // Migrar proveedor inicial desde cada producto existente
+      const prods = db.prepare('SELECT id, codigo, marca, descripcion, categoria, precio_costo FROM productos WHERE activo = 1').all()
+      const insProveedor = db.prepare(`
+        INSERT OR IGNORE INTO proveedores_sku (id, sku_codigo, proveedor_nombre, costo_neto, condicion_pago, es_activo)
+        VALUES (?,?,?,?,?,1)
+      `)
+      for (const p of prods) {
+        insProveedor.run(uuidv4(), p.codigo, p.marca, p.precio_costo, 'credito')
+        const ck = extractClusterKey(p.categoria, p.descripcion)
+        db.prepare('UPDATE productos SET cluster_key = ? WHERE id = ?').run(ck, p.id)
+      }
+
+      // Sembrar precios de mercado validados (jun-2026)
+      const insCluster = db.prepare(`
+        INSERT OR IGNORE INTO cluster_referencia_mercado
+          (id, linea, cluster_key, precio_mercado_min, precio_mercado_max, fuente)
+        VALUES (?,?,?,?,?,?)
+      `)
+      const SEED_CLUSTERS = [
+        ['neumaticos', '215/70R16',    121500, 162000, 'Autoplanet/Neumafast jun-2026'],
+        ['neumaticos', '205/60R16',     44990,  62990, 'Fullneumaticos (tier económico) jun-2026'],
+        ['baterias',   'NS40ZL',        67287,  70271, 'Covepa/Razazi jun-2026'],
+        ['baterias',   '90AMP',         89900, 129000, 'Tienda Salfa/AutoPlanet/Razazi jun-2026'],
+        ['lubricantes','5W30-ACEA-C3',  10900,  27500, 'KIXX/Just Oil (tier económico) jun-2026'],
+      ]
+      for (const [linea, key, min, max, fuente] of SEED_CLUSTERS) {
+        insCluster.run(uuidv4(), linea, key, min, max, fuente)
+      }
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('pricing_v2')
+      return prods.length
+    })
+    const total = seedPricingV2()
+    console.log(`✅ Migración pricing_v2 — ${total} SKUs con proveedor+cluster_key, 5 clusters sembrados`)
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
@@ -669,4 +818,4 @@ async function initDB() {
   seedData()
 }
 
-module.exports = { db, initDB, uuidv4 }
+module.exports = { db, initDB, uuidv4, extractClusterKey }

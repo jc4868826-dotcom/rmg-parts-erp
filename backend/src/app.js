@@ -67,6 +67,7 @@ app.use('/api/compras',                require('./routes/compras'));   // Compra
 app.use('/api/cxc',                    require('./routes/cxc'));       // Cuentas por cobrar
 app.use('/api/bodega',                 require('./routes/bodega'));    // Bodegas
 app.use('/api/admin',                  require('./routes/admin'));     // TEMP: reset-db
+app.use('/api/pricing',                require('./routes/pricing'));   // Pricing multi-proveedor + benchmarks
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {
