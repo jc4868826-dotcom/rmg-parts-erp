@@ -642,6 +642,24 @@ function extractClusterKey(categoria, descripcion) {
   return d.split(' ').slice(0, 3).join(' ')
 }
 
+// ─── Parser de volumen en litros (lubricantes) ───────────────────────────────
+function parseVolumenLitros(descripcion) {
+  const d = descripcion.toUpperCase()
+  // Gallons: digits directly adjacent to GL (no space), GL not followed by - or digit
+  // e.g. "1GL" → 3.785L. "GL-4" / "GL5" spec codes are excluded by (?![-\d]).
+  const galMatch = d.match(/(\d+(?:[.,]\d+)?)GL\b(?![-\d])/)
+  if (galMatch) {
+    const gal = parseFloat(galMatch[1].replace(',', '.'))
+    if (!isNaN(gal) && gal > 0) return Math.round(gal * 3785) / 1000
+  }
+  // Liters: 1L, 1LT, 3L, 4L, 4LT, 6L, 20L, 200L, 200LT — use last match to avoid
+  // viscosity-grade digits (e.g. "80W90" → "90" would not be followed by L)
+  const matches = [...d.matchAll(/(\d+(?:[.,]\d+)?)\s*LT?\b/g)]
+  if (matches.length === 0) return null
+  const vol = parseFloat(matches[matches.length - 1][1].replace(',', '.'))
+  return (isNaN(vol) || vol <= 0) ? null : vol
+}
+
 // ─── Migraciones idempotentes ─────────────────────────────────────────────────
 function runMigrations() {
   // Migration 1: eliminar todos los datos de prueba
@@ -902,6 +920,55 @@ function runMigrations() {
     const n = seedClusters()
     console.log(`✅ Migración pricing_v2b — ${n} nuevos clusters de batería sembrados`)
   }
+
+  // Migration 6: pricing_v3 — volumen_litros en productos + corrección cluster 5W30-ACEA-C3 + NX120-7 + limpia 90AMP
+  const m6 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('pricing_v3')
+  if (!m6) {
+    // Añadir columna volumen_litros si no existe
+    const colsProd = db.prepare('PRAGMA table_info(productos)').all()
+    if (!colsProd.some(c => c.name === 'volumen_litros')) {
+      db.exec('ALTER TABLE productos ADD COLUMN volumen_litros REAL')
+    }
+
+    const migV3 = db.transaction(() => {
+      // Poblar volumen_litros para todos los lubricantes
+      const lubricantes = db.prepare(
+        "SELECT id, descripcion FROM productos WHERE categoria = 'lubricante'"
+      ).all()
+      for (const p of lubricantes) {
+        db.prepare('UPDATE productos SET volumen_litros = ? WHERE id = ?')
+          .run(parseVolumenLitros(p.descripcion), p.id)
+      }
+
+      // Paso 3: corregir datos semilla 5W30-ACEA-C3 (ahora en $/L normalizados)
+      db.prepare(`
+        UPDATE cluster_referencia_mercado
+        SET precio_mercado_min = ?, precio_mercado_max = ?, fuente = ?,
+            fecha_actualizacion = datetime('now')
+        WHERE cluster_key = ?
+      `).run(7275, 10900, 'KIXX 1L / Just Oil 1gal jun-2026 (normalizado a $/L)', '5W30-ACEA-C3')
+
+      // Paso 4: insertar cluster NX120-7 (sin sufijo L) si no existe
+      db.prepare(`
+        INSERT OR IGNORE INTO cluster_referencia_mercado
+          (id, linea, cluster_key, precio_mercado_min, precio_mercado_max, fuente)
+        VALUES (?,?,?,?,?,?)
+      `).run(uuidv4(), 'baterias', 'NX120-7', 79000, 107375, 'LOA/MSRepuestos/Beste/Easy jun-2026')
+
+      // Paso 5: eliminar cluster 90AMP si ningún producto lo referencia
+      const uso90 = db.prepare(
+        "SELECT COUNT(*) as n FROM productos WHERE cluster_key = '90AMP'"
+      ).get()
+      if (!uso90 || uso90.n === 0) {
+        db.prepare("DELETE FROM cluster_referencia_mercado WHERE cluster_key = '90AMP'").run()
+      }
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('pricing_v3')
+      return lubricantes.length
+    })
+    const nLub = migV3()
+    console.log(`✅ Migración pricing_v3 — volumen_litros calculado para ${nLub} lubricantes, cluster 5W30-ACEA-C3 corregido, NX120-7 insertado, 90AMP eliminado`)
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
@@ -945,4 +1012,4 @@ async function initDB() {
   seedData()
 }
 
-module.exports = { db, initDB, uuidv4, extractClusterKey }
+module.exports = { db, initDB, uuidv4, extractClusterKey, parseVolumenLitros }

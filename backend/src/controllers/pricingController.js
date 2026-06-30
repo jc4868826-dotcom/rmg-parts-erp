@@ -1,4 +1,4 @@
-const { db, uuidv4, extractClusterKey } = require('../../config/database')
+const { db, uuidv4, extractClusterKey, parseVolumenLitros } = require('../../config/database')
 
 const CATEGORIA_LINEA = {
   neumatico:  'NEUMATICOS',
@@ -12,6 +12,7 @@ const getSkus = (req, res) => {
     const rows = db.prepare(`
       SELECT p.codigo, p.marca, p.descripcion, p.categoria, p.cluster_key,
              p.precio_costo, p.precio_b2b_base, p.margen_objetivo, p.stock_actual,
+             p.volumen_litros,
              ps.id   AS proveedor_id,
              ps.proveedor_nombre,
              ps.costo_neto,
@@ -37,24 +38,30 @@ const getSkus = (req, res) => {
       provByCodigo[pv.sku_codigo].push(pv)
     }
 
-    const result = rows.map(r => ({
-      codigo:         r.codigo,
-      marca:          r.marca,
-      descripcion:    r.descripcion,
-      categoria:      r.categoria,
-      linea:          CATEGORIA_LINEA[r.categoria] || r.categoria.toUpperCase(),
-      cluster_key:    r.cluster_key || null,
-      costo:          r.costo_neto  ?? r.precio_costo,
-      precio_b2b:     r.precio_b2b_base,
-      stock:          r.stock_actual,
-      margen_pct:     r.margen_objetivo,
-      proveedor_activo: r.proveedor_nombre || null,
-      condicion_pago:   r.condicion_pago  || null,
-      mercado_min:    r.mercado_min  || null,
-      mercado_max:    r.mercado_max  || null,
-      mercado_fuente: r.mercado_fuente || null,
-      proveedores:    provByCodigo[r.codigo] || [],
-    }))
+    const result = rows.map(r => {
+      const costo = r.costo_neto ?? r.precio_costo
+      const volumen = r.volumen_litros || null
+      return {
+        codigo:         r.codigo,
+        marca:          r.marca,
+        descripcion:    r.descripcion,
+        categoria:      r.categoria,
+        linea:          CATEGORIA_LINEA[r.categoria] || r.categoria.toUpperCase(),
+        cluster_key:    r.cluster_key || null,
+        costo,
+        precio_b2b:     r.precio_b2b_base,
+        stock:          r.stock_actual,
+        margen_pct:     r.margen_objetivo,
+        proveedor_activo: r.proveedor_nombre || null,
+        condicion_pago:   r.condicion_pago  || null,
+        mercado_min:    r.mercado_min  || null,
+        mercado_max:    r.mercado_max  || null,
+        mercado_fuente: r.mercado_fuente || null,
+        proveedores:    provByCodigo[r.codigo] || [],
+        volumen_litros: volumen,
+        costo_por_litro: (volumen && volumen > 0) ? costo / volumen : null,
+      }
+    })
 
     res.json(result)
   } catch (err) {
@@ -179,14 +186,16 @@ const upsertCluster = (req, res) => {
   }
 }
 
-// POST /api/pricing/reindex  — re-ejecuta cluster_key extraction en todos los SKUs activos
+// POST /api/pricing/reindex  — re-ejecuta cluster_key + volumen_litros en todos los SKUs activos
 const reindexClusters = (req, res) => {
   try {
     const prods = db.prepare('SELECT id, codigo, categoria, descripcion FROM productos WHERE activo = 1').all()
     const upd = db.transaction(() => {
       for (const p of prods) {
-        db.prepare('UPDATE productos SET cluster_key = ? WHERE id = ?')
-          .run(extractClusterKey(p.categoria, p.descripcion), p.id)
+        const ck  = extractClusterKey(p.categoria, p.descripcion)
+        const vol = p.categoria === 'lubricante' ? parseVolumenLitros(p.descripcion) : null
+        db.prepare('UPDATE productos SET cluster_key = ?, volumen_litros = ? WHERE id = ?')
+          .run(ck, vol, p.id)
       }
     })
     upd()

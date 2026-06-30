@@ -563,7 +563,10 @@ function ComparativaView({ clustersData, soloConRef, onToggleSoloConRef }) {
               const lineCfg = LINEA_CONFIG[c.linea];
               return (
                 <tr key={c.cluster_key} style={{ background: "transparent" }}>
-                  <td style={{ ...tdStyle("left"), fontFamily: "monospace", fontSize: 12, color: DARK.textMuted }}>{c.cluster_key}</td>
+                  <td style={{ ...tdStyle("left"), fontFamily: "monospace", fontSize: 12, color: DARK.textMuted }}>
+                    {c.cluster_key}
+                    {c.per_litro && <span style={{ fontSize: 10, color: DARK.textSecondary, marginLeft: 5 }}>($/L)</span>}
+                  </td>
                   <td style={{ ...tdStyle("left") }}>
                     {lineCfg ? (
                       <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: lineCfg.bg, color: lineCfg.text }}>{lineCfg.label}</span>
@@ -687,8 +690,25 @@ export default function PricingTab() {
       byCluster[key].marcas.add(s.marca);
     }
     return Object.entries(byCluster).map(([key, { linea, skus, marcas }]) => {
-      const costoAvg = skus.reduce((a, s) => a + s.costo, 0) / skus.length;
-      const benchmark = Math.round(costoAvg * 1.25);
+      const isLubricante = linea === "LUBRICANTES";
+      let costoAvg, benchmark, per_litro = false;
+
+      if (isLubricante) {
+        // Para lubricantes: benchmark en $/L usando costo_por_litro de los SKUs con volumen conocido
+        const conVol = skus.filter(s => s.costo_por_litro != null && s.costo_por_litro > 0);
+        if (conVol.length > 0) {
+          costoAvg = conVol.reduce((a, s) => a + s.costo_por_litro, 0) / conVol.length;
+          benchmark = Math.round(costoAvg * 1.25);
+          per_litro = true;
+        } else {
+          costoAvg = skus.reduce((a, s) => a + s.costo, 0) / skus.length;
+          benchmark = Math.round(costoAvg * 1.25);
+        }
+      } else {
+        costoAvg = skus.reduce((a, s) => a + s.costo, 0) / skus.length;
+        benchmark = Math.round(costoAvg * 1.25);
+      }
+
       const skuConRef = skus.find(s => s.mercado_min && s.mercado_max);
       const mercado_min = skuConRef?.mercado_min ?? null;
       const mercado_max = skuConRef?.mercado_max ?? null;
@@ -706,6 +726,7 @@ export default function PricingTab() {
         sku_count: skus.length,
         costo_avg: costoAvg,
         benchmark,
+        per_litro,
         mercado_min,
         mercado_max,
         mercado_avg,
