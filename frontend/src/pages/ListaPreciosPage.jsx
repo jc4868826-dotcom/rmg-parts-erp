@@ -108,7 +108,7 @@ export default function ListaPreciosPage() {
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
                 {[
-                  'Proveedor', 'Categoría', 'Producto Genérico', 'Descripción',
+                  'SKU', 'Proveedor', 'Categoría', 'Producto Genérico', 'Descripción',
                   'Presentación', 'Tipo Envase', 'Costo Neto',
                   'Precio Venta Neto RMG', 'Segmento', 'Margen %'
                 ].map(h => (
@@ -121,7 +121,7 @@ export default function ListaPreciosPage() {
               {isLoading
                 ? Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      {Array.from({ length: 10 }).map((_, j) => (
+                      {Array.from({ length: 11 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/>
                         </td>
@@ -132,7 +132,8 @@ export default function ListaPreciosPage() {
                     <tr key={f.id}
                       style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
                       className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3 text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-blt)' }}>{f.proveedor}</td>
+                      <td className="px-4 py-3 font-mono text-xs font-bold whitespace-nowrap" style={{ color: 'var(--rmg-blt)' }}>{f.codigo_sku}</td>
+                      <td className="px-4 py-3 text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.proveedor}</td>
                       <td className="px-4 py-3 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{f.categoria}</td>
                       <td className="px-4 py-3 text-xs max-w-[140px] truncate" style={{ color: 'var(--rmg-off)' }}>{f.producto_generico}</td>
                       <td className="px-4 py-3 text-xs max-w-[220px] truncate" style={{ color: 'var(--rmg-off)' }} title={f.descripcion}>{f.descripcion}</td>
