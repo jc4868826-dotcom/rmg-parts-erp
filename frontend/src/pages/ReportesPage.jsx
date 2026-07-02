@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP } from '@utils/format'
-import { useConfigStore } from '@stores/configStore'
+import { useConfig } from '@hooks/useConfig'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, ReferenceLine } from 'recharts'
 import { Download } from 'lucide-react'
 
 export default function ReportesPage() {
-  const cfg = useConfigStore()
+  const { cfg } = useConfig()
 
   const { data: ventas } = useQuery({
     queryKey: ['reportes-ventas'],

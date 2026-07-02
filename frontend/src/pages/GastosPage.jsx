@@ -14,8 +14,9 @@ const CATEGORIAS = [
   { key: 'otros',          label: 'Otros',           color: 'rgba(90,143,168,0.8)', bg: 'rgba(90,143,168,0.1)', icon: '📦' },
 ]
 
+const CUENTAS = ['1781310106 Banco de Chile', '000-0-00000 Banco BCI', '000-0-00000 Banco Santander', 'Caja chica']
 const PRESUPUESTO = 2_500_000
-const FORM_INIT = { fecha: new Date().toISOString().split('T')[0], categoria: 'combustible', monto: '', descripcion: '', comprobante: '' }
+const FORM_INIT = { fecha: new Date().toISOString().split('T')[0], categoria: 'combustible', monto: '', descripcion: '', comprobante: '', cuenta_bancaria: '' }
 
 export default function GastosPage() {
   const [filtro, setFiltro]     = useState('')
@@ -101,6 +102,13 @@ export default function GastosPage() {
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Comprobante</label>
               <input className="rmg-input" placeholder="N° boleta / factura..." value={form.comprobante}
                 onChange={e => setForm(p => ({ ...p, comprobante: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cuenta bancaria</label>
+              <select className="rmg-input" value={form.cuenta_bancaria} onChange={e => setForm(p => ({ ...p, cuenta_bancaria: e.target.value }))}>
+                <option value="">Sin especificar</option>
+                {CUENTAS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
             <div className="md:col-span-3 flex gap-3 justify-end pt-1">
               <button type="button" onClick={() => { setShowForm(false); setForm(FORM_INIT) }} className="btn-secondary">Cancelar</button>

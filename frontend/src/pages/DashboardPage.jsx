@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { formatCLP } from '@utils/format'
-import { useConfigStore } from '@stores/configStore'
+import { useConfig } from '@hooks/useConfig'
 import {
   TrendingUp, Users, FileText, Package, Bell,
   ChevronDown, Zap, RefreshCw, ArrowUpRight, ArrowDownRight,
@@ -135,7 +135,7 @@ const SegBar = ({ nombre, icono, actual, meta, color }) => {
 const ALL_SECS = ['segmentos','edr','forecast','cxc','flujo','alertas']
 
 export default function DashboardPage() {
-  const cfg = useConfigStore()
+  const { cfg } = useConfig()
 
   const [filtro,  setFiltro]  = useState({ periodo:'mes', segmento:'todos', desde:'', hasta:'' })
   const [activo,  setActivo]  = useState({ periodo:'mes', segmento:'todos', desde:'', hasta:'' })
@@ -144,10 +144,10 @@ export default function DashboardPage() {
   const [open,       setOpen]       = useState(new Set(ALL_SECS))
   const [filtroCxC,  setFiltroCxC]  = useState('todas')
   const [supuestos,  setSupuestos]  = useState({
-    talleres:       cfg.forecast_mes1,
-    flotas:         cfg.forecast_mes1,
-    concesionarios: cfg.forecast_mes1,
-    construccion:   cfg.forecast_mes1,
+    talleres:       15,
+    flotas:         15,
+    concesionarios: 15,
+    construccion:   15,
   })
 
   const toggle = id => setOpen(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n })

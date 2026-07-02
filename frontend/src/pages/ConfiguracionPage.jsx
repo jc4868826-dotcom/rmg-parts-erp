@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
-import { useConfigStore } from '@stores/configStore'
 import {
   Building2, Users, Plug, Check, Plus, X,
-  Shield, Eye, EyeOff, SlidersHorizontal
+  Shield, Eye, EyeOff, SlidersHorizontal, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -100,35 +101,68 @@ export default function ConfiguracionPage() {
   }
   const toggleActivo = (id) => setUsuarios(prev => prev.map(u => u.id === id ? { ...u, activo: !u.activo } : u))
 
-  // ── Parámetros del negocio (Zustand + localStorage) ──────
-  const cfg    = useConfigStore()
-  const saveCfg = useConfigStore(s => s.save)
+  // ── Parámetros del negocio (API → DB) ────────────────────
+  const qc = useQueryClient()
 
-  const [params, setParams] = useState({
-    meta_total:           cfg.meta_total,
-    meta_talleres:        cfg.meta_talleres,
-    meta_flotas:          cfg.meta_flotas,
-    meta_concesionarios:  cfg.meta_concesionarios,
-    meta_construccion:    cfg.meta_construccion,
-    forecast_mes1:        cfg.forecast_mes1,
-    forecast_mes2:        cfg.forecast_mes2,
-    forecast_mes3:        cfg.forecast_mes3,
-    margen_objetivo:      cfg.margen_objetivo,
-    dias_credito:         cfg.dias_credito,
-    presupuesto_gastos:   cfg.presupuesto_gastos,
-    stock_min_bateria:    cfg.stock_min_bateria,
-    stock_min_lubricante: cfg.stock_min_lubricante,
-    stock_min_neumatico:  cfg.stock_min_neumatico,
-    dias_inactivo:        cfg.dias_inactivo,
-    dias_cxc_alerta:      cfg.dias_cxc_alerta,
-  })
-
-  const handleSaveParams = () => {
-    saveCfg(params)
-    toast.success('Parámetros guardados — dashboard y reportes actualizados')
+  const mesHoy = () => new Date().toISOString().slice(0, 7)
+  const generarMeses = () => {
+    const meses = []
+    const d = new Date()
+    for (let i = 0; i < 12; i++) {
+      meses.push(d.toISOString().slice(0, 7))
+      d.setMonth(d.getMonth() - 1)
+    }
+    return meses
   }
 
+  const [mesSel, setMesSel] = useState(mesHoy)
+
+  const { data: cfgDB, isLoading: cfgLoading } = useQuery({
+    queryKey: ['config', mesSel],
+    queryFn: () => api.get('/configuracion', { params: { mes: mesSel } }).then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const [params, setParams] = useState(null)
+
+  useEffect(() => {
+    if (cfgDB) {
+      setParams({
+        meta_venta_total:                 cfgDB.meta_venta_total,
+        meta_talleres:                    cfgDB.meta_talleres,
+        meta_flotas:                      cfgDB.meta_flotas,
+        meta_concesionarios:              cfgDB.meta_concesionarios,
+        meta_construccion:                cfgDB.meta_construccion,
+        pct_crecimiento_m1:               cfgDB.pct_crecimiento_m1,
+        pct_crecimiento_m2:               cfgDB.pct_crecimiento_m2,
+        pct_crecimiento_m3:               cfgDB.pct_crecimiento_m3,
+        margen_objetivo_pct:              cfgDB.margen_objetivo_pct,
+        dias_credito_promedio:            cfgDB.dias_credito_promedio,
+        presupuesto_gastos_operacionales: cfgDB.presupuesto_gastos_operacionales,
+        stock_minimo_bateria:             cfgDB.stock_minimo_bateria,
+        stock_minimo_lubricante:          cfgDB.stock_minimo_lubricante,
+        stock_minimo_neumatico:           cfgDB.stock_minimo_neumatico,
+        dias_inactivo_cliente:            cfgDB.dias_inactivo_cliente,
+        dias_alerta_cxc:                  cfgDB.dias_alerta_cxc,
+      })
+    }
+  }, [cfgDB])
+
+  const saveMut = useMutation({
+    mutationFn: (data) => api.post('/configuracion', { mes: mesSel, ...data }).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries(['config'])
+      qc.invalidateQueries(['config-actual'])
+      toast.success('Parámetros guardados — dashboard y reportes actualizados')
+    },
+    onError: () => toast.error('Error al guardar parámetros'),
+  })
+
+  const handleSaveParams = () => params && saveMut.mutate(params)
+
   const setP = (key) => (val) => setParams(p => ({ ...p, [key]: val }))
+
+  const mesesDisponibles = generarMeses()
 
   const TABS = [
     { k: 'empresa',    l: 'Empresa',            Icon: Building2        },
@@ -315,6 +349,23 @@ export default function ConfiguracionPage() {
       {tab === 'parametros' && (
         <div className="space-y-5">
 
+          {/* ─── Selector de mes ─────────────────────────────── */}
+          <div className="rmg-card p-4 flex items-center justify-between">
+            <div>
+              <div className="font-semibold text-sm" style={{ color: 'var(--rmg-off)' }}>Mes de configuración</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Los parámetros se guardan por mes — puedes configurar meses futuros</div>
+            </div>
+            <select className="rmg-input w-44" value={mesSel} onChange={e => setMesSel(e.target.value)}>
+              {mesesDisponibles.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          {cfgLoading || !params ? (
+            <div className="rmg-card p-8 text-center" style={{ color: 'var(--rmg-muted)' }}>Cargando parámetros…</div>
+          ) : (
+            <>
           {/* ─── Metas mensuales ─────────────────────────────── */}
           <div className="rmg-card p-6">
             <h2 className="font-bold mb-1">Metas mensuales</h2>
@@ -323,8 +374,8 @@ export default function ConfiguracionPage() {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Meta total mensual">
-                <NumInput value={params.meta_total} min={0} step={500000} prefix="$"
-                  onChange={setP('meta_total')} />
+                <NumInput value={params.meta_venta_total} min={0} step={500000} prefix="$"
+                  onChange={setP('meta_venta_total')} />
               </Field>
               <Field label="Meta Talleres">
                 <NumInput value={params.meta_talleres} min={0} step={500000} prefix="$"
@@ -346,7 +397,7 @@ export default function ConfiguracionPage() {
             <p className="text-xs mt-4 pt-3" style={{ borderTop: '1px solid rgba(56,182,255,0.08)', color: 'var(--rmg-muted)' }}>
               La suma de segmentos ({(
                 (params.meta_talleres + params.meta_flotas + params.meta_concesionarios + params.meta_construccion) / 1_000_000
-              ).toFixed(1)}M) idealmente iguala la meta total ({(params.meta_total / 1_000_000).toFixed(0)}M).
+              ).toFixed(1)}M) idealmente iguala la meta total ({(params.meta_venta_total / 1_000_000).toFixed(0)}M).
             </p>
           </div>
 
@@ -358,30 +409,30 @@ export default function ConfiguracionPage() {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Field label="Crecimiento mes 1">
-                <NumInput value={params.forecast_mes1} min={-50} max={100} suffix="%"
-                  onChange={setP('forecast_mes1')} />
+                <NumInput value={params.pct_crecimiento_m1} min={-50} max={100} suffix="%"
+                  onChange={setP('pct_crecimiento_m1')} />
               </Field>
               <Field label="Crecimiento mes 2">
-                <NumInput value={params.forecast_mes2} min={-50} max={100} suffix="%"
-                  onChange={setP('forecast_mes2')} />
+                <NumInput value={params.pct_crecimiento_m2} min={-50} max={100} suffix="%"
+                  onChange={setP('pct_crecimiento_m2')} />
               </Field>
               <Field label="Crecimiento mes 3">
-                <NumInput value={params.forecast_mes3} min={-50} max={100} suffix="%"
-                  onChange={setP('forecast_mes3')} />
+                <NumInput value={params.pct_crecimiento_m3} min={-50} max={100} suffix="%"
+                  onChange={setP('pct_crecimiento_m3')} />
               </Field>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <Field label="Margen bruto objetivo">
-                <NumInput value={params.margen_objetivo} min={0} max={100} step={0.5} suffix="%"
-                  onChange={setP('margen_objetivo')} />
+                <NumInput value={params.margen_objetivo_pct} min={0} max={100} step={0.5} suffix="%"
+                  onChange={setP('margen_objetivo_pct')} />
               </Field>
               <Field label="Días de crédito promedio">
-                <NumInput value={params.dias_credito} min={0} max={180} suffix="días"
-                  onChange={setP('dias_credito')} />
+                <NumInput value={params.dias_credito_promedio} min={0} max={180} suffix="días"
+                  onChange={setP('dias_credito_promedio')} />
               </Field>
               <Field label="Presupuesto mensual gastos">
-                <NumInput value={params.presupuesto_gastos} min={0} step={100000} prefix="$"
-                  onChange={setP('presupuesto_gastos')} />
+                <NumInput value={params.presupuesto_gastos_operacionales} min={0} step={100000} prefix="$"
+                  onChange={setP('presupuesto_gastos_operacionales')} />
               </Field>
             </div>
           </div>
@@ -394,34 +445,36 @@ export default function ConfiguracionPage() {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Field label="Stock mínimo — Baterías">
-                <NumInput value={params.stock_min_bateria} min={0} suffix="u"
-                  onChange={setP('stock_min_bateria')} />
+                <NumInput value={params.stock_minimo_bateria} min={0} suffix="u"
+                  onChange={setP('stock_minimo_bateria')} />
               </Field>
               <Field label="Stock mínimo — Lubricantes">
-                <NumInput value={params.stock_min_lubricante} min={0} suffix="u"
-                  onChange={setP('stock_min_lubricante')} />
+                <NumInput value={params.stock_minimo_lubricante} min={0} suffix="u"
+                  onChange={setP('stock_minimo_lubricante')} />
               </Field>
               <Field label="Stock mínimo — Neumáticos">
-                <NumInput value={params.stock_min_neumatico} min={0} suffix="u"
-                  onChange={setP('stock_min_neumatico')} />
+                <NumInput value={params.stock_minimo_neumatico} min={0} suffix="u"
+                  onChange={setP('stock_minimo_neumatico')} />
               </Field>
               <Field label="Días sin compra → cliente inactivo">
-                <NumInput value={params.dias_inactivo} min={1} suffix="días"
-                  onChange={setP('dias_inactivo')} />
+                <NumInput value={params.dias_inactivo_cliente} min={1} suffix="días"
+                  onChange={setP('dias_inactivo_cliente')} />
               </Field>
               <Field label="Días vencimiento CxC → alerta">
-                <NumInput value={params.dias_cxc_alerta} min={1} suffix="días"
-                  onChange={setP('dias_cxc_alerta')} />
+                <NumInput value={params.dias_alerta_cxc} min={1} suffix="días"
+                  onChange={setP('dias_alerta_cxc')} />
               </Field>
             </div>
           </div>
 
           {/* Guardar */}
           <div className="flex justify-end">
-            <button onClick={handleSaveParams} className="btn-primary flex items-center gap-2 px-6">
-              <Check size={15} /> Guardar parámetros
+            <button onClick={handleSaveParams} disabled={saveMut.isPending} className="btn-primary flex items-center gap-2 px-6 disabled:opacity-50">
+              <Check size={15} /> {saveMut.isPending ? 'Guardando...' : 'Guardar parámetros'}
             </button>
           </div>
+            </>
+          )}
         </div>
       )}
 

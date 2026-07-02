@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, FileText, Send, Check, X, Clock } from 'lucide-react'
+import { Plus, FileText, Send, Check, X, Clock, Printer, MessageCircle } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 const ESTADOS = [
   { key: '', label: 'Todos' },
@@ -21,9 +22,70 @@ const ESTADO_STYLES = {
   vencida:   { label: 'Vencida',   icon: Clock,   bg: 'rgba(244,162,60,0.12)', color: 'var(--rmg-gold)' },
 }
 
+function imprimirCotizacion(c) {
+  const win = window.open('', '_blank', 'width=800,height=600')
+  win.document.write(`
+    <html><head><title>Cotización ${c.numero}</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 32px; color: #1a1a2e; }
+      h1 { font-size: 22px; margin-bottom: 4px; }
+      .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+      th { text-align: left; padding: 8px; border-bottom: 2px solid #ddd; font-size: 12px; text-transform: uppercase; color: #666; }
+      td { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; }
+      .total-row td { font-weight: bold; font-size: 15px; border-top: 2px solid #ddd; }
+      .right { text-align: right; }
+      .footer { margin-top: 32px; font-size: 11px; color: #999; }
+    </style></head><body>
+    <h1>RMG Auto Parts</h1>
+    <p class="sub">Cotización ${c.numero} · ${new Date().toLocaleDateString('es-CL')}</p>
+    <p><strong>Cliente:</strong> ${c.cliente || '—'}</p>
+    <p><strong>Condición de pago:</strong> ${c.condicion_pago || '—'}</p>
+    ${c.notas ? `<p><strong>Notas:</strong> ${c.notas}</p>` : ''}
+    <table>
+      <thead><tr><th>Código</th><th>Descripción</th><th class="right">Cant.</th><th class="right">P. Neto</th><th class="right">Subtotal</th></tr></thead>
+      <tbody>
+        ${(c.items || []).map(i => `<tr>
+          <td>${i.codigo || '—'}</td><td>${i.descripcion || '—'}</td>
+          <td class="right">${i.cantidad}</td>
+          <td class="right">$${i.precio_unitario?.toLocaleString('es-CL')}</td>
+          <td class="right">$${i.subtotal?.toLocaleString('es-CL')}</td>
+        </tr>`).join('')}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="4" class="right">Neto</td><td class="right">$${c.neto?.toLocaleString('es-CL')}</td></tr>
+        <tr><td colspan="4" class="right">IVA (19%)</td><td class="right">$${c.iva?.toLocaleString('es-CL')}</td></tr>
+        <tr class="total-row"><td colspan="4" class="right">TOTAL</td><td class="right">$${c.total?.toLocaleString('es-CL')}</td></tr>
+      </tfoot>
+    </table>
+    <div class="footer">RMG Auto Parts · ventas@rmgautoparts.cl · Santiago, Chile</div>
+    </body></html>
+  `)
+  win.document.close()
+  win.print()
+}
+
+function waLink(c) {
+  const msg = encodeURIComponent(
+    `Hola! Adjunto cotización *${c.numero}* de RMG Auto Parts.\n` +
+    `Cliente: ${c.cliente || '—'}\n` +
+    `Total: $${c.total?.toLocaleString('es-CL')} IVA incluido\n` +
+    `Condición: ${c.condicion_pago || 'Contado'}\n\n` +
+    `Para más información contactar a ventas@rmgautoparts.cl`
+  )
+  return `https://wa.me/?text=${msg}`
+}
+
 export default function CotizacionesPage() {
   const [estadoFiltro, setFiltro] = useState('')
   const navigate = useNavigate()
+  const qc = useQueryClient()
+
+  const aprobarMut = useMutation({
+    mutationFn: (id) => api.post(`/cotizaciones/${id}/aprobar`).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cotizaciones'] }); toast.success('Cotización aprobada') },
+    onError: () => toast.error('Error al aprobar'),
+  })
 
   const { data: cotizaciones = [], isLoading } = useQuery({
     queryKey: ['cotizaciones', estadoFiltro],
@@ -123,8 +185,18 @@ export default function CotizacionesPage() {
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(c.created_at)}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
-                          <button className="btn-secondary text-xs px-2 py-1" onClick={e => { e.stopPropagation() }}>PDF</button>
-                          <button className="btn-secondary text-xs px-2 py-1" onClick={e => { e.stopPropagation() }}>WA</button>
+                          <button className="btn-secondary text-xs px-2 py-1 flex items-center gap-1" onClick={async e => {
+                            e.stopPropagation()
+                            const full = await api.get(`/cotizaciones/${c.id}`).then(r => r.data)
+                            imprimirCotizacion(full)
+                          }}>
+                            <Printer size={11}/> PDF
+                          </button>
+                          <a href={waLink(c)} target="_blank" rel="noreferrer"
+                            className="btn-secondary text-xs px-2 py-1 flex items-center gap-1 no-underline"
+                            onClick={e => e.stopPropagation()}>
+                            <MessageCircle size={11}/> WA
+                          </a>
                         </div>
                       </td>
                     </tr>

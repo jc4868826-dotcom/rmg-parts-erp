@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
-import { Tag, X } from 'lucide-react'
+import { Tag, X, Package } from 'lucide-react'
 
 function formatCLP(v) {
   if (v == null) return '—'
@@ -14,10 +14,12 @@ function formatPct(v) {
 }
 
 export default function ListaPreciosPage() {
+  const [tab, setTab] = useState('lista')
   const [busqueda, setBusqueda] = useState('')
   const [filtroProveedor, setFiltroProveedor] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroSegmento, setFiltroSegmento] = useState('')
+  const [busquedaUnicos, setBusquedaUnicos] = useState('')
 
   const { data: filas = [], isLoading } = useQuery({
     queryKey: ['lista-precios'],
@@ -54,6 +56,25 @@ export default function ListaPreciosPage() {
 
   const hayFiltros = busqueda || filtroProveedor || filtroCategoria || filtroSegmento
 
+  // Artículos únicos: un registro por SKU, precio más bajo
+  const articulosUnicos = useMemo(() => {
+    const map = {}
+    for (const f of filas) {
+      if (!map[f.codigo_sku] || f.precio_venta_neto < map[f.codigo_sku].precio_venta_neto) {
+        map[f.codigo_sku] = f
+      }
+    }
+    const arr = Object.values(map)
+    if (!busquedaUnicos) return arr
+    const q = busquedaUnicos.toLowerCase()
+    return arr.filter(f =>
+      (f.descripcion || '').toLowerCase().includes(q) ||
+      (f.codigo_sku || '').toLowerCase().includes(q) ||
+      (f.producto_generico || '').toLowerCase().includes(q) ||
+      (f.marca || '').toLowerCase().includes(q)
+    )
+  }, [filas, busquedaUnicos])
+
   return (
     <div className="space-y-5 animate-fade-in">
 
@@ -66,6 +87,28 @@ export default function ListaPreciosPage() {
           <Tag size={18} style={{ color: 'var(--rmg-blue)' }}/>
         </div>
       </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b" style={{ borderColor: 'rgba(56,182,255,0.1)' }}>
+        {[
+          { k: 'lista',   l: 'Lista completa', Icon: Tag     },
+          { k: 'unicos',  l: 'Artículos únicos', Icon: Package },
+        ].map(({ k, l, Icon }) => (
+          <button key={k} onClick={() => setTab(k)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all border-b-2"
+            style={tab === k
+              ? { borderColor: 'var(--rmg-blue)', color: 'var(--rmg-blt)' }
+              : { borderColor: 'transparent', color: 'var(--rmg-muted)' }
+            }>
+            <Icon size={14}/>{l}
+            {k === 'lista'  && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blt)' }}>{filas.length}</span>}
+            {k === 'unicos' && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: 'rgba(45,201,138,0.1)', color: 'var(--rmg-teal)' }}>{articulosUnicos.length}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* TAB: Lista completa */}
+      {tab === 'lista' && (<>
 
       {/* Filtros */}
       <div className="rmg-card p-4">
@@ -168,6 +211,75 @@ export default function ListaPreciosPage() {
           )}
         </div>
       </div>
+      </>)}
+
+      {/* TAB: Artículos únicos */}
+      {tab === 'unicos' && (<>
+      <div className="rmg-card p-4">
+        <input
+          className="rmg-input"
+          placeholder="Buscar SKU, descripción, producto, marca..."
+          value={busquedaUnicos}
+          onChange={e => setBusquedaUnicos(e.target.value)}
+        />
+        <div className="mt-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>
+          {articulosUnicos.length} artículos únicos (un registro por SKU · precio más bajo entre segmentos)
+        </div>
+      </div>
+      <div className="rmg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                {['SKU', 'Proveedor', 'Categoría', 'Producto Genérico', 'Descripción', 'Presentación', 'Costo Neto', 'Precio Venta Neto', 'Margen %'].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold whitespace-nowrap"
+                    style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading
+                ? Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      {Array.from({ length: 9 }).map((_, j) => (
+                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/></td>
+                      ))}
+                    </tr>
+                  ))
+                : articulosUnicos.map((f, i) => (
+                    <tr key={f.codigo_sku}
+                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                      className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs font-bold whitespace-nowrap" style={{ color: 'var(--rmg-blt)' }}>{f.codigo_sku}</td>
+                      <td className="px-4 py-3 text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.proveedor}</td>
+                      <td className="px-4 py-3 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{f.categoria}</td>
+                      <td className="px-4 py-3 text-xs max-w-[140px] truncate" style={{ color: 'var(--rmg-off)' }}>{f.producto_generico}</td>
+                      <td className="px-4 py-3 text-xs max-w-[220px] truncate" style={{ color: 'var(--rmg-off)' }} title={f.descripcion}>{f.descripcion}</td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{f.presentacion}</td>
+                      <td className="px-4 py-3 text-xs text-right whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(f.costo_unidad_neto)}</td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <span className="font-black text-sm" style={{ color: 'var(--rmg-teal)', fontFamily: 'Inter Tight, sans-serif' }}>
+                          {formatCLP(f.precio_venta_neto)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-right font-semibold whitespace-nowrap"
+                        style={{ color: f.margen_pct >= 0.2 ? 'var(--rmg-teal)' : f.margen_pct >= 0.1 ? 'var(--rmg-gold)' : 'var(--rmg-red)' }}>
+                        {formatPct(f.margen_pct)}
+                      </td>
+                    </tr>
+                  ))
+              }
+            </tbody>
+          </table>
+          {!isLoading && articulosUnicos.length === 0 && (
+            <div className="py-12 text-center" style={{ color: 'var(--rmg-muted)' }}>
+              <Package size={28} className="mx-auto mb-2 opacity-20"/>
+              <p className="text-sm">Sin resultados</p>
+            </div>
+          )}
+        </div>
+      </div>
+      </>)}
 
     </div>
   )

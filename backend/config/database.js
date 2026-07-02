@@ -1074,6 +1074,92 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('gastos_v1')
     console.log('✅ Migración gastos_v1 — tablas gastos y caja_movimientos creadas')
   }
+
+  // Migration 10: erp_v1 — configuracion_mensual, pedido_items, notas_venta, nota_venta_items, cuenta_bancaria
+  const m10 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('erp_v1')
+  if (!m10) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS configuracion_mensual (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mes TEXT UNIQUE NOT NULL,
+        meta_venta_total INTEGER DEFAULT 20000000,
+        meta_talleres INTEGER DEFAULT 8000000,
+        meta_flotas INTEGER DEFAULT 6000000,
+        meta_concesionarios INTEGER DEFAULT 4000000,
+        meta_construccion INTEGER DEFAULT 2000000,
+        pct_crecimiento_m1 REAL DEFAULT 15,
+        pct_crecimiento_m2 REAL DEFAULT 15,
+        pct_crecimiento_m3 REAL DEFAULT 15,
+        margen_objetivo_pct REAL DEFAULT 26,
+        dias_credito_promedio INTEGER DEFAULT 30,
+        presupuesto_gastos_operacionales INTEGER DEFAULT 2500000,
+        stock_minimo_bateria INTEGER DEFAULT 5,
+        stock_minimo_lubricante INTEGER DEFAULT 10,
+        stock_minimo_neumatico INTEGER DEFAULT 8,
+        dias_inactivo_cliente INTEGER DEFAULT 30,
+        dias_alerta_cxc INTEGER DEFAULT 30,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS pedido_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pedido_id TEXT NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+        codigo_sku TEXT,
+        descripcion TEXT NOT NULL,
+        cantidad INTEGER NOT NULL DEFAULT 1,
+        precio_unitario INTEGER NOT NULL DEFAULT 0,
+        descuento_pct REAL DEFAULT 0,
+        subtotal INTEGER DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS notas_venta (
+        id TEXT PRIMARY KEY,
+        numero TEXT UNIQUE NOT NULL,
+        pedido_id TEXT REFERENCES pedidos(id),
+        cliente_id TEXT REFERENCES clientes(id),
+        cliente TEXT,
+        neto INTEGER DEFAULT 0,
+        iva INTEGER DEFAULT 0,
+        total INTEGER DEFAULT 0,
+        condicion_pago TEXT DEFAULT 'Contado',
+        metodo_pago TEXT CHECK(metodo_pago IN ('efectivo','transferencia','credito')),
+        cuenta_bancaria TEXT DEFAULT '1781310106 Banco de Chile',
+        estado_pago TEXT DEFAULT 'pendiente' CHECK(estado_pago IN ('pendiente','pagado')),
+        fecha_pago TEXT,
+        notas TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS nota_venta_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nota_id TEXT NOT NULL REFERENCES notas_venta(id) ON DELETE CASCADE,
+        codigo_sku TEXT,
+        descripcion TEXT NOT NULL,
+        cantidad INTEGER NOT NULL DEFAULT 1,
+        precio_unitario INTEGER NOT NULL DEFAULT 0,
+        descuento_pct REAL DEFAULT 0,
+        subtotal INTEGER DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_pedido_items_pedido ON pedido_items(pedido_id);
+      CREATE INDEX IF NOT EXISTS idx_notas_venta_pedido ON notas_venta(pedido_id);
+      CREATE INDEX IF NOT EXISTS idx_nota_items_nota ON nota_venta_items(nota_id);
+    `)
+    // Add cuenta_bancaria to caja_movimientos if not present
+    const cajaCols = db.prepare('PRAGMA table_info(caja_movimientos)').all().map(c => c.name)
+    if (!cajaCols.includes('cuenta_bancaria')) {
+      db.exec("ALTER TABLE caja_movimientos ADD COLUMN cuenta_bancaria TEXT DEFAULT '1781310106 Banco de Chile'")
+    }
+    // Seed current month config with Zustand defaults
+    const mesActual = new Date().toISOString().slice(0, 7)
+    db.prepare(`
+      INSERT OR IGNORE INTO configuracion_mensual (mes) VALUES (?)
+    `).run(mesActual)
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('erp_v1')
+    console.log('✅ Migración erp_v1 — configuracion_mensual, pedido_items, notas_venta, nota_venta_items, caja cuenta_bancaria')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

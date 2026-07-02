@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { ShoppingCart } from 'lucide-react'
+import { ShoppingCart, Plus, X, ChevronDown, ChevronRight, CreditCard, FileText } from 'lucide-react'
+import toast from 'react-hot-toast'
+
+const CUENTAS = ['1781310106 Banco de Chile', '000-0-00000 Banco BCI', '000-0-00000 Banco Santander', 'Caja chica']
 
 const ESTADOS = [
   { key: '', label: 'Todos' },
@@ -14,38 +17,113 @@ const ESTADOS = [
 ]
 
 const ESTADO_STYLES = {
-  pendiente:       { bg: 'rgba(90,143,168,0.12)',  color: 'rgba(90,143,168,0.9)' },
-  confirmado:      { bg: 'rgba(56,182,255,0.12)',  color: 'var(--rmg-blt)' },
-  en_preparacion:  { bg: 'rgba(244,162,60,0.12)',  color: 'var(--rmg-gold)' },
-  despachado:      { bg: 'rgba(123,97,196,0.12)',  color: 'var(--rmg-purple)' },
-  entregado:       { bg: 'rgba(45,201,138,0.12)',  color: 'var(--rmg-teal)' },
-  anulado:         { bg: 'rgba(224,90,78,0.12)',   color: 'var(--rmg-red)' },
+  pendiente:      { bg: 'rgba(90,143,168,0.12)',  color: 'rgba(90,143,168,0.9)' },
+  confirmado:     { bg: 'rgba(56,182,255,0.12)',  color: 'var(--rmg-blt)' },
+  en_preparacion: { bg: 'rgba(244,162,60,0.12)',  color: 'var(--rmg-gold)' },
+  despachado:     { bg: 'rgba(123,97,196,0.12)',  color: 'var(--rmg-purple)' },
+  entregado:      { bg: 'rgba(45,201,138,0.12)',  color: 'var(--rmg-teal)' },
+  anulado:        { bg: 'rgba(224,90,78,0.12)',   color: 'var(--rmg-red)' },
 }
+
+const PAGO_INIT = { metodo_pago: 'Transferencia', cuenta_bancaria: CUENTAS[0], fecha_pago: new Date().toISOString().split('T')[0], notas_pago: '' }
 
 export default function PedidosPage() {
   const [estadoFiltro, setFiltro] = useState('')
+  const [showCotModal, setShowCotModal] = useState(false)
+  const [expandido, setExpandido] = useState({})
+  const [pagoModal, setPagoModal] = useState(null)
+  const [pago, setPago] = useState(PAGO_INIT)
+  const qc = useQueryClient()
 
   const { data: pedidos = [], isLoading } = useQuery({
     queryKey: ['pedidos', estadoFiltro],
     queryFn: () => api.get('/pedidos', { params: { estado: estadoFiltro || undefined } }).then(r => r.data),
   })
 
+  const { data: cotAprobadas = [] } = useQuery({
+    queryKey: ['cotizaciones-aprobadas'],
+    queryFn: () => api.get('/cotizaciones', { params: { estado: 'aprobada' } }).then(r => r.data),
+    enabled: showCotModal,
+  })
+
+  const { data: cotPendientes = [] } = useQuery({
+    queryKey: ['cotizaciones-pendientes'],
+    queryFn: () => api.get('/cotizaciones').then(r => r.data).then(rows =>
+      rows.filter(c => !['rechazada'].includes(c.estado))
+    ),
+    enabled: showCotModal,
+  })
+
+  const crearDesdeCotMut = useMutation({
+    mutationFn: (cotId) => api.post(`/pedidos/from-cotizacion/${cotId}`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pedidos'] })
+      qc.invalidateQueries({ queryKey: ['cotizaciones'] })
+      qc.invalidateQueries({ queryKey: ['cotizaciones-aprobadas'] })
+      qc.invalidateQueries({ queryKey: ['cotizaciones-pendientes'] })
+      toast.success('Pedido creado desde cotización')
+      setShowCotModal(false)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al crear pedido'),
+  })
+
+  const cambiarEstadoMut = useMutation({
+    mutationFn: ({ id, estado }) => api.patch(`/pedidos/${id}/estado`, { estado }).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pedidos'] })
+      toast.success('Estado actualizado')
+    },
+    onError: () => toast.error('Error al actualizar estado'),
+  })
+
+  const crearNVMut = useMutation({
+    mutationFn: (pedidoId) => api.post(`/notas-venta/from-pedido/${pedidoId}`).then(r => r.data),
+    onSuccess: (nv) => {
+      qc.invalidateQueries({ queryKey: ['pedidos'] })
+      toast.success(`Nota de venta ${nv.numero} creada`)
+      setPagoModal(nv)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al crear nota de venta'),
+  })
+
+  const registrarPagoMut = useMutation({
+    mutationFn: ({ nvId, data }) => api.post(`/notas-venta/${nvId}/pago`, data).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pedidos'] })
+      qc.invalidateQueries({ queryKey: ['flujo-caja'] })
+      toast.success('Pago registrado — ingreso confirmado en flujo de caja')
+      setPagoModal(null)
+      setPago(PAGO_INIT)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar pago'),
+  })
+
   const totalPedidos = pedidos.reduce((s, p) => s + p.total, 0)
+
+  const availableCots = cotPendientes.filter(c =>
+    !cotAprobadas.some(a => a.id === c.id) || c.estado !== 'aprobada'
+  )
 
   return (
     <div className="space-y-5 animate-fade-in">
 
+      {/* Header */}
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Pedidos</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>ERP · seguimiento de despachos</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>ERP · seguimiento de despachos y pagos</p>
         </div>
-        <div className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)', border: '1px solid rgba(56,182,255,0.2)' }}>
-          {formatCLP(totalPedidos)} en curso
+        <div className="flex items-center gap-3">
+          <div className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)', border: '1px solid rgba(56,182,255,0.2)' }}>
+            {formatCLP(totalPedidos)} en curso
+          </div>
+          <button onClick={() => setShowCotModal(true)} className="btn-primary flex items-center gap-2">
+            <Plus size={15}/> Desde cotización
+          </button>
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros estado */}
       <div className="flex gap-1 flex-wrap">
         {ESTADOS.map(e => (
           <button key={e.key} onClick={() => setFiltro(e.key)}
@@ -53,9 +131,7 @@ export default function PedidosPage() {
             style={estadoFiltro === e.key
               ? { background: 'var(--rmg-blue)', color: '#fff' }
               : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
-            }>
-            {e.label}
-          </button>
+            }>{e.label}</button>
         ))}
       </div>
 
@@ -64,7 +140,7 @@ export default function PedidosPage() {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-              {['N° Pedido', 'Cliente', 'Estado', 'Total', 'Condición pago', 'Entrega programada', 'Guía despacho'].map(h => (
+              {['', 'N° Pedido', 'Cliente', 'Estado', 'Total', 'Condición pago', 'Entrega', 'Acciones'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
             </tr>
@@ -80,26 +156,57 @@ export default function PedidosPage() {
                 ))
               : pedidos.map((p, i) => {
                   const est = ESTADO_STYLES[p.estado] || ESTADO_STYLES.pendiente
-                  return (
-                    <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                  const expanded = expandido[p.id]
+                  return [
+                    <tr key={p.id} style={{ borderBottom: expanded ? 'none' : '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
                       className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 w-8">
+                        <button onClick={() => setExpandido(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                          style={{ color: 'var(--rmg-muted)' }}>
+                          {expanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                        </button>
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.numero}</td>
                       <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>{p.cliente}</td>
                       <td className="px-4 py-3">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full capitalize" style={{ background: est.bg, color: est.color }}>
-                          {p.estado.replace('_', ' ')}
-                        </span>
+                        <select className="text-xs font-semibold px-2 py-0.5 rounded-full cursor-pointer border-0 outline-none"
+                          style={{ background: est.bg, color: est.color }}
+                          value={p.estado}
+                          onChange={e => cambiarEstadoMut.mutate({ id: p.id, estado: e.target.value })}>
+                          {Object.keys(ESTADO_STYLES).map(s => (
+                            <option key={s} value={s} style={{ background: '#0a1a2e', color: '#fff' }}>
+                              {s.replace('_', ' ')}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(p.total)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{p.condicion_pago}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: p.fecha_entrega_programada ? 'var(--rmg-off)' : 'var(--rmg-muted)' }}>
                         {p.fecha_entrega_programada ? formatFecha(p.fecha_entrega_programada) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-xs font-mono" style={{ color: p.guia_despacho ? 'var(--rmg-teal)' : 'var(--rmg-muted)' }}>
-                        {p.guia_despacho || '—'}
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5">
+                          {p.estado !== 'entregado' && (
+                            <button
+                              onClick={() => crearNVMut.mutate(p.id)}
+                              disabled={crearNVMut.isPending}
+                              className="btn-secondary text-xs px-2 py-1 flex items-center gap-1 disabled:opacity-50"
+                              title="Crear nota de venta y registrar pago">
+                              <FileText size={11}/> NV + Pago
+                            </button>
+                          )}
+                        </div>
                       </td>
-                    </tr>
-                  )
+                    </tr>,
+                    expanded && (
+                      <tr key={`${p.id}-items`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <td colSpan={8} className="px-8 py-3" style={{ background: 'rgba(56,182,255,0.02)' }}>
+                          <PedidoItems pedidoId={p.id} />
+                        </td>
+                      </tr>
+                    )
+                  ]
                 })
             }
           </tbody>
@@ -108,9 +215,146 @@ export default function PedidosPage() {
           <div className="py-16 text-center" style={{ color: 'var(--rmg-muted)' }}>
             <ShoppingCart size={32} className="mx-auto mb-3 opacity-30" />
             <p>No hay pedidos en este estado</p>
+            <button onClick={() => setShowCotModal(true)} className="btn-secondary text-sm mt-3 flex items-center gap-2 mx-auto">
+              <Plus size={13}/> Crear desde cotización
+            </button>
           </div>
         )}
       </div>
+
+      {/* Modal: crear desde cotización */}
+      {showCotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rmg-card p-6 w-full max-w-2xl max-h-[80vh] flex flex-col animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold">Crear pedido desde cotización</h2>
+              <button onClick={() => setShowCotModal(false)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {cotPendientes.length === 0 ? (
+                <p className="text-center py-8" style={{ color: 'var(--rmg-muted)' }}>No hay cotizaciones disponibles</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
+                      {['N°', 'Cliente', 'Estado', 'Total', ''].map(h => (
+                        <th key={h} className="text-left px-3 py-2 text-xs uppercase font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cotPendientes.map(c => (
+                      <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/[0.02]">
+                        <td className="px-3 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{c.numero}</td>
+                        <td className="px-3 py-2.5" style={{ color: 'var(--rmg-off)' }}>{c.cliente}</td>
+                        <td className="px-3 py-2.5 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{c.estado}</td>
+                        <td className="px-3 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total)}</td>
+                        <td className="px-3 py-2.5">
+                          <button
+                            onClick={() => crearDesdeCotMut.mutate(c.id)}
+                            disabled={crearDesdeCotMut.isPending}
+                            className="btn-primary text-xs px-3 py-1 disabled:opacity-50">
+                            Crear pedido
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: registrar pago */}
+      {pagoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-bold">Registrar pago</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{pagoModal.numero} · {formatCLP(pagoModal.total)}</p>
+              </div>
+              <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Método de pago</label>
+                <select className="rmg-input" value={pago.metodo_pago} onChange={e => setPago(p => ({ ...p, metodo_pago: e.target.value }))}>
+                  <option>Transferencia</option>
+                  <option>Cheque</option>
+                  <option>Efectivo</option>
+                  <option>Crédito 30 días</option>
+                  <option>Crédito 60 días</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cuenta bancaria</label>
+                <select className="rmg-input" value={pago.cuenta_bancaria} onChange={e => setPago(p => ({ ...p, cuenta_bancaria: e.target.value }))}>
+                  {CUENTAS.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="">Sin especificar</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Fecha de pago</label>
+                <input type="date" className="rmg-input" value={pago.fecha_pago}
+                  onChange={e => setPago(p => ({ ...p, fecha_pago: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
+                <input className="rmg-input" placeholder="Referencia, número de operación..." value={pago.notas_pago}
+                  onChange={e => setPago(p => ({ ...p, notas_pago: e.target.value }))} />
+              </div>
+              <div className="flex gap-3 justify-end pt-2">
+                <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} className="btn-secondary">Cancelar</button>
+                <button
+                  onClick={() => registrarPagoMut.mutate({ nvId: pagoModal.id, data: pago })}
+                  disabled={registrarPagoMut.isPending}
+                  className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                  <CreditCard size={14}/>
+                  {registrarPagoMut.isPending ? 'Registrando...' : 'Confirmar pago'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+function PedidoItems({ pedidoId }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['pedido-items', pedidoId],
+    queryFn: () => api.get(`/pedidos/${pedidoId}`).then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div className="text-xs py-2" style={{ color: 'var(--rmg-muted)' }}>Cargando items…</div>
+  if (!data?.items?.length) return <div className="text-xs py-2" style={{ color: 'var(--rmg-muted)' }}>Sin items</div>
+
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          {['Código', 'Descripción', 'Cant.', 'P. Neto', 'Desc %', 'Subtotal'].map(h => (
+            <th key={h} className="text-left px-2 py-1 uppercase font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {data.items.map(item => (
+          <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+            <td className="px-2 py-1.5 font-mono" style={{ color: 'var(--rmg-blt)' }}>{item.codigo || '—'}</td>
+            <td className="px-2 py-1.5" style={{ color: 'var(--rmg-off)' }}>{item.descripcion}</td>
+            <td className="px-2 py-1.5 text-center">{item.cantidad}</td>
+            <td className="px-2 py-1.5 text-right">{formatCLP(item.precio_unitario)}</td>
+            <td className="px-2 py-1.5 text-center">{item.descuento_pct ? `${item.descuento_pct}%` : '—'}</td>
+            <td className="px-2 py-1.5 text-right font-bold" style={{ color: 'var(--rmg-teal)' }}>{formatCLP(item.subtotal)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
