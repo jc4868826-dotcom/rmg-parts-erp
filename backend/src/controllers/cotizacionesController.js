@@ -85,6 +85,17 @@ const update = (req, res) => {
       db.prepare(`UPDATE cotizaciones SET ${set}, updated_at = datetime('now') WHERE id = ?`)
         .run(...fields.map(f => req.body[f]), req.params.id)
     }
+    if (Array.isArray(req.body.items)) {
+      db.prepare('DELETE FROM cotizacion_items WHERE cotizacion_id = ?').run(req.params.id)
+      const ins = db.prepare(`INSERT INTO cotizacion_items
+        (id,cotizacion_id,codigo,descripcion,cantidad,precio_unitario,descuento_pct,subtotal)
+        VALUES (?,?,?,?,?,?,?,?)`)
+      for (const item of req.body.items) {
+        const sub = item.subtotal || Math.round(item.cantidad * item.precio_unitario * (1 - (item.descuento_pct || 0) / 100))
+        ins.run(uuidv4(), req.params.id, item.codigo || null, item.descripcion || null,
+          item.cantidad, item.precio_unitario, item.descuento_pct || 0, sub)
+      }
+    }
     res.json(withItems(db.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(req.params.id)))
   } catch (err) {
     res.status(500).json({ error: err.message })

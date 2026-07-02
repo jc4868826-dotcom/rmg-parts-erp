@@ -48,12 +48,12 @@ const create = (req, res) => {
     if (Array.isArray(items) && items.length) {
       const ins = db.prepare(`
         INSERT INTO pedido_items
-          (id, pedido_id, codigo, descripcion, cantidad, precio_unitario, descuento_pct, subtotal)
+          (id, pedido_id, codigo_sku, descripcion, cantidad, precio_unitario, descuento_pct, subtotal)
         VALUES (?,?,?,?,?,?,?,?)
       `)
       for (const item of items) {
         const sub = item.subtotal || Math.round(item.cantidad * item.precio_unitario * (1 - (item.descuento_pct || 0) / 100))
-        ins.run(uuidv4(), id, item.codigo || null, item.descripcion || null,
+        ins.run(uuidv4(), id, item.codigo_sku || item.codigo || null, item.descripcion || null,
           item.cantidad, item.precio_unitario, item.descuento_pct || 0, sub)
       }
     }
@@ -92,11 +92,11 @@ const createFromCotizacion = (req, res) => {
     if (items.length) {
       const ins = db.prepare(`
         INSERT INTO pedido_items
-          (id, pedido_id, codigo, descripcion, cantidad, precio_unitario, descuento_pct, subtotal)
+          (id, pedido_id, codigo_sku, descripcion, cantidad, precio_unitario, descuento_pct, subtotal)
         VALUES (?,?,?,?,?,?,?,?)
       `)
       for (const item of items) {
-        ins.run(uuidv4(), id, item.codigo, item.descripcion,
+        ins.run(uuidv4(), id, item.codigo || null, item.descripcion,
           item.cantidad, item.precio_unitario, item.descuento_pct || 0, item.subtotal)
       }
     }

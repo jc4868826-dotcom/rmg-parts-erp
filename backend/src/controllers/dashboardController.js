@@ -1,65 +1,189 @@
-const getResumen = (_req, res) => res.json({
-  venta_mes: 12400000,
-  meta_mes: 20000000,
-  pct_meta: 62,
-  clientes_activos: 8,
-  pipeline_activo: 3,
-  cotizaciones_pendientes: 2,
-  margen_bruto: 26.1,
-  ticket_promedio: 428000,
-})
+'use strict'
+const { db } = require('../../config/database')
 
-const getVentas = (_req, res) => res.json({
-  por_segmento: [
-    { segmento: 'taller',        actual: 5200000, meta: 8000000 },
-    { segmento: 'flota',         actual: 4100000, meta: 6000000 },
-    { segmento: 'concesionario', actual: 2200000, meta: 4000000 },
-    { segmento: 'construccion',  actual: 900000,  meta: 2000000 },
-  ],
-  por_semana: [
-    { dia: 'Lun', venta: 1800000 },
-    { dia: 'Mar', venta: 2100000 },
-    { dia: 'Mié', venta: 1650000 },
-    { dia: 'Jue', venta: 2400000 },
-    { dia: 'Vie', venta: 2800000 },
-    { dia: 'Sáb', venta: 1200000 },
-  ],
-})
+function getDateRange(periodo, desde, hasta) {
+  const now = new Date()
+  const today = now.toISOString().split('T')[0]
+  switch (periodo) {
+    case 'hoy': return [today, today]
+    case 'semana': {
+      const d = new Date(now); d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+      return [d.toISOString().split('T')[0], today]
+    }
+    case 'mes': return [`${today.slice(0, 7)}-01`, today]
+    case 'mes_anterior': {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const last  = new Date(now.getFullYear(), now.getMonth(), 0)
+      return [first.toISOString().split('T')[0], last.toISOString().split('T')[0]]
+    }
+    case 'personalizado': return [desde || today, hasta || today]
+    default: return [`${today.slice(0, 7)}-01`, today]
+  }
+}
 
-const getProductos = (_req, res) => res.json([
-  { codigo: '7000049', descripcion: 'AUSTER 5W30 4LT', ventas: 42, ingresos: 651000, margen: 25.8 },
-  { codigo: '210016', descripcion: 'DOUBLE STAR 185/65 R15', ventas: 38, ingresos: 1330000, margen: 25.5 },
-  { codigo: '352420', descripcion: 'YOKO 55AMP 55559', ventas: 31, ingresos: 1984000, margen: 24.3 },
-  { codigo: '7000003', descripcion: 'AUSTER FE 5W30 1L', ventas: 28, ingresos: 117600, margen: 26.1 },
-  { codigo: '244374', descripcion: 'KUMHO 275/60 R20 AT51', ventas: 22, ingresos: 4620000, margen: 24.7 },
-])
+const getResumen = (req, res) => {
+  try {
+    const { periodo = 'mes', segmento = 'todos', desde, hasta } = req.query
+    const [dateFrom, dateTo] = getDateRange(periodo, desde, hasta)
 
-const getClientes = (_req, res) => res.json({
-  total: 8,
-  activos: 4,
-  pipeline: [
-    { etapa: 'prospecto', count: 1 },
-    { etapa: 'contactado', count: 2 },
-    { etapa: 'cotizado', count: 1 },
-    { etapa: 'negociando', count: 1 },
-    { etapa: 'cliente', count: 3 },
-  ],
-})
+    // ── Métricas de tabla ─────────────────────────────────
+    const clientesActivos = db.prepare("SELECT COUNT(*) as n FROM clientes WHERE activo=1").get().n
+    const pipelineActivo  = db.prepare("SELECT COUNT(*) as n FROM pipeline_contactos WHERE etapa NOT IN ('ganado','cliente')").get().n
+    const cotPendientes   = db.prepare("SELECT COUNT(*) as n FROM cotizaciones WHERE estado IN ('borrador','enviada')").get().n
 
-const getCaja = (_req, res) => res.json({
-  ingresos_mes: 12400000,
-  cxc_pendiente: 3827001,
-  cxc_vencida: 2000000,
-  proyeccion_mes: 16000000,
-})
+    // ── Meta desde configuracion_mensual ─────────────────
+    const mesActual = new Date().toISOString().slice(0, 7)
+    const cfg = db.prepare('SELECT * FROM configuracion_mensual WHERE mes = ?').get(mesActual) || {}
+    const metaMap = {
+      todos:          cfg.meta_venta_total            || 20000000,
+      talleres:       cfg.meta_talleres               || 8000000,
+      flotas:         cfg.meta_flotas                 || 6000000,
+      concesionarios: cfg.meta_concesionarios         || 4000000,
+      construccion:   cfg.meta_construccion           || 2000000,
+    }
+    const meta = metaMap[segmento] || metaMap.todos
 
-const getAlertas = (_req, res) => res.json([
-  { tipo: 'stock', msg: '3 SKUs bajo mínimo: 15W40 20L · N70Z · AT51', urgencia: 'alta' },
-  { tipo: 'cxc',   msg: '2 facturas vencidas: $1.2M Taller Díaz · $800K Flota Norte', urgencia: 'alta' },
-  { tipo: 'pipeline', msg: '4 prospectos sin actividad +7 días', urgencia: 'media' },
-  { tipo: 'bot',   msg: '3 cotizaciones WhatsApp sin respuesta', urgencia: 'media' },
-])
+    // ── Ventas reales (notas_venta pagadas) ──────────────
+    let ventaSQL = `
+      SELECT COALESCE(SUM(nv.total),0) as total_bruto,
+             COALESCE(SUM(nv.neto),0)  as total_neto
+      FROM notas_venta nv
+      WHERE nv.estado_pago = 'pagado'
+        AND nv.fecha_pago >= ? AND nv.fecha_pago <= ?`
+    const ventaParams = [dateFrom, dateTo]
 
-const exportExcel = (_req, res) => res.json({ ok: true, url: '/mock-exports/dashboard-junio-2026.xlsx' })
+    if (segmento !== 'todos') {
+      ventaSQL += ` AND EXISTS (SELECT 1 FROM clientes c WHERE c.id = nv.cliente_id AND c.segmento = ?)`
+      ventaParams.push(segmento)
+    }
+    const ventaData = db.prepare(ventaSQL).get(...ventaParams)
+    const venta = ventaData.total_bruto
+    const neto  = ventaData.total_neto
+
+    // ── Saldo inicial (confirmados ANTES del rango) ──────
+    const saldoInicial = db.prepare(`
+      SELECT COALESCE(SUM(CASE tipo WHEN 'ingreso' THEN monto ELSE -monto END),0) as saldo
+      FROM caja_movimientos
+      WHERE estado='confirmado' AND fecha_pago < ?
+    `).get(dateFrom).saldo
+
+    // ── Gastos reales (caja confirmados en rango) ────────
+    const totalGastosConf = db.prepare(`
+      SELECT COALESCE(SUM(monto),0) as total FROM caja_movimientos
+      WHERE tipo='egreso' AND estado='confirmado' AND fecha_pago>=? AND fecha_pago<=?
+    `).get(dateFrom, dateTo).total
+
+    const totalIngresosConf = db.prepare(`
+      SELECT COALESCE(SUM(monto),0) as total FROM caja_movimientos
+      WHERE tipo='ingreso' AND estado='confirmado' AND fecha_pago>=? AND fecha_pago<=?
+    `).get(dateFrom, dateTo).total
+
+    const ingresosProy = db.prepare(`
+      SELECT COALESCE(SUM(monto),0) as total FROM caja_movimientos
+      WHERE tipo='ingreso' AND estado='proyectado' AND fecha_pago>=? AND fecha_pago<=?
+    `).get(dateFrom, dateTo).total
+
+    const egresosProy = db.prepare(`
+      SELECT COALESCE(SUM(monto),0) as total FROM caja_movimientos
+      WHERE tipo='egreso' AND estado='proyectado' AND fecha_pago>=? AND fecha_pago<=?
+    `).get(dateFrom, dateTo).total
+
+    const saldoPeriodo   = saldoInicial + totalIngresosConf - totalGastosConf
+    const saldoProyectado = saldoPeriodo + ingresosProy - egresosProy
+
+    // ── Margen bruto (notas_venta: neto vs costo) ───────
+    // Calculamos desde nota_venta_items × lista_precios si existen
+    const margenQuery = db.prepare(`
+      SELECT COALESCE(SUM(nvi.subtotal),0) as venta_neto,
+             COALESCE(SUM(nvi.cantidad * COALESCE(lp.costo_unidad_neto,0)),0) as costo_total
+      FROM nota_venta_items nvi
+      JOIN notas_venta nv ON nv.id = nvi.nota_venta_id
+      LEFT JOIN lista_precios lp ON lp.codigo_sku = nvi.codigo
+      WHERE nv.estado_pago='pagado' AND nv.fecha_pago>=? AND nv.fecha_pago<=?
+    `).get(dateFrom, dateTo)
+    const margenBrutoMonto = margenQuery.venta_neto - margenQuery.costo_total
+    const margenBrutoPct   = neto > 0 ? (margenBrutoMonto / neto * 100) : 0
+
+    // ── Ventas por segmento ──────────────────────────────
+    const segs = ['talleres','flotas','concesionarios','construccion'].map(seg => {
+      const r = db.prepare(`
+        SELECT COALESCE(SUM(nv.total),0) as actual FROM notas_venta nv
+        WHERE nv.estado_pago='pagado' AND nv.fecha_pago>=? AND nv.fecha_pago<=?
+          AND EXISTS (SELECT 1 FROM clientes c WHERE c.id=nv.cliente_id AND c.segmento=?)
+      `).get(dateFrom, dateTo, seg)
+      return { segmento: seg, actual: r.actual, meta: metaMap[seg] }
+    })
+
+    // ── Ventas por semana (para gráfico) ────────────────
+    const ventasSemana = db.prepare(`
+      SELECT strftime('%Y-W%W', fecha_pago) as semana_key,
+             MIN(fecha_pago) as fecha_ref,
+             COALESCE(SUM(CASE tipo WHEN 'ingreso' THEN monto ELSE 0 END),0) as ingresos,
+             COALESCE(SUM(CASE tipo WHEN 'egreso'  THEN monto ELSE 0 END),0) as egresos
+      FROM caja_movimientos
+      WHERE fecha_pago>=? AND fecha_pago<=?
+      GROUP BY semana_key ORDER BY semana_key
+    `).all(dateFrom, dateTo).map(r => ({
+      semana: `S${r.semana_key.split('-W')[1]}`,
+      Ingresos: r.ingresos,
+      Egresos:  r.egresos,
+    }))
+
+    // ── Lista de clientes reales ─────────────────────────
+    let clientesSQL = `
+      SELECT c.razon_social as nombre, c.segmento,
+             MAX(nv.fecha_pago) as ultima,
+             COALESCE(SUM(nv.total),0) as monto
+      FROM clientes c
+      LEFT JOIN notas_venta nv ON nv.cliente_id=c.id AND nv.estado_pago='pagado'
+        AND nv.fecha_pago>=? AND nv.fecha_pago<=?
+      WHERE c.activo=1`
+    const clParams = [dateFrom, dateTo]
+    if (segmento !== 'todos') { clientesSQL += ' AND c.segmento=?'; clParams.push(segmento) }
+    clientesSQL += ' GROUP BY c.id ORDER BY monto DESC LIMIT 8'
+    const clientesList = db.prepare(clientesSQL).all(...clParams)
+
+    // ── CxC real ─────────────────────────────────────────
+    const cxcRows = db.prepare(`
+      SELECT nv.cliente as nombre, nv.numero, nv.total as monto, nv.fecha_pago,
+             CAST(julianday('now') - julianday(COALESCE(nv.fecha_pago, nv.created_at)) AS INTEGER) as dias_desde
+      FROM notas_venta nv
+      WHERE nv.estado_pago = 'pendiente'
+      ORDER BY dias_desde DESC LIMIT 10
+    `).all()
+
+    res.json({
+      dateFrom, dateTo,
+      venta_total: venta, meta,
+      pct_meta: meta > 0 ? Math.round((venta / meta) * 100) : 0,
+      clientes_activos: clientesActivos,
+      pipeline_activo:  pipelineActivo,
+      cotizaciones_pendientes: cotPendientes,
+      margen_bruto_pct:   parseFloat(margenBrutoPct.toFixed(1)),
+      margen_bruto_monto: margenBrutoMonto,
+      costo_mercaderia:   margenQuery.costo_total,
+      total_gastos: totalGastosConf,
+      utilidad_neta: margenBrutoMonto - totalGastosConf,
+      saldo_inicial: saldoInicial,
+      saldo_periodo: saldoPeriodo,
+      ingresos_proyectados: ingresosProy,
+      egresos_proyectados:  egresosProy,
+      saldo_proyectado: saldoProyectado,
+      ventas_por_segmento: segs,
+      ventas_semana: ventasSemana,
+      clientes_list: clientesList,
+      cxc_rows: cxcRows,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const getVentas = (_req, res) => res.json({ por_segmento: [], por_semana: [] })
+const getProductos = (_req, res) => res.json([])
+const getClientes = (_req, res) => res.json({ total: 0, activos: 0, pipeline: [] })
+const getCaja = (_req, res) => res.json({ ingresos_mes: 0, cxc_pendiente: 0, cxc_vencida: 0, proyeccion_mes: 0 })
+const getAlertas = (_req, res) => res.json([])
+const exportExcel = (_req, res) => res.json({ ok: true })
 
 module.exports = { getResumen, getVentas, getProductos, getClientes, getCaja, getAlertas, exportExcel }

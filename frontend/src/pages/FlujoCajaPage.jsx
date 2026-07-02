@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP } from '@utils/format'
-import { TrendingUp, TrendingDown, Wallet, Plus, X, Pencil, Trash2, ChevronDown, ChevronRight, Filter } from 'lucide-react'
+import { Wallet, Plus, X, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import toast from 'react-hot-toast'
 
@@ -19,38 +19,41 @@ const FORM_INIT = {
   cuenta_bancaria: '',
 }
 
+const hoyStr = () => new Date().toISOString().split('T')[0]
+const mesInicio = () => `${new Date().toISOString().slice(0, 7)}-01`
+
 function formatFecha(str) {
   if (!str) return '—'
   return new Date(str + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function semanaISO(dateStr) {
+function semanaKey(dateStr) {
   const d = new Date(dateStr + 'T12:00:00')
   const jan1 = new Date(d.getFullYear(), 0, 1)
   const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7)
-  const label = `Sem ${week} — ${d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}`
-  const key = `${d.getFullYear()}-W${String(week).padStart(2, '0')}`
-  return { key, label }
+  return {
+    key:   `${d.getFullYear()}-W${String(week).padStart(2, '0')}`,
+    label: `S${week} · ${d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}`,
+  }
 }
 
-const tooltipStyle = { background: '#0a1a2e', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, color: '#fff', fontSize: 12 }
+const TT = { background: '#0a1a2e', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, color: '#fff', fontSize: 12 }
+const AX = { fill: 'rgba(90,143,168,0.7)', fontSize: 11 }
 
 export default function FlujoCajaPage() {
-  const [modo, setModo]         = useState('proyectado')
+  const [desde, setDesde]       = useState(mesInicio())
+  const [hasta, setHasta]       = useState(hoyStr())
   const [showForm, setShowForm] = useState(false)
   const [form, setForm]         = useState(FORM_INIT)
   const [editando, setEditando] = useState(null)
-  const [showFiltros, setShowFiltros] = useState(false)
-  const [filtros, setFiltros]   = useState({ desde: '', hasta: '', tipo: '', categoria: '', cuenta_bancaria: '', estado: '' })
+  const [cardFilter, setCardFilter] = useState(null)
   const [openSem, setOpenSem]   = useState({})
   const [openCat, setOpenCat]   = useState({})
   const qc = useQueryClient()
 
-  const queryParams = { modo, ...Object.fromEntries(Object.entries(filtros).filter(([, v]) => v)) }
-
   const { data: movimientos = [], isLoading } = useQuery({
-    queryKey: ['flujo-caja', queryParams],
-    queryFn: () => api.get('/flujo-caja', { params: queryParams }).then(r => r.data),
+    queryKey: ['flujo-caja', desde, hasta],
+    queryFn: () => api.get('/flujo-caja', { params: { desde: desde || undefined, hasta: hasta || undefined } }).then(r => r.data),
   })
 
   const { data: resumen = {} } = useQuery({
@@ -78,7 +81,7 @@ export default function FlujoCajaPage() {
   const eliminarMut = useMutation({
     mutationFn: (id) => api.delete(`/flujo-caja/${id}`).then(r => r.data),
     onSuccess: () => { invalidate(); toast.success('Eliminado') },
-    onError: (e) => toast.error(e.response?.data?.error || 'Solo se eliminan movimientos manuales'),
+    onError: () => toast.error('Solo se eliminan movimientos manuales'),
   })
 
   const handleSubmit = (e) => {
@@ -87,55 +90,80 @@ export default function FlujoCajaPage() {
     crearMut.mutate({ ...form, monto: Number(form.monto) })
   }
 
-  const handleEdit = (m) => {
-    setEditando({ ...m })
-  }
-
   const handleEditSubmit = (e) => {
     e.preventDefault()
     editarMut.mutate({ id: editando.id, data: editando })
   }
 
-  // Saldo acumulado corrido
-  let saldoCorrido = 0
-  const movsConSaldo = movimientos.map(m => {
-    saldoCorrido += m.tipo === 'ingreso' ? m.monto : -m.monto
-    return { ...m, saldo_acum: saldoCorrido }
-  })
-
-  // 7 cards resumen
-  const totalIngresos = movimientos.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + m.monto, 0)
-  const totalEgresos  = movimientos.filter(m => m.tipo === 'egreso').reduce((s, m) => s + m.monto, 0)
-  const confirmados   = movimientos.filter(m => m.estado === 'confirmado')
-  const ingConf       = confirmados.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + m.monto, 0)
-  const egConf        = confirmados.filter(m => m.tipo === 'egreso').reduce((s, m) => s + m.monto, 0)
-  const proyectados   = movimientos.filter(m => m.estado === 'proyectado')
-  const ingProy       = proyectados.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + m.monto, 0)
-  const saldoNet      = totalIngresos - totalEgresos
+  // ── Cálculo de 5 cards ──────────────────────────────────────────────────
+  const ingConf  = movimientos.filter(m => m.tipo === 'ingreso' && m.estado === 'confirmado').reduce((s, m) => s + m.monto, 0)
+  const egConf   = movimientos.filter(m => m.tipo === 'egreso'  && m.estado === 'confirmado').reduce((s, m) => s + m.monto, 0)
+  const ingProy  = movimientos.filter(m => m.tipo === 'ingreso' && m.estado === 'proyectado').reduce((s, m) => s + m.monto, 0)
+  const gastProy = movimientos.filter(m => m.tipo === 'egreso'  && m.estado === 'proyectado').reduce((s, m) => s + m.monto, 0)
+  const saldoActualGlobal = resumen.saldo_actual ?? 0
+  const saldoInicial      = saldoActualGlobal - ingConf + egConf
+  const saldoPeriodo      = saldoActualGlobal
+  const saldoProyectado   = saldoActualGlobal + ingProy - gastProy
 
   const CARDS = [
-    { label: 'Saldo actual (confirmado)', value: resumen.saldo_actual ?? 0, color: (resumen.saldo_actual ?? 0) >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)' },
-    { label: 'Ingresos periodo',          value: totalIngresos,              color: 'var(--rmg-teal)' },
-    { label: 'Egresos periodo',           value: totalEgresos,               color: 'var(--rmg-red)'  },
-    { label: 'Saldo neto periodo',        value: saldoNet,                   color: saldoNet >= 0 ? 'var(--rmg-blt)' : 'var(--rmg-red)' },
-    { label: 'Ingresos confirmados',      value: ingConf,                    color: 'var(--rmg-teal)' },
-    { label: 'Egresos confirmados',       value: egConf,                     color: 'var(--rmg-red)'  },
-    { label: 'Ingresos proyectados',      value: ingProy,                    color: 'var(--rmg-blt)'  },
+    {
+      key: 'saldo_inicial', label: 'Saldo Inicial',
+      value: saldoInicial,
+      sub: 'Confirmados antes del período',
+      color: saldoInicial >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
+      filter: (m) => m.estado === 'confirmado',
+    },
+    {
+      key: 'saldo_periodo', label: 'Saldo Período Real',
+      value: saldoPeriodo,
+      sub: `+${formatCLP(ingConf)} ingresos · -${formatCLP(egConf)} egresos conf.`,
+      color: saldoPeriodo >= 0 ? 'var(--rmg-blt)' : 'var(--rmg-red)',
+      filter: (m) => m.estado === 'confirmado',
+    },
+    {
+      key: 'ing_proy', label: 'Ingresos Proyectados',
+      value: ingProy,
+      sub: `${movimientos.filter(m => m.tipo==='ingreso' && m.estado==='proyectado').length} movimientos`,
+      color: 'var(--rmg-teal)',
+      filter: (m) => m.tipo === 'ingreso' && m.estado === 'proyectado',
+    },
+    {
+      key: 'gast_proy', label: 'Gastos Proyectados',
+      value: gastProy,
+      sub: `${movimientos.filter(m => m.tipo==='egreso' && m.estado==='proyectado').length} movimientos`,
+      color: 'var(--rmg-red)',
+      filter: (m) => m.tipo === 'egreso' && m.estado === 'proyectado',
+    },
+    {
+      key: 'saldo_proy', label: 'Saldo Proyectado',
+      value: saldoProyectado,
+      sub: `Real + ${formatCLP(ingProy)} ingresos − ${formatCLP(gastProy)} gastos`,
+      color: saldoProyectado >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
+      filter: (m) => m.estado === 'proyectado',
+    },
   ]
 
-  // Accordion: semana → categoria → detalle
+  const activeCard = CARDS.find(c => c.key === cardFilter)
+
+  // ── Movimientos filtrados por card activa ────────────────────────────────
+  const movsVisible = useMemo(() => {
+    if (!activeCard) return movimientos
+    return movimientos.filter(activeCard.filter)
+  }, [movimientos, activeCard])
+
+  // ── Accordion: semana → categoria ───────────────────────────────────────
   const porSemana = useMemo(() => {
     const map = {}
-    for (const m of movimientos) {
+    for (const m of movsVisible) {
       if (!m.fecha_pago) continue
-      const { key, label } = semanaISO(m.fecha_pago)
+      const { key, label } = semanaKey(m.fecha_pago)
       if (!map[key]) map[key] = { key, label, items: [], ingresos: 0, egresos: 0 }
       map[key].items.push(m)
       if (m.tipo === 'ingreso') map[key].ingresos += m.monto
       else                      map[key].egresos  += m.monto
     }
     return Object.values(map).sort((a, b) => a.key.localeCompare(b.key))
-  }, [movimientos])
+  }, [movsVisible])
 
   const categoriasPorSem = (semKey) => {
     const sem = porSemana.find(s => s.key === semKey)
@@ -151,15 +179,25 @@ export default function FlujoCajaPage() {
     return Object.values(map)
   }
 
-  // BarChart data por semana
-  const chartData = porSemana.map(s => ({
-    semana: s.label.replace('Sem ', 'S').split(' — ')[0],
-    Ingresos: s.ingresos,
-    Egresos:  s.egresos,
-    Saldo:    s.ingresos - s.egresos,
-  }))
+  // ── Chart data ───────────────────────────────────────────────────────────
+  const chartData = useMemo(() => {
+    const map = {}
+    for (const m of movimientos) {
+      if (!m.fecha_pago) continue
+      const { key, label } = semanaKey(m.fecha_pago)
+      if (!map[key]) map[key] = { key, semana: label, Ingresos: 0, Egresos: 0 }
+      if (m.tipo === 'ingreso') map[key].Ingresos += m.monto
+      else                      map[key].Egresos  += m.monto
+    }
+    return Object.values(map).sort((a, b) => a.key.localeCompare(b.key))
+  }, [movimientos])
 
-  const hayFiltros = Object.values(filtros).some(Boolean)
+  // Saldo acumulado para tabla plana
+  let saldoCorrido = 0
+  const movsConSaldo = movsVisible.map(m => {
+    saldoCorrido += m.tipo === 'ingreso' ? m.monto : -m.monto
+    return { ...m, saldo_acum: saldoCorrido }
+  })
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -168,81 +206,82 @@ export default function FlujoCajaPage() {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Flujo de Caja</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Ingresos y egresos · saldo acumulado corrido</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Ingresos y egresos · saldos confirmados y proyectados</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowFiltros(v => !v)} className="btn-secondary flex items-center gap-2">
-            <Filter size={14}/> Filtros {hayFiltros && <span className="w-2 h-2 rounded-full" style={{ background: 'var(--rmg-blue)' }}/>}
-          </button>
-          <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2">
-            {showForm ? <><X size={15}/> Cerrar</> : <><Plus size={15}/> Nuevo</>}
-          </button>
-        </div>
+        <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2">
+          {showForm ? <><X size={15}/> Cerrar</> : <><Plus size={15}/> Nuevo</>}
+        </button>
       </div>
 
-      {/* 7 KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
-        {CARDS.map(k => (
-          <div key={k.label} className="rmg-card p-3">
-            <div className="text-xs mb-1 leading-tight" style={{ color: 'var(--rmg-muted)' }}>{k.label}</div>
-            <div className="font-black text-base" style={{ color: k.color, fontFamily: 'Inter Tight, sans-serif' }}>
-              {formatCLP(k.value)}
-            </div>
-          </div>
-        ))}
+      {/* Filtro fecha */}
+      <div className="rmg-card p-4 flex items-center gap-4 flex-wrap">
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Período</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Desde</span>
+          <input type="date" className="rmg-input text-xs w-36 py-1.5" value={desde}
+            onChange={e => setDesde(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Hasta</span>
+          <input type="date" className="rmg-input text-xs w-36 py-1.5" value={hasta}
+            onChange={e => setHasta(e.target.value)} />
+        </div>
+        <button onClick={() => { setDesde(mesInicio()); setHasta(hoyStr()) }}
+          className="text-xs px-3 py-1.5 rounded-lg"
+          style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          Mes actual
+        </button>
       </div>
 
-      {/* Filtros */}
-      {showFiltros && (
-        <div className="rmg-card p-4 animate-fade-in">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div>
-              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Desde</label>
-              <input type="date" className="rmg-input text-xs" value={filtros.desde}
-                onChange={e => setFiltros(p => ({ ...p, desde: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Hasta</label>
-              <input type="date" className="rmg-input text-xs" value={filtros.hasta}
-                onChange={e => setFiltros(p => ({ ...p, hasta: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Tipo</label>
-              <select className="rmg-input text-xs" value={filtros.tipo} onChange={e => setFiltros(p => ({ ...p, tipo: e.target.value }))}>
-                <option value="">Todos</option>
-                <option value="ingreso">Ingreso</option>
-                <option value="egreso">Egreso</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Categoría</label>
-              <input className="rmg-input text-xs" placeholder="Filtrar..." value={filtros.categoria}
-                onChange={e => setFiltros(p => ({ ...p, categoria: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cuenta</label>
-              <select className="rmg-input text-xs" value={filtros.cuenta_bancaria} onChange={e => setFiltros(p => ({ ...p, cuenta_bancaria: e.target.value }))}>
-                <option value="">Todas</option>
-                {CUENTAS.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Estado</label>
-              <select className="rmg-input text-xs" value={filtros.estado} onChange={e => setFiltros(p => ({ ...p, estado: e.target.value }))}>
-                <option value="">Todos</option>
-                <option value="proyectado">Proyectado</option>
-                <option value="confirmado">Confirmado</option>
-              </select>
-            </div>
+      {/* ── GRÁFICO DE BARRAS (primero) ─────────────────────────────────── */}
+      <div className="rmg-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-bold text-sm">Ingresos vs Egresos por semana</h2>
+          <div className="flex gap-4 text-xs" style={{ color: 'var(--rmg-muted)' }}>
+            <span className="flex items-center gap-1.5"><div className="w-4 h-2 rounded" style={{ background: 'var(--rmg-teal)' }}/>Ingresos</span>
+            <span className="flex items-center gap-1.5"><div className="w-4 h-2 rounded" style={{ background: 'var(--rmg-red)' }}/>Egresos</span>
           </div>
-          {hayFiltros && (
-            <button onClick={() => setFiltros({ desde: '', hasta: '', tipo: '', categoria: '', cuenta_bancaria: '', estado: '' })}
-              className="mt-3 text-xs flex items-center gap-1" style={{ color: 'var(--rmg-muted)' }}>
-              <X size={11}/> Limpiar filtros
+        </div>
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chartData} barGap={4} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="semana" tick={AX} axisLine={false} tickLine={false} />
+              <YAxis tick={AX} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1e6).toFixed(1)}M`} />
+              <Tooltip contentStyle={TT} formatter={v => formatCLP(v)} />
+              <Bar dataKey="Ingresos" fill="var(--rmg-teal)" radius={[3,3,0,0]} />
+              <Bar dataKey="Egresos"  fill="var(--rmg-red)"  radius={[3,3,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-40 text-sm" style={{ color: 'var(--rmg-muted)' }}>
+            Sin movimientos en este período
+          </div>
+        )}
+      </div>
+
+      {/* ── 5 CARDS (clickables) ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {CARDS.map(c => {
+          const isActive = cardFilter === c.key
+          return (
+            <button key={c.key} onClick={() => setCardFilter(isActive ? null : c.key)}
+              className="rmg-card p-4 text-left transition-all"
+              style={isActive ? { outline: `2px solid ${c.color}`, outlineOffset: 2 } : {}}>
+              <div className="text-xs uppercase tracking-wider font-semibold mb-2 leading-tight" style={{ color: 'var(--rmg-muted)' }}>
+                {c.label}
+              </div>
+              <div className="font-black text-xl leading-none" style={{ fontFamily: 'Inter Tight, sans-serif', color: c.color }}>
+                {formatCLP(c.value)}
+              </div>
+              <div className="text-xs mt-1.5 leading-snug" style={{ color: 'var(--rmg-muted)' }}>{c.sub}</div>
+              {isActive && (
+                <div className="mt-2 text-xs font-semibold" style={{ color: c.color }}>▼ filtrado</div>
+              )}
             </button>
-          )}
-        </div>
-      )}
+          )
+        })}
+      </div>
 
       {/* Formulario nuevo movimiento */}
       {showForm && (
@@ -358,41 +397,20 @@ export default function FlujoCajaPage() {
         </div>
       )}
 
-      {/* Toggle Real / Proyectado */}
-      <div className="flex gap-1">
-        {[{ k: 'proyectado', l: 'Proyectado (todo)' }, { k: 'real', l: 'Real (confirmado ≤ hoy)' }].map(t => (
-          <button key={t.k} onClick={() => setModo(t.k)}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-            style={modo === t.k
-              ? { background: 'var(--rmg-blue)', color: '#fff' }
-              : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
-            }>{t.l}</button>
-        ))}
-      </div>
-
-      {/* BarChart */}
-      {chartData.length > 0 && (
-        <div className="rmg-card p-5">
-          <h2 className="font-bold mb-4 text-sm">Ingresos vs Egresos por semana</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chartData} barGap={4}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="semana" tick={{ fill: 'rgba(90,143,168,0.7)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'rgba(90,143,168,0.7)', fontSize: 10 }} axisLine={false} tickLine={false}
-                tickFormatter={v => `$${(v / 1000000).toFixed(1)}M`} />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v) => formatCLP(v)} />
-              <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(90,143,168,0.7)' }} />
-              <Bar dataKey="Ingresos" fill="var(--rmg-teal)"  radius={[3,3,0,0]} />
-              <Bar dataKey="Egresos"  fill="var(--rmg-red)"   radius={[3,3,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Accordion semana → categoria → detalle */}
+      {/* ── Accordion semana → categoria → detalle ──────────────────────── */}
       {porSemana.length > 0 && (
         <div className="space-y-2">
-          <h2 className="font-bold text-sm px-1">Detalle por semana</h2>
+          <div className="flex items-center justify-between px-1">
+            <h2 className="font-bold text-sm">
+              Detalle por semana
+              {activeCard && <span className="ml-2 text-xs font-normal" style={{ color: 'var(--rmg-muted)' }}>· filtrado: {activeCard.label}</span>}
+            </h2>
+            {activeCard && (
+              <button onClick={() => setCardFilter(null)} className="text-xs flex items-center gap-1" style={{ color: 'var(--rmg-muted)' }}>
+                <X size={11}/> Limpiar filtro
+              </button>
+            )}
+          </div>
           {porSemana.map(sem => {
             const semOpen = openSem[sem.key]
             return (
@@ -402,11 +420,11 @@ export default function FlujoCajaPage() {
                   <div className="flex items-center gap-3">
                     {semOpen ? <ChevronDown size={14} style={{ color: 'var(--rmg-muted)' }}/> : <ChevronRight size={14} style={{ color: 'var(--rmg-muted)' }}/>}
                     <span className="font-semibold text-sm" style={{ color: 'var(--rmg-off)' }}>{sem.label}</span>
-                    <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{sem.items.length} movimientos</span>
+                    <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{sem.items.length} mov.</span>
                   </div>
                   <div className="flex items-center gap-4 text-xs">
-                    <span style={{ color: 'var(--rmg-teal)' }}>+{formatCLP(sem.ingresos)}</span>
-                    <span style={{ color: 'var(--rmg-red)' }}>-{formatCLP(sem.egresos)}</span>
+                    {sem.ingresos > 0 && <span style={{ color: 'var(--rmg-teal)' }}>+{formatCLP(sem.ingresos)}</span>}
+                    {sem.egresos  > 0 && <span style={{ color: 'var(--rmg-red)'  }}>-{formatCLP(sem.egresos)}</span>}
                     <span className="font-bold" style={{ color: sem.ingresos - sem.egresos >= 0 ? 'var(--rmg-blt)' : 'var(--rmg-red)' }}>
                       {formatCLP(sem.ingresos - sem.egresos)}
                     </span>
@@ -447,7 +465,7 @@ export default function FlujoCajaPage() {
                                 <span className="font-semibold" style={{ color: m.tipo === 'ingreso' ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>
                                   {m.tipo === 'ingreso' ? '+' : '-'}{formatCLP(m.monto)}
                                 </span>
-                                <span className="px-1.5 py-0.5 rounded text-xs"
+                                <span className="px-1.5 py-0.5 rounded"
                                   style={m.estado === 'confirmado'
                                     ? { background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }
                                     : { background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)' }}>
@@ -455,7 +473,7 @@ export default function FlujoCajaPage() {
                                 </span>
                                 {m.origen_tabla === 'manual' && (
                                   <>
-                                    <button onClick={() => handleEdit(m)} className="p-1 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
+                                    <button onClick={() => setEditando({ ...m })} className="p-1 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
                                       <Pencil size={11}/>
                                     </button>
                                     <button onClick={() => eliminarMut.mutate(m.id)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}>
@@ -477,11 +495,11 @@ export default function FlujoCajaPage() {
         </div>
       )}
 
-      {/* Tabla plana */}
+      {/* ── Tabla plana ────────────────────────────────────────────────────── */}
       <div className="rmg-card overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(56,182,255,0.08)' }}>
           <span className="font-bold text-sm">Tabla de movimientos</span>
-          <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{movimientos.length} registros</span>
+          <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{movsVisible.length} registros</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -511,7 +529,7 @@ export default function FlujoCajaPage() {
                         <td className="px-4 py-2.5">
                           <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
                             style={{ background: isIng ? 'rgba(45,201,138,0.12)' : 'rgba(224,90,78,0.12)', color: isIng ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>
-                            {isIng ? '↑' : '↓'} {isIng ? 'Ingreso' : 'Egreso'}
+                            {isIng ? '↑ Ingreso' : '↓ Egreso'}
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{m.categoria || m.origen_tabla || '—'}</td>
@@ -538,7 +556,7 @@ export default function FlujoCajaPage() {
                         <td className="px-4 py-2.5">
                           {m.origen_tabla === 'manual' && (
                             <div className="flex gap-1">
-                              <button onClick={() => handleEdit(m)} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
+                              <button onClick={() => setEditando({ ...m })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
                                 <Pencil size={12}/>
                               </button>
                               <button onClick={() => eliminarMut.mutate(m.id)} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}>
@@ -554,10 +572,10 @@ export default function FlujoCajaPage() {
             </tbody>
           </table>
         </div>
-        {!isLoading && movimientos.length === 0 && (
+        {!isLoading && movsVisible.length === 0 && (
           <div className="py-12 text-center" style={{ color: 'var(--rmg-muted)' }}>
             <Wallet size={28} className="mx-auto mb-2 opacity-20"/>
-            <p className="text-sm">Sin movimientos</p>
+            <p className="text-sm">Sin movimientos para este filtro</p>
           </div>
         )}
       </div>

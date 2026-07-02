@@ -1160,6 +1160,14 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('erp_v1')
     console.log('✅ Migración erp_v1 — configuracion_mensual, pedido_items, notas_venta, nota_venta_items, caja cuenta_bancaria')
   }
+
+  // Migration 11: stock_seed_v1 — set stock_actual = 10 on all productos
+  const m11 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('stock_seed_v1')
+  if (!m11) {
+    db.prepare("UPDATE productos SET stock_actual = 10").run()
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('stock_seed_v1')
+    console.log('✅ Migración stock_seed_v1 — stock_actual = 10 en todos los productos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

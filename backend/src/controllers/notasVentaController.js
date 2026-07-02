@@ -4,16 +4,16 @@ const hoy = () => new Date().toISOString().split('T')[0]
 
 const withItems = (nv) => {
   if (!nv) return null
-  const items = db.prepare('SELECT * FROM nota_venta_items WHERE nota_venta_id = ?').all(nv.id)
+  const items = db.prepare('SELECT * FROM nota_venta_items WHERE nota_id = ?').all(nv.id)
   return { ...nv, items }
 }
 
 const getAll = (req, res) => {
   try {
-    const { estado } = req.query
+    const { estado_pago } = req.query
     let sql = 'SELECT * FROM notas_venta'
     const params = []
-    if (estado) { sql += ' WHERE estado = ?'; params.push(estado) }
+    if (estado_pago) { sql += ' WHERE estado_pago = ?'; params.push(estado_pago) }
     sql += ' ORDER BY created_at DESC'
     res.json(db.prepare(sql).all(...params))
   } catch (err) {
@@ -48,11 +48,10 @@ const createFromPedido = (req, res) => {
 
     db.prepare(`
       INSERT INTO notas_venta
-        (id, numero, pedido_id, cotizacion_id, cliente_id, cliente, estado,
+        (id, numero, pedido_id, cliente_id, cliente, estado_pago,
          neto, iva, total, condicion_pago, notas)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)
     `).run(id, numero, pedidoId,
-      pedido.cotizacion_id || null,
       pedido.cliente_id || null,
       pedido.cliente || null,
       'pendiente',
@@ -63,11 +62,11 @@ const createFromPedido = (req, res) => {
     if (items.length) {
       const ins = db.prepare(`
         INSERT INTO nota_venta_items
-          (id, nota_venta_id, codigo, descripcion, cantidad, precio_unitario, descuento_pct, subtotal)
-        VALUES (?,?,?,?,?,?,?,?)
+          (nota_id, codigo_sku, descripcion, cantidad, precio_unitario, descuento_pct, subtotal)
+        VALUES (?,?,?,?,?,?,?)
       `)
       for (const item of items) {
-        ins.run(uuidv4(), id, item.codigo, item.descripcion,
+        ins.run(id, item.codigo_sku || null, item.descripcion,
           item.cantidad, item.precio_unitario, item.descuento_pct || 0, item.subtotal)
       }
     }
@@ -82,19 +81,18 @@ const registrarPago = (req, res) => {
   try {
     const nv = db.prepare('SELECT * FROM notas_venta WHERE id = ?').get(req.params.id)
     if (!nv) return res.status(404).json({ error: 'Nota de venta no encontrada' })
-    if (nv.estado === 'pagada') return res.status(400).json({ error: 'La nota de venta ya está pagada' })
+    if (nv.estado_pago === 'pagado') return res.status(400).json({ error: 'La nota de venta ya está pagada' })
 
-    const { metodo_pago, cuenta_bancaria, fecha_pago, notas_pago } = req.body
+    const { metodo_pago, cuenta_bancaria, fecha_pago, notas } = req.body
 
     db.prepare(`
       UPDATE notas_venta
-        SET estado = 'pagada', metodo_pago = ?, cuenta_bancaria = ?,
-            fecha_pago = ?, notas_pago = ?, updated_at = datetime('now')
+        SET estado_pago = 'pagado', metodo_pago = ?, cuenta_bancaria = ?,
+            fecha_pago = ?, notas = ?, updated_at = datetime('now')
         WHERE id = ?
-    `).run(metodo_pago || 'Transferencia', cuenta_bancaria || null,
-           fecha_pago || hoy(), notas_pago || null, nv.id)
+    `).run(metodo_pago || 'transferencia', cuenta_bancaria || null,
+           fecha_pago || hoy(), notas || null, nv.id)
 
-    // Registrar ingreso CONFIRMADO en caja
     db.prepare(`
       INSERT INTO caja_movimientos
         (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)

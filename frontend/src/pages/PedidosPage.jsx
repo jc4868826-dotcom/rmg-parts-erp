@@ -25,11 +25,12 @@ const ESTADO_STYLES = {
   anulado:        { bg: 'rgba(224,90,78,0.12)',   color: 'var(--rmg-red)' },
 }
 
-const PAGO_INIT = { metodo_pago: 'Transferencia', cuenta_bancaria: CUENTAS[0], fecha_pago: new Date().toISOString().split('T')[0], notas_pago: '' }
+const PAGO_INIT = { metodo_pago: 'transferencia', cuenta_bancaria: CUENTAS[0], fecha_pago: new Date().toISOString().split('T')[0], notas: '' }
 
 export default function PedidosPage() {
   const [estadoFiltro, setFiltro] = useState('')
   const [showCotModal, setShowCotModal] = useState(false)
+  const [clienteFiltroModal, setClienteFiltroModal] = useState('')
   const [expandido, setExpandido] = useState({})
   const [pagoModal, setPagoModal] = useState(null)
   const [pago, setPago] = useState(PAGO_INIT)
@@ -100,9 +101,10 @@ export default function PedidosPage() {
 
   const totalPedidos = pedidos.reduce((s, p) => s + p.total, 0)
 
-  const availableCots = cotPendientes.filter(c =>
-    !cotAprobadas.some(a => a.id === c.id) || c.estado !== 'aprobada'
-  )
+  const availableCots = cotPendientes.filter(c => {
+    if (clienteFiltroModal && !c.cliente?.toLowerCase().includes(clienteFiltroModal.toLowerCase())) return false
+    return true
+  })
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -228,10 +230,14 @@ export default function PedidosPage() {
           <div className="rmg-card p-6 w-full max-w-2xl max-h-[80vh] flex flex-col animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold">Crear pedido desde cotización</h2>
-              <button onClick={() => setShowCotModal(false)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+              <button onClick={() => { setShowCotModal(false); setClienteFiltroModal('') }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <div className="mb-3">
+              <input className="rmg-input" placeholder="Filtrar por cliente..." value={clienteFiltroModal}
+                onChange={e => setClienteFiltroModal(e.target.value)} />
             </div>
             <div className="overflow-y-auto flex-1">
-              {cotPendientes.length === 0 ? (
+              {availableCots.length === 0 ? (
                 <p className="text-center py-8" style={{ color: 'var(--rmg-muted)' }}>No hay cotizaciones disponibles</p>
               ) : (
                 <table className="w-full text-sm">
@@ -243,7 +249,7 @@ export default function PedidosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cotPendientes.map(c => (
+                    {availableCots.map(c => (
                       <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/[0.02]">
                         <td className="px-3 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{c.numero}</td>
                         <td className="px-3 py-2.5" style={{ color: 'var(--rmg-off)' }}>{c.cliente}</td>
@@ -303,8 +309,8 @@ export default function PedidosPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
-                <input className="rmg-input" placeholder="Referencia, número de operación..." value={pago.notas_pago}
-                  onChange={e => setPago(p => ({ ...p, notas_pago: e.target.value }))} />
+                <input className="rmg-input" placeholder="Referencia, número de operación..." value={pago.notas}
+                  onChange={e => setPago(p => ({ ...p, notas: e.target.value }))} />
               </div>
               <div className="flex gap-3 justify-end pt-2">
                 <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} className="btn-secondary">Cancelar</button>
@@ -346,7 +352,7 @@ function PedidoItems({ pedidoId }) {
       <tbody>
         {data.items.map(item => (
           <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-            <td className="px-2 py-1.5 font-mono" style={{ color: 'var(--rmg-blt)' }}>{item.codigo || '—'}</td>
+            <td className="px-2 py-1.5 font-mono" style={{ color: 'var(--rmg-blt)' }}>{item.codigo_sku || item.codigo || '—'}</td>
             <td className="px-2 py-1.5" style={{ color: 'var(--rmg-off)' }}>{item.descripcion}</td>
             <td className="px-2 py-1.5 text-center">{item.cantidad}</td>
             <td className="px-2 py-1.5 text-right">{formatCLP(item.precio_unitario)}</td>
