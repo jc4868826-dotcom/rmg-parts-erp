@@ -104,14 +104,31 @@ function VistaFactura({ pedido, cotizacion }) {
 }
 
 export default function FacturaPage() {
+  const [clienteId, setClienteId] = useState('')
   const [pedidoId, setPedidoId] = useState('')
+
+  const { data: clientes = [] } = useQuery({
+    queryKey: ['clientes'],
+    queryFn: () => api.get('/clientes').then(r => r.data),
+  })
 
   const { data: pedidos = [] } = useQuery({
     queryKey: ['pedidos'],
     queryFn: () => api.get('/pedidos').then(r => r.data),
   })
 
-  const pedidoSel = pedidos.find(p => p.id === pedidoId || p.numero === pedidoId)
+  const { data: notasVenta = [] } = useQuery({
+    queryKey: ['notas-venta'],
+    queryFn: () => api.get('/notas-venta').then(r => r.data),
+  })
+
+  const pedidosConNV = new Set(notasVenta.map(nv => nv.pedido_id))
+
+  const pedidosCliente = clienteId
+    ? pedidos.filter(p => p.cliente_id === clienteId && !pedidosConNV.has(p.id))
+    : []
+
+  const pedidoSel = pedidos.find(p => p.id === pedidoId)
 
   const { data: cotizacion } = useQuery({
     queryKey: ['cotizacion', pedidoSel?.cotizacion_id],
@@ -148,16 +165,47 @@ export default function FacturaPage() {
         )}
       </div>
 
-      {/* Selector pedido */}
-      <div className="rmg-card p-5">
-        <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Seleccionar pedido</label>
-        <select className="rmg-input max-w-md" value={pedidoId} onChange={e => setPedidoId(e.target.value)}>
-          <option value="">Seleccionar pedido...</option>
-          {pedidos.map(p => (
-            <option key={p.id} value={p.id}>{p.numero} — {p.cliente} — {formatCLP(p.total)}</option>
-          ))}
-        </select>
-        <p className="text-xs mt-2" style={{ color: 'var(--rmg-muted)' }}>
+      {/* Selector pedido — 2 pasos */}
+      <div className="rmg-card p-5 space-y-4">
+        {/* Paso 1: cliente */}
+        <div>
+          <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Paso 1 — Cliente</label>
+          <select
+            className="rmg-input max-w-md"
+            value={clienteId}
+            onChange={e => { setClienteId(e.target.value); setPedidoId('') }}
+          >
+            <option value="">Seleccionar cliente...</option>
+            {clientes.map(c => (
+              <option key={c.id} value={c.id}>{c.razon_social}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Paso 2: pedido del cliente */}
+        {clienteId && (
+          <div>
+            <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Paso 2 — Pedido</label>
+            {pedidosCliente.length === 0 ? (
+              <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
+                Este cliente no tiene pedidos pendientes sin nota de venta.
+              </p>
+            ) : (
+              <select
+                className="rmg-input max-w-md"
+                value={pedidoId}
+                onChange={e => setPedidoId(e.target.value)}
+              >
+                <option value="">Seleccionar pedido...</option>
+                {pedidosCliente.map(p => (
+                  <option key={p.id} value={p.id}>{p.numero} — {p.estado} — {formatCLP(p.total)}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
           Solo pedidos con cotización asociada generan detalle de productos completo.
         </p>
       </div>

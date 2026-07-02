@@ -30,7 +30,7 @@ const PAGO_INIT = { metodo_pago: 'transferencia', cuenta_bancaria: CUENTAS[0], f
 export default function PedidosPage() {
   const [estadoFiltro, setFiltro] = useState('')
   const [showCotModal, setShowCotModal] = useState(false)
-  const [clienteFiltroModal, setClienteFiltroModal] = useState('')
+  const [clienteModal, setClienteModal] = useState(null)   // { id, razon_social }
   const [expandido, setExpandido] = useState({})
   const [pagoModal, setPagoModal] = useState(null)
   const [pago, setPago] = useState(PAGO_INIT)
@@ -41,17 +41,15 @@ export default function PedidosPage() {
     queryFn: () => api.get('/pedidos', { params: { estado: estadoFiltro || undefined } }).then(r => r.data),
   })
 
-  const { data: cotAprobadas = [] } = useQuery({
-    queryKey: ['cotizaciones-aprobadas'],
-    queryFn: () => api.get('/cotizaciones', { params: { estado: 'aprobada' } }).then(r => r.data),
+  const { data: clientes = [] } = useQuery({
+    queryKey: ['clientes'],
+    queryFn: () => api.get('/clientes').then(r => r.data),
     enabled: showCotModal,
   })
 
-  const { data: cotPendientes = [] } = useQuery({
-    queryKey: ['cotizaciones-pendientes'],
-    queryFn: () => api.get('/cotizaciones').then(r => r.data).then(rows =>
-      rows.filter(c => !['rechazada'].includes(c.estado))
-    ),
+  const { data: todasCots = [] } = useQuery({
+    queryKey: ['cotizaciones-modal'],
+    queryFn: () => api.get('/cotizaciones').then(r => r.data),
     enabled: showCotModal,
   })
 
@@ -60,10 +58,10 @@ export default function PedidosPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pedidos'] })
       qc.invalidateQueries({ queryKey: ['cotizaciones'] })
-      qc.invalidateQueries({ queryKey: ['cotizaciones-aprobadas'] })
-      qc.invalidateQueries({ queryKey: ['cotizaciones-pendientes'] })
+      qc.invalidateQueries({ queryKey: ['cotizaciones-modal'] })
       toast.success('Pedido creado desde cotización')
       setShowCotModal(false)
+      setClienteModal(null)
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al crear pedido'),
   })
@@ -101,10 +99,13 @@ export default function PedidosPage() {
 
   const totalPedidos = pedidos.reduce((s, p) => s + p.total, 0)
 
-  const availableCots = cotPendientes.filter(c => {
-    if (clienteFiltroModal && !c.cliente?.toLowerCase().includes(clienteFiltroModal.toLowerCase())) return false
-    return true
-  })
+  // Cotizaciones para el cliente seleccionado, excluyendo rechazadas y ya convertidas en pedido
+  const availableCots = clienteModal
+    ? todasCots.filter(c =>
+        c.cliente_id === clienteModal.id &&
+        !['rechazada', 'aprobada'].includes(c.estado)
+      )
+    : []
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -224,51 +225,79 @@ export default function PedidosPage() {
         )}
       </div>
 
-      {/* Modal: crear desde cotización */}
+      {/* Modal: crear desde cotización — 2 pasos: cliente → cotizaciones */}
       {showCotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
           <div className="rmg-card p-6 w-full max-w-2xl max-h-[80vh] flex flex-col animate-fade-in">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold">Crear pedido desde cotización</h2>
-              <button onClick={() => { setShowCotModal(false); setClienteFiltroModal('') }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+              <h2 className="font-bold">
+                {clienteModal ? `Cotizaciones · ${clienteModal.razon_social}` : 'Crear pedido desde cotización'}
+              </h2>
+              <button onClick={() => { setShowCotModal(false); setClienteModal(null) }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
             </div>
-            <div className="mb-3">
-              <input className="rmg-input" placeholder="Filtrar por cliente..." value={clienteFiltroModal}
-                onChange={e => setClienteFiltroModal(e.target.value)} />
-            </div>
-            <div className="overflow-y-auto flex-1">
-              {availableCots.length === 0 ? (
-                <p className="text-center py-8" style={{ color: 'var(--rmg-muted)' }}>No hay cotizaciones disponibles</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
-                      {['N°', 'Cliente', 'Estado', 'Total', ''].map(h => (
-                        <th key={h} className="text-left px-3 py-2 text-xs uppercase font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {availableCots.map(c => (
-                      <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/[0.02]">
-                        <td className="px-3 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{c.numero}</td>
-                        <td className="px-3 py-2.5" style={{ color: 'var(--rmg-off)' }}>{c.cliente}</td>
-                        <td className="px-3 py-2.5 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{c.estado}</td>
-                        <td className="px-3 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total)}</td>
-                        <td className="px-3 py-2.5">
-                          <button
-                            onClick={() => crearDesdeCotMut.mutate(c.id)}
-                            disabled={crearDesdeCotMut.isPending}
-                            className="btn-primary text-xs px-3 py-1 disabled:opacity-50">
-                            Crear pedido
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+
+            {/* Paso 1: seleccionar cliente */}
+            {!clienteModal ? (
+              <div className="space-y-3">
+                <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>Selecciona el cliente para ver sus cotizaciones activas:</p>
+                <select className="rmg-input" defaultValue=""
+                  onChange={e => {
+                    const cl = clientes.find(c => c.id === e.target.value)
+                    if (cl) setClienteModal(cl)
+                  }}>
+                  <option value="" disabled>Elegir cliente...</option>
+                  {clientes.map(c => (
+                    <option key={c.id} value={c.id}>{c.razon_social}</option>
+                  ))}
+                </select>
+                {clientes.length === 0 && (
+                  <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Cargando clientes...</p>
+                )}
+              </div>
+            ) : (
+              /* Paso 2: cotizaciones del cliente */
+              <div className="flex flex-col flex-1 min-h-0">
+                <button onClick={() => setClienteModal(null)}
+                  className="text-xs mb-3 flex items-center gap-1 w-fit"
+                  style={{ color: 'var(--rmg-muted)' }}>
+                  ← Cambiar cliente
+                </button>
+                <div className="overflow-y-auto flex-1">
+                  {availableCots.length === 0 ? (
+                    <p className="text-center py-8" style={{ color: 'var(--rmg-muted)' }}>
+                      Este cliente no tiene cotizaciones activas disponibles
+                    </p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
+                          {['N°', 'Estado', 'Total', ''].map(h => (
+                            <th key={h} className="text-left px-3 py-2 text-xs uppercase font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {availableCots.map(c => (
+                          <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/[0.02]">
+                            <td className="px-3 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{c.numero}</td>
+                            <td className="px-3 py-2.5 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{c.estado}</td>
+                            <td className="px-3 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total)}</td>
+                            <td className="px-3 py-2.5">
+                              <button
+                                onClick={() => crearDesdeCotMut.mutate(c.id)}
+                                disabled={crearDesdeCotMut.isPending}
+                                className="btn-primary text-xs px-3 py-1 disabled:opacity-50">
+                                Crear pedido
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
