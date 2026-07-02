@@ -69,6 +69,7 @@ app.use('/api/bodega',                 require('./routes/bodega'));    // Bodega
 app.use('/api/admin',                  require('./routes/admin'));     // TEMP: reset-db
 app.use('/api/pricing',                require('./routes/pricing'));   // Pricing multi-proveedor + benchmarks
 app.use('/api/prospeccion',            require('./routes/prospeccion')); // Pipeline Prospección
+app.use('/api/lista-precios',          require('./routes/listaPrecios')); // Lista de Precios
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {

@@ -969,6 +969,75 @@ function runMigrations() {
     const nLub = migV3()
     console.log(`✅ Migración pricing_v3 — volumen_litros calculado para ${nLub} lubricantes, cluster 5W30-ACEA-C3 corregido, NX120-7 insertado, 90AMP eliminado`)
   }
+
+  // Migration 7: lista_precios_v1 — tabla maestra de precios RMG
+  const m7 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('lista_precios_v1')
+  if (!m7) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS lista_precios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        segmento_negocio TEXT, prioridad_consumo INTEGER, categoria TEXT,
+        producto_generico TEXT, proveedor TEXT, marca TEXT, ranking_compra INTEGER,
+        codigo_sku TEXT, descripcion TEXT, presentacion TEXT, tipo_envase TEXT,
+        unidades_por_pack INTEGER, costo_pack_neto INTEGER, costo_unidad_neto INTEGER,
+        precio_venta_neto INTEGER, margen_clp INTEGER, margen_pct REAL,
+        mercado_min REAL, mercado_max REAL, holgura_mercado REAL,
+        pct_min_mercado REAL, pct_max_mercado REAL
+      );
+      CREATE INDEX IF NOT EXISTS idx_lp_sku ON lista_precios(codigo_sku);
+      CREATE INDEX IF NOT EXISTS idx_lp_proveedor ON lista_precios(proveedor);
+    `)
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_v1')
+    console.log('✅ Migración lista_precios_v1 — tabla lista_precios creada con índices')
+  }
+
+  // Migration 8: lista_precios_seed_v1 — carga inicial del CSV de precios
+  const m8 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('lista_precios_seed_v1')
+  if (!m8) {
+    const csvPath = path.join(__dirname, '../../data/lista_precios.csv')
+    if (fs.existsSync(csvPath)) {
+      const lines = fs.readFileSync(csvPath, 'utf8').split('\n').filter(l => l.trim())
+      const headers = lines[0].split(',').map(h => h.trim())
+      const toInt = v => { const n = parseInt(v, 10); return isNaN(n) ? null : n }
+      const toFloat = v => { const n = parseFloat(v); return isNaN(n) ? null : n }
+      const toStr = v => (v && v.trim()) ? v.trim() : null
+
+      const seedLP = db.transaction(() => {
+        db.prepare('DELETE FROM lista_precios').run()
+        const ins = db.prepare(`
+          INSERT INTO lista_precios (
+            segmento_negocio, prioridad_consumo, categoria, producto_generico,
+            proveedor, marca, ranking_compra, codigo_sku, descripcion, presentacion,
+            tipo_envase, unidades_por_pack, costo_pack_neto, costo_unidad_neto,
+            precio_venta_neto, margen_clp, margen_pct,
+            mercado_min, mercado_max, holgura_mercado, pct_min_mercado, pct_max_mercado
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `)
+        let count = 0
+        for (const line of lines.slice(1)) {
+          const v = line.split(',')
+          const r = {}
+          headers.forEach((h, i) => { r[h] = (v[i] || '').trim() })
+          ins.run(
+            toStr(r.segmento_negocio), toInt(r.prioridad_consumo), toStr(r.categoria), toStr(r.producto_generico),
+            toStr(r.proveedor), toStr(r.marca), toInt(r.ranking_compra), toStr(r.codigo_sku),
+            toStr(r.descripcion), toStr(r.presentacion), toStr(r.tipo_envase), toInt(r.unidades_por_pack),
+            toInt(r.costo_pack_neto), toInt(r.costo_unidad_neto), toInt(r.precio_venta_neto),
+            toInt(r.margen_clp), toFloat(r.margen_pct),
+            toFloat(r.mercado_min), toFloat(r.mercado_max), toFloat(r.holgura_mercado),
+            toFloat(r.pct_min_mercado), toFloat(r.pct_max_mercado)
+          )
+          count++
+        }
+        db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_seed_v1')
+        return count
+      })
+      const n = seedLP()
+      console.log(`✅ Migración lista_precios_seed_v1 — ${n} filas importadas desde CSV`)
+    } else {
+      console.warn('⚠️  lista_precios_seed_v1: CSV no encontrado en', csvPath, '— importa manualmente con import_lista_precios.js')
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

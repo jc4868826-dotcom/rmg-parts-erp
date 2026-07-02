@@ -13,7 +13,7 @@ import {
   ShoppingCart, Warehouse, MessageCircle, BarChart3,
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
-  CreditCard, Building2, BookOpen, Tag, Crosshair
+  CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList
 } from 'lucide-react'
 
 const NAV_SECTIONS = [
@@ -26,7 +26,8 @@ const NAV_SECTIONS = [
       { to: '/agenda',       icon: CalendarDays,    label: 'Agenda',          badge: null },
       { to: '/clientes',     icon: Users,           label: 'Clientes',        badge: null },
       { to: '/cotizaciones', icon: FileText,        label: 'Cotizaciones',    badge: '2' },
-      { to: '/pricing',      icon: Tag,             label: 'Pricing',         badge: null },
+      { to: '/pricing',        icon: Tag,             label: 'Pricing',         badge: null },
+      { to: '/lista-precios',  icon: ClipboardList,   label: 'Lista de Precios',badge: null },
     ],
   },
   {
