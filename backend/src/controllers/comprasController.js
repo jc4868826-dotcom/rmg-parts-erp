@@ -1,5 +1,16 @@
 const { db, uuidv4 } = require('../../config/database')
 
+function insertCaja(tipo, categoria, descripcion, monto, fecha_pago, estado, origen_tabla, origen_id) {
+  try {
+    const hoy = new Date().toISOString().split('T')[0]
+    db.prepare(`
+      INSERT INTO caja_movimientos
+        (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id)
+      VALUES (?,?,?,?,?,?,?,?,?)
+    `).run(tipo, categoria, descripcion, monto, hoy, fecha_pago || hoy, estado, origen_tabla, origen_id)
+  } catch (_) {}
+}
+
 const withItems = (oc) => {
   if (!oc) return null
   const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(oc.id)
@@ -183,6 +194,10 @@ const pagarFactura = (req, res) => {
     const fecha_pago = new Date().toISOString().split('T')[0]
     db.prepare("UPDATE facturas_cxp SET estado = 'pagada', fecha_pago = ? WHERE id = ?")
       .run(fecha_pago, req.params.id)
+    db.prepare(`
+      UPDATE caja_movimientos SET estado = 'confirmado', fecha_pago = ?
+      WHERE origen_tabla = 'facturas_cxp' AND origen_id = ?
+    `).run(fecha_pago, req.params.id)
     res.json(db.prepare('SELECT * FROM facturas_cxp WHERE id = ?').get(req.params.id))
   } catch (err) {
     res.status(500).json({ error: err.message })

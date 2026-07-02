@@ -34,6 +34,7 @@ import FacturaPage      from '@pages/FacturaPage'
 import PricingTab        from '@components/PricingTab'
 import ProspeccionPage  from '@pages/ProspeccionPage'
 import ListaPreciosPage from '@pages/ListaPreciosPage'
+import FlujoCajaPage   from '@pages/FlujoCajaPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -102,6 +103,7 @@ export default function App() {
               <Route path="pricing"            element={<PricingTab />} />
               <Route path="prospeccion"       element={<ProspeccionPage />} />
               <Route path="lista-precios"     element={<ListaPreciosPage />} />
+              <Route path="flujo-caja"        element={<FlujoCajaPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

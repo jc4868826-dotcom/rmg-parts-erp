@@ -164,7 +164,7 @@ const moverAContacto = (req, res) => {
       db.prepare(`
         INSERT OR IGNORE INTO clientes
           (id, razon_social, segmento, etapa_pipeline,
-           contacto_nombre, cargo, telefono, whatsapp, email,
+           contacto_nombre, contacto_cargo, telefono, whatsapp, email,
            direccion, comuna, notas, activo)
         VALUES (?, ?, ?, 'contactado', ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `).run(

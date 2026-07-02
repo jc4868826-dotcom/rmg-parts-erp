@@ -1,14 +1,18 @@
 /**
- * RUTA TEMPORAL — eliminar después de usarla en producción
- * POST /api/admin/reset-db  →  borra datos de prueba, conserva usuarios y productos
+ * POST /api/admin/reset-db  — limpieza marcha blanca
+ * Vacía datos de prueba; conserva: usuarios, productos, lista_precios,
+ * cluster_referencia_mercado, proveedores_sku, _migrations,
+ * y pipeline_contactos donde fuente = 'Prospección jun-2026'.
  */
 const express = require('express')
 const router = express.Router()
 const { authenticate, requireRole } = require('../middleware/auth')
 const { db } = require('../../config/database')
 
-// Tablas a limpiar, en orden que respeta FK constraints
+// Tablas a vaciar completamente (en orden FK)
 const RESET_TABLES = [
+  'caja_movimientos',
+  'gastos',
   'mensajes_whatsapp',
   'conversaciones_whatsapp',
   'facturas_cxp',
@@ -35,16 +39,33 @@ router.post('/reset-db', authenticate, requireRole('admin'), (req, res) => {
   const deleted = {}
   try {
     const doReset = db.transaction(() => {
+      // Tablas de borrado total
       for (const t of RESET_TABLES) {
-        deleted[t] = db.prepare(`SELECT COUNT(*) as n FROM ${t}`).get().n
-        db.prepare(`DELETE FROM ${t}`).run()
+        try {
+          deleted[t] = db.prepare(`SELECT COUNT(*) as n FROM ${t}`).get().n
+          db.prepare(`DELETE FROM ${t}`).run()
+        } catch (_) {
+          deleted[t] = 0
+        }
       }
-      // Permite que catalog_223_v1 re-corra si fuera necesario
-      db.prepare("DELETE FROM _migrations WHERE id != 'clean_test_data_v1'").run()
-    })
-    doReset()
 
-    console.log('🗑️  reset-db ejecutado por:', req.user.email)
+      // pipeline_contactos: solo borrar los que NO son de 'Prospección jun-2026'
+      try {
+        const noReales = db.prepare(
+          "SELECT COUNT(*) as n FROM pipeline_contactos WHERE fuente != 'Prospección jun-2026' OR fuente IS NULL"
+        ).get().n
+        db.prepare(
+          "DELETE FROM pipeline_contactos WHERE fuente != 'Prospección jun-2026' OR fuente IS NULL"
+        ).run()
+        deleted['pipeline_contactos (no-reales)'] = noReales
+        deleted['pipeline_contactos (conservados)'] = db.prepare(
+          'SELECT COUNT(*) as n FROM pipeline_contactos'
+        ).get().n
+      } catch (_) {}
+    })
+
+    doReset()
+    console.log('🗑️  reset-db marcha blanca ejecutado por:', req.user.email)
     return res.json({ ok: true, deleted })
   } catch (err) {
     console.error('reset-db error:', err.message)

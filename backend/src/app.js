@@ -70,6 +70,8 @@ app.use('/api/admin',                  require('./routes/admin'));     // TEMP: 
 app.use('/api/pricing',                require('./routes/pricing'));   // Pricing multi-proveedor + benchmarks
 app.use('/api/prospeccion',            require('./routes/prospeccion')); // Pipeline Prospección
 app.use('/api/lista-precios',          require('./routes/listaPrecios')); // Lista de Precios
+app.use('/api/gastos',                 require('./routes/gastos'));        // Gastos operacionales
+app.use('/api/flujo-caja',             require('./routes/flujoCaja'));     // Flujo de caja
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {

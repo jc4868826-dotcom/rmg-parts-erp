@@ -13,7 +13,7 @@ import {
   ShoppingCart, Warehouse, MessageCircle, BarChart3,
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
-  CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList
+  CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart
 } from 'lucide-react'
 
 const NAV_SECTIONS = [
@@ -38,6 +38,7 @@ const NAV_SECTIONS = [
       { to: '/cxp',          icon: CreditCard,      label: 'CxP · Pagar',     badge: null },
       { to: '/facturas',     icon: BookOpen,        label: 'Notas de Venta',  badge: null },
       { to: '/gastos',       icon: Receipt,         label: 'Gastos',          badge: null },
+      { to: '/flujo-caja',   icon: LineChart,       label: 'Flujo de Caja',   badge: null },
     ],
   },
   {

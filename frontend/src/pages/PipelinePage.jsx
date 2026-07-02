@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@utils/api'
 import { labelSegmento } from '@utils/format'
-import { GitBranch, Plus } from 'lucide-react'
+import { GitBranch, Plus, UserPlus } from 'lucide-react'
 
 const ETAPAS = [
   { key: 'prospecto',  label: 'Prospecto',  color: 'rgba(90,143,168,0.8)' },
@@ -48,8 +48,8 @@ export default function PipelinePage() {
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Pipeline CRM</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>5 etapas · Prospecto → Cliente</p>
         </div>
-        <button className="btn-primary flex items-center gap-2">
-          <Plus size={16} /> Agregar prospecto
+        <button onClick={() => navigate('/prospeccion')} className="btn-primary flex items-center gap-2">
+          <UserPlus size={16} /> Agregar prospecto
         </button>
       </div>
 

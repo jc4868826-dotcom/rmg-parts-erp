@@ -1,5 +1,16 @@
 const { db, uuidv4 } = require('../../config/database')
 
+function insertCaja(tipo, categoria, descripcion, monto, fecha_pago, estado, origen_tabla, origen_id) {
+  try {
+    const hoy = new Date().toISOString().split('T')[0]
+    db.prepare(`
+      INSERT INTO caja_movimientos
+        (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id)
+      VALUES (?,?,?,?,?,?,?,?,?)
+    `).run(tipo, categoria, descripcion, monto, hoy, fecha_pago || hoy, estado, origen_tabla, origen_id)
+  } catch (_) {}
+}
+
 const getFacturas = (req, res) => {
   try {
     const { estado, segmento } = req.query
@@ -47,6 +58,10 @@ const marcarCobrada = (req, res) => {
     const fecha_cobro = new Date().toISOString().split('T')[0]
     db.prepare("UPDATE facturas_cxc SET estado = 'cobrada', fecha_cobro = ? WHERE id = ?")
       .run(fecha_cobro, req.params.id)
+    db.prepare(`
+      UPDATE caja_movimientos SET estado = 'confirmado', fecha_pago = ?
+      WHERE origen_tabla = 'facturas_cxc' AND origen_id = ?
+    `).run(fecha_cobro, req.params.id)
     res.json(db.prepare('SELECT * FROM facturas_cxc WHERE id = ?').get(req.params.id))
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -65,6 +80,8 @@ const crearFactura = (req, res) => {
       VALUES (?,?,?,?,?,?,?,?,?,?)`
     ).run(id, numero, pedido_id || null, cliente_id || null, cliente || null,
       segmento || null, monto, fecha_emision, fecha_vencimiento || null, notas || null)
+    insertCaja('ingreso', 'venta', `CxC ${numero} — ${cliente || ''}`, monto,
+      fecha_vencimiento || fecha_emision, 'proyectado', 'facturas_cxc', id)
     res.status(201).json(db.prepare('SELECT * FROM facturas_cxc WHERE id = ?').get(id))
   } catch (err) {
     res.status(500).json({ error: err.message })

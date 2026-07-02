@@ -1038,6 +1038,42 @@ function runMigrations() {
       console.warn('⚠️  lista_precios_seed_v1: CSV no encontrado en', csvPath, '— importa manualmente con import_lista_precios.js')
     }
   }
+
+  // Migration 9: gastos_v1 — tabla de gastos operacionales + flujo de caja
+  const m9 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('gastos_v1')
+  if (!m9) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS gastos (
+        id TEXT PRIMARY KEY,
+        fecha TEXT NOT NULL,
+        categoria TEXT NOT NULL CHECK(categoria IN ('combustible','bodega','logistica','marketing','administrativo','otros')),
+        descripcion TEXT NOT NULL,
+        monto INTEGER NOT NULL,
+        comprobante TEXT,
+        fecha_pago TEXT,
+        estado TEXT DEFAULT 'pagado' CHECK(estado IN ('pagado','pendiente')),
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS caja_movimientos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT NOT NULL CHECK(tipo IN ('ingreso','egreso')),
+        categoria TEXT,
+        descripcion TEXT NOT NULL,
+        monto INTEGER NOT NULL,
+        fecha_registro TEXT,
+        fecha_pago TEXT,
+        estado TEXT DEFAULT 'proyectado' CHECK(estado IN ('proyectado','confirmado')),
+        origen_tabla TEXT,
+        origen_id TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_caja_tipo ON caja_movimientos(tipo);
+      CREATE INDEX IF NOT EXISTS idx_caja_estado ON caja_movimientos(estado);
+      CREATE INDEX IF NOT EXISTS idx_caja_origen ON caja_movimientos(origen_tabla, origen_id);
+    `)
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('gastos_v1')
+    console.log('✅ Migración gastos_v1 — tablas gastos y caja_movimientos creadas')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

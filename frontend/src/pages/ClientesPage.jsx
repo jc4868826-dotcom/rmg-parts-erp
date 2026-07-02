@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@utils/api'
 import { labelSegmento, colorSegmento, formatFecha } from '@utils/format'
-import { Search, Plus, Users, ChevronRight } from 'lucide-react'
+import { Search, Plus, Users, ChevronRight, X } from 'lucide-react'
+import toast from 'react-hot-toast'
+
+const SEGMENTOS = ['taller', 'flota', 'concesionario', 'construccion']
+const FORM_INIT = { razon_social: '', segmento: 'taller', contacto_nombre: '', telefono: '', email: '', comuna: '', notas: '' }
 
 const ETAPA_STYLES = {
   prospecto:   { label: 'Prospecto',   bg: 'rgba(90,143,168,0.15)', color: 'rgba(90,143,168,0.9)' },
@@ -16,7 +20,10 @@ const ETAPA_STYLES = {
 export default function ClientesPage() {
   const [search, setSearch]   = useState('')
   const [segFiltro, setFiltro] = useState('')
-  const navigate              = useNavigate()
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm]        = useState(FORM_INIT)
+  const navigate               = useNavigate()
+  const qc                     = useQueryClient()
 
   const { data: clientes = [], isLoading } = useQuery({
     queryKey: ['clientes', segFiltro],
@@ -28,6 +35,23 @@ export default function ClientesPage() {
     const q = search.toLowerCase()
     return c.razon_social.toLowerCase().includes(q) || c.contacto_nombre?.toLowerCase().includes(q) || c.rut?.includes(q)
   })
+
+  const crearMut = useMutation({
+    mutationFn: (data) => api.post('/clientes', data).then(r => r.data),
+    onSuccess: (c) => {
+      qc.invalidateQueries(['clientes'])
+      toast.success(`Cliente "${c.razon_social}" creado`)
+      setForm(FORM_INIT)
+      setShowForm(false)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al crear cliente'),
+  })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!form.razon_social) { toast.error('Razón social requerida'); return }
+    crearMut.mutate(form)
+  }
 
   const stats = {
     total: clientes.length,
@@ -45,10 +69,61 @@ export default function ClientesPage() {
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Clientes</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Cartera activa B2B — 4 segmentos</p>
         </div>
-        <button className="btn-primary flex items-center gap-2">
-          <Plus size={16} /> Nuevo cliente
+        <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2">
+          {showForm ? <><X size={15}/> Cerrar</> : <><Plus size={16}/> Nuevo cliente</>}
         </button>
       </div>
+
+      {/* Modal nuevo cliente */}
+      {showForm && (
+        <div className="rmg-card p-5 animate-fade-in">
+          <h2 className="font-bold mb-4">Nuevo cliente</h2>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Razón social *</label>
+              <input className="rmg-input" placeholder="Nombre empresa..." value={form.razon_social}
+                onChange={e => setForm(p => ({ ...p, razon_social: e.target.value }))} required />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Segmento *</label>
+              <select className="rmg-input" value={form.segmento} onChange={e => setForm(p => ({ ...p, segmento: e.target.value }))}>
+                {SEGMENTOS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Contacto</label>
+              <input className="rmg-input" placeholder="Nombre contacto..." value={form.contacto_nombre}
+                onChange={e => setForm(p => ({ ...p, contacto_nombre: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Teléfono</label>
+              <input className="rmg-input" placeholder="+56 9..." value={form.telefono}
+                onChange={e => setForm(p => ({ ...p, telefono: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Email</label>
+              <input type="email" className="rmg-input" placeholder="correo@..." value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Comuna</label>
+              <input className="rmg-input" placeholder="Santiago..." value={form.comuna}
+                onChange={e => setForm(p => ({ ...p, comuna: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
+              <input className="rmg-input" placeholder="Notas opcionales..." value={form.notas}
+                onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} />
+            </div>
+            <div className="md:col-span-3 flex gap-3 justify-end pt-1">
+              <button type="button" onClick={() => { setShowForm(false); setForm(FORM_INIT) }} className="btn-secondary">Cancelar</button>
+              <button type="submit" disabled={crearMut.isPending} className="btn-primary disabled:opacity-50">
+                {crearMut.isPending ? 'Guardando...' : 'Crear cliente'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Stats rápidos */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
