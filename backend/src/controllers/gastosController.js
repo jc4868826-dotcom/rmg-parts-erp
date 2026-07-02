@@ -3,13 +3,13 @@ const { db, uuidv4 } = require('../../config/database')
 
 const hoy = () => new Date().toISOString().split('T')[0]
 
-function insertCaja(tipo, categoria, descripcion, monto, fecha_pago, origen_tabla, origen_id, estado) {
+function insertCaja(tipo, categoria, descripcion, monto, fecha_pago, origen_tabla, origen_id, estado, cuenta_bancaria) {
   try {
     db.prepare(`
       INSERT INTO caja_movimientos
-        (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id)
-      VALUES (?,?,?,?,?,?,?,?,?)
-    `).run(tipo, categoria, descripcion, monto, hoy(), fecha_pago || hoy(), estado, origen_tabla, origen_id)
+        (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `).run(tipo, categoria, descripcion, monto, hoy(), fecha_pago || hoy(), estado, origen_tabla, origen_id, cuenta_bancaria || null)
   } catch (_) {}
 }
 
@@ -28,7 +28,7 @@ const getAll = (req, res) => {
 
 const create = (req, res) => {
   try {
-    const { fecha, categoria, descripcion, monto, comprobante, fecha_pago } = req.body
+    const { fecha, categoria, descripcion, monto, comprobante, fecha_pago, cuenta_bancaria } = req.body
     if (!fecha || !categoria || !descripcion || !monto) {
       return res.status(400).json({ error: 'fecha, categoria, descripcion y monto son requeridos' })
     }
@@ -42,7 +42,7 @@ const create = (req, res) => {
     `).run(id, fecha, categoria, descripcion, Number(monto), comprobante || null, fechaPago, estadoGasto)
 
     const estadoCaja = fechaPago > hoy() ? 'proyectado' : 'confirmado'
-    insertCaja('egreso', categoria, descripcion, Number(monto), fechaPago, 'gastos', id, estadoCaja)
+    insertCaja('egreso', categoria, descripcion, Number(monto), fechaPago, 'gastos', id, estadoCaja, cuenta_bancaria)
 
     res.status(201).json(db.prepare('SELECT * FROM gastos WHERE id = ?').get(id))
   } catch (err) {
