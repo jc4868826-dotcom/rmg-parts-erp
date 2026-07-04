@@ -163,7 +163,9 @@ function _showProductError() {
 
 function _showSkeletons() {
   const grid = document.getElementById('prodGrid');
-  if (grid) grid.innerHTML = Array(8).fill('<div class="prod-skeleton"></div>').join('');
+  if (!grid) return;
+  grid.className = 'prod-grid';
+  grid.innerHTML = Array(8).fill('<div class="prod-skeleton"></div>').join('');
 }
 
 function _renderProducts(products) {
@@ -171,26 +173,30 @@ function _renderProducts(products) {
   if (!grid) return;
 
   if (!products || !products.length) {
-    grid.innerHTML = '<p style="color:var(--text-dim);grid-column:1/-1;text-align:center;padding:48px 0;">Sin resultados para esta búsqueda.</p>';
+    grid.className = 'prod-list';
+    grid.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--text-dim);">Sin resultados para esta búsqueda.</div>';
     return;
   }
 
-  grid.innerHTML = products.map(p => `
-    <div class="prod-card">
-      <div class="prod-thumb">
-        <img src="${p.imagen || 'assets/img/mock/placeholder.jpg'}"
-             alt="${p.nombre}" loading="lazy"
-             onerror="this.src='assets/img/mock/placeholder.jpg'">
+  const sorted = [...products].sort((a, b) => {
+    const ca = (a.categoria || '').localeCompare(b.categoria || '', 'es');
+    if (ca !== 0) return ca;
+    const ma = (a.marca || '').localeCompare(b.marca || '', 'es');
+    if (ma !== 0) return ma;
+    return (a.presentacion || '').localeCompare(b.presentacion || '', 'es');
+  });
+
+  grid.className = 'prod-list';
+  grid.innerHTML = sorted.map(p => `
+    <div class="prod-row">
+      <div class="prod-row-marca">${p.marca || '—'}</div>
+      <div class="prod-row-desc">
+        <span class="prod-row-name">${p.nombre}</span>
+        <span class="prod-row-sku mono">${p.sku || p.id || ''}</span>
       </div>
-      <div class="prod-body">
-        <div class="prod-brand">${p.marca || ''}</div>
-        <div class="prod-name">${p.nombre}</div>
-        <div class="prod-meta mono">${p.sku || p.id || ''}</div>
-      </div>
-      <div class="prod-footer">
-        <div class="prod-price">${_fmt(p.precio)}</div>
-        <button class="add-btn" onclick="addToCart('${p.id}')">+ Agregar</button>
-      </div>
+      <div class="prod-row-pres">${p.presentacion || ''}</div>
+      <div class="prod-row-price mono">${_fmt(p.precio)}</div>
+      <button class="prod-row-add" onclick="addToCart('${p.id}')" title="Agregar al carrito">+</button>
     </div>
   `).join('');
 }
