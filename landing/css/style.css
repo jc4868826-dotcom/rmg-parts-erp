@@ -90,42 +90,19 @@ nav.main-nav a:hover{color:var(--white);}
 
 /* ===== HERO ===== */
 .hero{
-  padding:0;position:relative;
-  border-bottom:1px solid var(--border);overflow:hidden;
-  min-height:540px;display:flex;align-items:center;
+  display:block;overflow:hidden;
+  border-bottom:1px solid var(--border);
+  line-height:0;
 }
-.hero-bg{position:absolute;inset:0;z-index:0;}
-.hero-bg img{width:100%;height:100%;object-fit:cover;object-position:right center;}
-.hero-bg::after{
-  content:'';position:absolute;inset:0;
-  background:linear-gradient(
-    95deg,
-    rgba(5,6,8,0.96) 0%,
-    rgba(5,6,8,0.88) 28%,
-    rgba(5,6,8,0.55) 50%,
-    rgba(5,6,8,0.12) 72%,
-    transparent 100%
-  );
-}
-.hero .container{position:relative;z-index:2;padding-top:64px;padding-bottom:64px;}
-.hero-content{max-width:540px;}
-.badge-row{display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap;}
-.badge{
-  display:flex;align-items:center;gap:8px;
-  border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:8px 14px;
-  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;
-  color:rgba(255,255,255,0.65);
-  backdrop-filter:blur(8px);background:rgba(0,0,0,0.3);
-}
-.badge .ic{color:var(--blue-bright);}
-.hero h1{font-size:48px;line-height:1.06;margin-bottom:16px;text-shadow:0 2px 20px rgba(0,0,0,0.5);}
-.hero h1 .blue{color:var(--blue-bright);}
-.hero p.lead{font-size:16px;color:rgba(255,255,255,0.6);max-width:460px;text-transform:none;margin-bottom:26px;}
-.hero-ctas{display:flex;gap:12px;flex-wrap:wrap;}
+.hero img{width:100%;height:auto;display:block;max-height:560px;object-fit:cover;object-position:center top;}
 
-/* Finder bar under hero */
+/* ===== BUSCADOR (bajo el hero) ===== */
+.finder-section{
+  background:var(--panel-2);
+  border-bottom:1px solid var(--border);
+  padding:28px 0;
+}
 .finder{
-  margin-top:30px;
   background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;
 }
 .finder-tabs{display:flex;border-bottom:1px solid var(--border);}

@@ -17,13 +17,8 @@ const ProductService = {
     if (CONFIG.USE_MOCK_DATA) {
       return (MOCK_PRODUCTS || []).map(p => ({ ...p, imagen: 'assets/img/mock/placeholder.jpg' }));
     }
-    try {
-      const rows = await api.get(CONFIG.ENDPOINTS.productos);
-      return (rows || []).map(_erpToProduct);
-    } catch (e) {
-      console.warn('ERP getAll falló, usando mock:', e.message);
-      return (MOCK_PRODUCTS || []).map(p => ({ ...p, imagen: 'assets/img/mock/placeholder.jpg' }));
-    }
+    const rows = await api.get(CONFIG.ENDPOINTS.productos);
+    return (rows || []).map(_erpToProduct);
   },
 
   async search(text) {

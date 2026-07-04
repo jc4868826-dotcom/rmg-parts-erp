@@ -70,11 +70,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   _showSkeletons();
   try {
     STATE.products = await ProductService.getAll();
+    _renderProducts(STATE.products);
   } catch (e) {
-    console.warn('ERP no disponible, usando mock:', e.message);
-    STATE.products = (typeof MOCK_PRODUCTS !== 'undefined') ? MOCK_PRODUCTS : [];
+    console.error('Error cargando productos del ERP:', e.message);
+    _showProductError();
   }
-  _renderProducts(STATE.products);
 
   // ── Pagar btn ─────────────────────────────────────────────────
   document.getElementById('pagarBtn')?.addEventListener('click', _showCheckoutForm);
@@ -147,6 +147,18 @@ function _updateCartBadge() {
   const total = STATE.cart.reduce((a, b) => a + b.qty, 0);
   const badge = document.getElementById('cartCount');
   if (badge) badge.textContent = total;
+}
+
+function _showProductError() {
+  const grid = document.getElementById('prodGrid');
+  if (grid) grid.innerHTML = `
+    <div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--text-dim);">
+      <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
+      <div style="font-weight:600;margin-bottom:8px;">Error cargando productos</div>
+      <div style="font-size:13px;color:var(--text-faint);">No se pudo conectar al catálogo. Intenta recargar la página o contáctanos.</div>
+      <button class="btn" style="margin-top:20px;" onclick="location.reload()">Reintentar</button>
+    </div>
+  `;
 }
 
 function _showSkeletons() {

@@ -19,7 +19,7 @@ app.use(helmet());
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'https://rmg-parts-frontend.onrender.com',
-  'https://rmg-parts-landing.onrender.com',
+  'https://landing-9iz8.onrender.com',
   'https://rmgautoparts.cl',
   'https://www.rmgautoparts.cl',
   'https://www.rmgparts.cl',
