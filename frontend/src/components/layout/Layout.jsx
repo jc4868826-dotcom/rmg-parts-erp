@@ -13,8 +13,12 @@ import {
   ShoppingCart, Warehouse, MessageCircle, BarChart3,
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
-  CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart
+  CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
+  ExternalLink
 } from 'lucide-react'
+
+// Cambiar por LANDING_URL de env cuando esté en Render: VITE_LANDING_URL
+const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://rmg-parts-landing.onrender.com'
 
 const NAV_SECTIONS = [
   {
@@ -169,6 +173,28 @@ export default function Layout() {
             </div>
           ))}
         </nav>
+
+        {/* Visitar Ecommerce */}
+        <div className="px-2 pb-2">
+          <a
+            href={LANDING_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group"
+            style={{ color: 'var(--rmg-teal)', background: 'rgba(45,201,138,0.08)', border: '1px solid rgba(45,201,138,0.2)' }}
+          >
+            <ExternalLink size={16} className="flex-shrink-0" />
+            {sidebarOpen && (
+              <span className="text-sm font-semibold">Visitar Ecommerce</span>
+            )}
+            {!sidebarOpen && (
+              <div className="absolute left-full ml-2 px-2 py-1 rounded-md text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none"
+                style={{ background: 'rgba(7,21,40,0.95)', border: '1px solid rgba(56,182,255,0.2)', color: '#fff' }}>
+                Visitar Ecommerce
+              </div>
+            )}
+          </a>
+        </div>
 
         {/* Usuario */}
         <div className="px-2 pb-4 border-t pt-3" style={{ borderColor: 'rgba(56, 182, 255, 0.1)' }}>

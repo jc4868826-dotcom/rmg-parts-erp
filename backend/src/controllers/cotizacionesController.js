@@ -118,4 +118,71 @@ const generarPDF = (req, res) => res.json({ ok: true, pdf_url: `/pdfs/${req.para
 const enviarWhatsApp = (_req, res) => res.json({ ok: true, message: 'Mensaje enviado' })
 const enviarEmail = (_req, res) => res.json({ ok: true, message: 'Email enviado' })
 
-module.exports = { getAll, getOne, create, createPublica, update, aprobar, generarPDF, enviarWhatsApp, enviarEmail }
+const createDesdeLanding = (req, res) => {
+  try {
+    const { cliente: clienteData, lineas } = req.body
+
+    if (!clienteData || !clienteData.nombre) {
+      return res.status(400).json({ error: 'Se requiere cliente.nombre' })
+    }
+    if (!Array.isArray(lineas) || lineas.length === 0) {
+      return res.status(400).json({ error: 'Se requiere al menos una línea de producto' })
+    }
+
+    // 1. Upsert cliente
+    let clienteId = null
+    let existente = null
+    if (clienteData.rut) {
+      existente = db.prepare('SELECT id FROM clientes WHERE rut = ?').get(clienteData.rut)
+    }
+    if (!existente && clienteData.email) {
+      existente = db.prepare('SELECT id FROM clientes WHERE email = ? AND activo = 1').get(clienteData.email)
+    }
+    if (existente) {
+      clienteId = existente.id
+    } else {
+      clienteId = uuidv4()
+      db.prepare(`INSERT INTO clientes
+        (id, razon_social, rut, segmento, etapa_pipeline, contacto_nombre, telefono, email)
+        VALUES (?, ?, ?, 'taller', 'prospecto', ?, ?, ?)`)
+        .run(clienteId, clienteData.nombre, clienteData.rut || null,
+             clienteData.nombre, clienteData.telefono || null, clienteData.email || null)
+    }
+
+    // 2. Calcular totales desde las líneas
+    const items = lineas.map(l => ({
+      codigo:          l.codigo_sku,
+      descripcion:     l.descripcion || l.codigo_sku,
+      cantidad:        Number(l.cantidad) || 1,
+      precio_unitario: Number(l.precio_venta_neto) || 0,
+      descuento_pct:   0,
+      subtotal:        Math.round((Number(l.cantidad) || 1) * (Number(l.precio_venta_neto) || 0))
+    }))
+    const neto  = items.reduce((a, b) => a + b.subtotal, 0)
+    const iva   = Math.round(neto * 0.19)
+    const total = neto + iva
+
+    // 3. Número único para landing
+    const count = db.prepare('SELECT COUNT(*) as n FROM cotizaciones').get().n
+    const numero = `COT-2026-L${String(count + 1).padStart(3, '0')}`
+
+    // 4. Crear cotización (canal_origen = 'landing')
+    const cot = _insertCotizacion({
+      cliente_id:   clienteId,
+      cliente:      clienteData.nombre,
+      estado:       'enviada',
+      canal_origen: 'landing',
+      neto, iva, total, items
+    }, { numero })
+
+    res.status(201).json({
+      cotizacion_id: cot.id,
+      numero:        cot.numero,
+      total:         cot.total
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getAll, getOne, create, createPublica, createDesdeLanding, update, aprobar, generarPDF, enviarWhatsApp, enviarEmail }

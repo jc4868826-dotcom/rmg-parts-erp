@@ -19,11 +19,16 @@ app.use(helmet());
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'https://rmg-parts-frontend.onrender.com',
+  'https://rmg-parts-landing.onrender.com',
   'https://rmgautoparts.cl',
   'https://www.rmgautoparts.cl',
+  'https://www.rmgparts.cl',
 ]
 if (process.env.APP_URL && !ALLOWED_ORIGINS.includes(process.env.APP_URL)) {
   ALLOWED_ORIGINS.push(process.env.APP_URL)
+}
+if (process.env.LANDING_URL && !ALLOWED_ORIGINS.includes(process.env.LANDING_URL)) {
+  ALLOWED_ORIGINS.push(process.env.LANDING_URL)
 }
 
 app.use(cors({
@@ -50,6 +55,9 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// ─── Rutas públicas (sin auth, CORS abierto para landing) ──
+app.use('/api/public', cors({ origin: '*' }), require('./routes/public'));
 
 // ─── Rutas ─────────────────────────────────────────────────
 app.use('/api/auth',       authLimiter, require('./routes/auth'));
