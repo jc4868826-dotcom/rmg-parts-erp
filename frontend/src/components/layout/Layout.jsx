@@ -17,8 +17,7 @@ import {
   ExternalLink
 } from 'lucide-react'
 
-// Cambiar por LANDING_URL de env cuando esté en Render: VITE_LANDING_URL
-const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://rmg-parts-landing.onrender.com'
+const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
 
 const NAV_SECTIONS = [
   {
