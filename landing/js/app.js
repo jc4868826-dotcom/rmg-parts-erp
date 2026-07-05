@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      _searchAndRender(chip.dataset.q);
+      _categoryFilter(chip.dataset.q);
     });
   });
 
@@ -48,8 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.querySelectorAll('.pair-card[data-search]').forEach(card => {
     card.style.cursor = 'pointer';
     card.addEventListener('click', () => {
-      _searchAndRender(card.dataset.search);
-      document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth' });
+      _categoryFilter(card.dataset.search);
     });
   });
 
@@ -199,6 +198,19 @@ function _renderProducts(products) {
       <button class="prod-row-add" onclick="addToCart('${p.id}')" title="Agregar al carrito">+</button>
     </div>
   `).join('');
+}
+
+function _categoryFilter(q) {
+  document.getElementById('prodSectionTitle').textContent = `Resultados: "${q}"`;
+  document.getElementById('prodSectionSub').textContent = '';
+  document.getElementById('clearSearchBtn').style.display = '';
+  document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth' });
+  const terms = q.toLowerCase().split(/\s+/);
+  const results = STATE.products.filter(p => {
+    const hay = [p.categoria, p.tipo, p.nombre, p.marca].join(' ').toLowerCase();
+    return terms.every(t => hay.includes(t));
+  });
+  _renderProducts(results);
 }
 
 async function _searchAndRender(q) {
