@@ -130,6 +130,9 @@
       </div>
       <button class="see-all" id="clearSearchBtn" style="display:none;background:none;border:none;cursor:pointer;" onclick="clearSearch()">← Volver a todos</button>
     </div>
+    <div id="refineRow" style="display:none;margin-bottom:14px;">
+      <input class="refine-input" type="text" id="refineInput" placeholder="Refinar en estos resultados…">
+    </div>
     <div class="prod-grid" id="prodGrid">
       <div class="prod-skeleton"></div>
       <div class="prod-skeleton"></div>
@@ -252,6 +255,14 @@
     <div class="subtotal-row"><span>Subtotal neto</span><span class="amt mono" id="subtotal">$0</span></div>
     <button class="btn" id="pagarBtn" style="width:100%;justify-content:center;">Generar cotización →</button>
     <div class="drawer-note">Precios netos, sin IVA. Al confirmar generamos una cotización formal en nuestro sistema.</div>
+  </div>
+</div>
+
+<!-- ===== PRODUCT MODAL ===== -->
+<div class="prod-modal-overlay" id="productModal" onclick="closeProductModal()">
+  <div class="prod-modal" onclick="event.stopPropagation()">
+    <button class="prod-modal-close" onclick="closeProductModal()">×</button>
+    <div id="productModalContent"></div>
   </div>
 </div>
 

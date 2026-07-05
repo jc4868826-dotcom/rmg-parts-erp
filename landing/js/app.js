@@ -12,7 +12,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     ? `https://wa.me/${WA}?text=${encodeURIComponent('Hola, me interesa cotizar en RMG Parts')}`
     : null;
 
-  ['waFloat', 'heroWaBtn', 'bulkWaBtn'].forEach(id => {
+  // waFloat siempre visible; heroWaBtn y bulkWaBtn se ocultan si no hay número
+  const waFloatEl = document.getElementById('waFloat');
+  if (waFloatEl && waUrl) {
+    waFloatEl.addEventListener('click', () => window.open(waUrl, '_blank', 'noopener'));
+  }
+
+  ['heroWaBtn', 'bulkWaBtn'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     if (waUrl) {
@@ -85,6 +91,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     _showProductError();
   }
 
+  // ── Refine input (resultados de segmento) ────────────────────
+  document.getElementById('refineInput')?.addEventListener('input', function () {
+    if (!STATE.activeResults) return;
+    const q = this.value.trim().toLowerCase();
+    if (!q) { _renderProducts(STATE.activeResults); return; }
+    _renderProducts(STATE.activeResults.filter(p =>
+      [p.nombre, p.marca, p.sku, p.tipo, p.presentacion].join(' ').toLowerCase().includes(q)
+    ));
+  });
+
+  // ── Router: detalle de producto ───────────────────────────────
+  Router.on('/producto/:sku', ({ sku }) => _showProductDetail(decodeURIComponent(sku)));
+  Router.init();
+  window.addEventListener('hashchange', () => {
+    if (!location.hash.startsWith('#/producto/')) {
+      document.getElementById('productModal')?.classList.remove('open');
+    }
+  });
+
   // ── Pagar btn ─────────────────────────────────────────────────
   document.getElementById('pagarBtn')?.addEventListener('click', _showCheckoutForm);
 
@@ -120,14 +145,20 @@ function clearSearch() {
   document.getElementById('prodSectionTitle').textContent = 'Productos destacados';
   document.getElementById('prodSectionSub').textContent = 'Los más pedidos por talleres y flotas.';
   document.getElementById('clearSearchBtn').style.display = 'none';
+  STATE.activeResults = null;
+  const refineRow = document.getElementById('refineRow');
+  if (refineRow) refineRow.style.display = 'none';
   _renderProducts(_dedup(STATE.products));
 }
 
 function addToCart(id) {
-  const product = STATE.products.find(p => String(p.id) === String(id));
+  const product = STATE.products.find(p => String(p.id) === String(id))
+               || (STATE.searchResults || []).find(p => String(p.id) === String(id));
   if (!product) return;
   CartService.add(product);
-  openCart();
+  _showToast('Agregado al carrito');
+  const badge = document.getElementById('cartCount');
+  if (badge) { badge.classList.remove('pop'); void badge.offsetWidth; badge.classList.add('pop'); }
 }
 
 function changeQty(id, delta) {
@@ -198,7 +229,7 @@ function _renderProducts(products) {
 
   grid.className = 'prod-list';
   grid.innerHTML = sorted.map(p => `
-    <div class="prod-row">
+    <div class="prod-row" onclick="showProductDetail('${p.sku}')">
       <div class="prod-row-marca">${p.marca || '—'}</div>
       <div class="prod-row-desc">
         <span class="prod-row-name">${p.nombre}</span>
@@ -206,9 +237,49 @@ function _renderProducts(products) {
       </div>
       <div class="prod-row-pres">${p.presentacion || ''}</div>
       <div class="prod-row-price mono">${_fmt(p.precio)}</div>
-      <button class="prod-row-add" onclick="addToCart('${p.id}')" title="Agregar al carrito">+</button>
+      <button class="prod-row-add" onclick="event.stopPropagation();addToCart('${p.id}')" title="Agregar al carrito">+</button>
     </div>
   `).join('');
+}
+
+function showProductDetail(sku) {
+  location.hash = '#/producto/' + encodeURIComponent(sku);
+}
+
+function closeProductModal() {
+  document.getElementById('productModal')?.classList.remove('open');
+  if (location.hash.startsWith('#/producto/')) history.back();
+}
+
+function _showProductDetail(sku) {
+  const product = STATE.products.find(p => String(p.sku) === String(sku))
+               || (STATE.searchResults || []).find(p => String(p.sku) === String(sku));
+  const modal = document.getElementById('productModal');
+  if (!modal) return;
+  if (!product) { history.back(); return; }
+
+  document.getElementById('productModalContent').innerHTML = `
+    <div class="pd-marca">${product.marca || ''}</div>
+    <h2 class="pd-nombre">${product.nombre}</h2>
+    <div class="pd-sku mono">${product.sku}</div>
+    <div class="pd-rows">
+      <div class="pd-row"><span>Precio neto</span><span class="mono pd-precio">${_fmt(product.precio)}</span></div>
+      <div class="pd-row"><span>Presentación</span><span>${product.presentacion || '—'}</span></div>
+      <div class="pd-row"><span>Categoría</span><span>${product.categoria || '—'}</span></div>
+      <div class="pd-row"><span>Proveedor</span><span>${product.proveedor || '—'}</span></div>
+    </div>
+    <button class="btn pd-add-btn" onclick="addToCart('${product.id}');closeProductModal()">Agregar al carrito +</button>
+  `;
+  modal.classList.add('open');
+}
+
+function _showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2000);
 }
 
 function _dedup(products) {
@@ -245,7 +316,10 @@ function _segmentFilter(segmento) {
   document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth' });
   const seg = _norm(segmento);
   const filtered = STATE.products.filter(p => _norm(p.segmento) === seg);
-  _renderProducts(_dedup(filtered));
+  STATE.activeResults = _dedup(filtered);
+  const refineRow = document.getElementById('refineRow');
+  if (refineRow) { refineRow.style.display = ''; document.getElementById('refineInput').value = ''; }
+  _renderProducts(STATE.activeResults);
 }
 
 async function _searchAndRender(q) {
