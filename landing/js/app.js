@@ -303,10 +303,11 @@ function _categoryFilter(q) {
   document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth' });
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
   const hay = p => [p.categoria, p.tipo, p.nombre, p.marca, p.segmento].join(' ').toLowerCase();
-  // Intenta AND estricto; si no hay resultados, cae a OR para evitar vacíos
-  let filtered = STATE.products.filter(p => terms.every(t => hay(p).includes(t)));
-  if (!filtered.length) filtered = STATE.products.filter(p => terms.some(t => hay(p).includes(t)));
-  _renderProducts(_dedup(filtered));
+  const filtered = STATE.products.filter(p => terms.every(t => hay(p).includes(t)));
+  STATE.activeResults = _dedup(filtered);
+  const refineRow = document.getElementById('refineRow');
+  if (refineRow) { refineRow.style.display = ''; document.getElementById('refineInput').value = ''; }
+  _renderProducts(STATE.activeResults);
 }
 
 function _segmentFilter(segmento) {
@@ -327,6 +328,9 @@ async function _searchAndRender(q) {
   document.getElementById('prodSectionSub').textContent = '';
   document.getElementById('clearSearchBtn').style.display = '';
   document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth' });
+  STATE.activeResults = null;
+  const refineRow = document.getElementById('refineRow');
+  if (refineRow) refineRow.style.display = 'none';
   _showSkeletons();
   try {
     const results = await ProductService.search(q);
