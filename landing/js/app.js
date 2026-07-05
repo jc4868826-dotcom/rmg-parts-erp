@@ -303,7 +303,8 @@ function _categoryFilter(q) {
   document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth' });
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
   const hay = p => [p.categoria, p.tipo, p.nombre, p.marca, p.segmento].join(' ').toLowerCase();
-  const filtered = STATE.products.filter(p => terms.every(t => hay(p).includes(t)));
+  let filtered = STATE.products.filter(p => terms.every(t => hay(p).includes(t)));
+  if (!filtered.length && terms.length > 1) filtered = STATE.products.filter(p => hay(p).includes(terms[0]));
   STATE.activeResults = _dedup(filtered);
   const refineRow = document.getElementById('refineRow');
   if (refineRow) { refineRow.style.display = ''; document.getElementById('refineInput').value = ''; }
