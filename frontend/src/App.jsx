@@ -35,6 +35,7 @@ import PricingTab        from '@components/PricingTab'
 import ProspeccionPage  from '@pages/ProspeccionPage'
 import ListaPreciosPage from '@pages/ListaPreciosPage'
 import FlujoCajaPage   from '@pages/FlujoCajaPage'
+import AsistenteIAPage from '@pages/AsistenteIAPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -104,6 +105,7 @@ export default function App() {
               <Route path="prospeccion"       element={<ProspeccionPage />} />
               <Route path="lista-precios"     element={<ListaPreciosPage />} />
               <Route path="flujo-caja"        element={<FlujoCajaPage />} />
+              <Route path="asistente"         element={<AsistenteIAPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
