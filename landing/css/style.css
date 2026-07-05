@@ -228,6 +228,7 @@ section{padding:60px 0;}
   padding:10px 18px 10px 14px;font-size:13px;text-transform:none;font-weight:500;
 }
 .seg-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--blue-bright);}
+.seg-pill:hover,.seg-pill.active{border-color:var(--blue-bright);color:var(--white);cursor:pointer;}
 
 /* ===== FOOTER ===== */
 footer{border-top:1px solid var(--border);padding:44px 0 26px;background:#000;}

@@ -35,6 +35,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     _renderDrawerItems();
   });
 
+  // ── Segment pills ─────────────────────────────────────────────
+  document.querySelectorAll('.seg-pill[data-segmento]').forEach(pill => {
+    pill.style.cursor = 'pointer';
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.seg-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      _segmentFilter(pill.dataset.segmento);
+    });
+  });
+
   // ── Chips del finder ──────────────────────────────────────────
   document.querySelectorAll('.chip[data-q]').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -69,7 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   _showSkeletons();
   try {
     STATE.products = await ProductService.getAll();
-    _renderProducts(STATE.products);
+    _renderProducts(_dedup(STATE.products));
   } catch (e) {
     console.error('Error cargando productos del ERP:', e.message);
     _showProductError();
@@ -104,12 +114,13 @@ function switchFinder(i, el) {
 
 function clearSearch() {
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.seg-pill').forEach(p => p.classList.remove('active'));
   const input = document.getElementById('buscadorInput');
   if (input) input.value = '';
   document.getElementById('prodSectionTitle').textContent = 'Productos destacados';
   document.getElementById('prodSectionSub').textContent = 'Los más pedidos por talleres y flotas.';
   document.getElementById('clearSearchBtn').style.display = 'none';
-  _renderProducts(STATE.products);
+  _renderProducts(_dedup(STATE.products));
 }
 
 function addToCart(id) {
@@ -200,17 +211,41 @@ function _renderProducts(products) {
   `).join('');
 }
 
+function _dedup(products) {
+  const seen = new Set();
+  return products.filter(p => {
+    const key = p.sku || p.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function _norm(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 function _categoryFilter(q) {
   document.getElementById('prodSectionTitle').textContent = `Resultados: "${q}"`;
   document.getElementById('prodSectionSub').textContent = '';
   document.getElementById('clearSearchBtn').style.display = '';
   document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth' });
-  const terms = q.toLowerCase().split(/\s+/);
-  const results = STATE.products.filter(p => {
-    const hay = [p.categoria, p.tipo, p.nombre, p.marca].join(' ').toLowerCase();
-    return terms.every(t => hay.includes(t));
-  });
-  _renderProducts(results);
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hay = p => [p.categoria, p.tipo, p.nombre, p.marca, p.segmento].join(' ').toLowerCase();
+  // Intenta AND estricto; si no hay resultados, cae a OR para evitar vacíos
+  let filtered = STATE.products.filter(p => terms.every(t => hay(p).includes(t)));
+  if (!filtered.length) filtered = STATE.products.filter(p => terms.some(t => hay(p).includes(t)));
+  _renderProducts(_dedup(filtered));
+}
+
+function _segmentFilter(segmento) {
+  document.getElementById('prodSectionTitle').textContent = `Segmento: ${segmento}`;
+  document.getElementById('prodSectionSub').textContent = '';
+  document.getElementById('clearSearchBtn').style.display = '';
+  document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth' });
+  const seg = _norm(segmento);
+  const filtered = STATE.products.filter(p => _norm(p.segmento) === seg);
+  _renderProducts(_dedup(filtered));
 }
 
 async function _searchAndRender(q) {

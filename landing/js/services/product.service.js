@@ -8,6 +8,7 @@ const _erpToProduct = r => ({
   presentacion: r.presentacion || '',
   precio:       Number(r.precio_venta_neto) || 0,
   stock:        Number(r.stock_actual) || 0,
+  segmento:     r.segmento_negocio || '',
 });
 
 const ProductService = {
