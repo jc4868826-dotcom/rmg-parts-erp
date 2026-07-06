@@ -215,11 +215,49 @@ def deducir_y_buscar_360(query, client, df_precios):
             )
             conteo += 1
 
+    # Fallback 1: add "Venta Libre" / generic category products if < 50 found
+    if len(catalogo_lines) < 50:
+        cat_gen_mask = df_w[col_cat].astype(str).str.contains(
+            "Venta Libre|No Especifico|General", case=False, na=False
+        )
+        df_gen = df_w[cat_gen_mask].sort_values('_p_num', ascending=False)
+        for _, row in df_gen.iterrows():
+            sku = str(row[col_sku]).split('.')[0]
+            if sku in skus_vistos:
+                continue
+            skus_vistos.add(sku)
+            marca = str(row[col_marca]) if pd.notna(row[col_marca]) else "Vistony"
+            p_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
+            catalogo_lines.append(
+                f"Venta Libre | {sku} | {marca} | {row[col_desc]} | {row[col_env]} | {p_fmt}"
+            )
+
+    # Fallback 2: inject full catalog (top 500 by price) if still < 50
+    if len(catalogo_lines) < 50:
+        df_full = df_w.sort_values('_p_num', ascending=False).head(500)
+        for _, row in df_full.iterrows():
+            sku = str(row[col_sku]).split('.')[0]
+            if sku in skus_vistos:
+                continue
+            skus_vistos.add(sku)
+            marca = str(row[col_marca]) if pd.notna(row[col_marca]) else "Vistony"
+            p_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
+            cat_label = str(row[col_cat]) if pd.notna(row[col_cat]) else "General"
+            catalogo_lines.append(
+                f"{cat_label} | {sku} | {marca} | {row[col_desc]} | {row[col_env]} | {p_fmt}"
+            )
+
+    filas_inyectadas = len(catalogo_lines)
+    print(f"[MOTOR] Catálogo inyectado a GPT: {filas_inyectadas} productos")
+
     if catalogo_lines:
         catalogo_str = (
             "CATALOGO REAL RMG — UNICOS PRODUCTOS VALIDOS (NUNCA INVENTES FUERA DE ESTA LISTA):\n"
             "ROL_INSUMO | SKU | MARCA | DESCRIPCION | PRESENTACION | PRECIO_NETO\n"
             + "\n".join(catalogo_lines)
+            + "\nREGLA CRITICA: si un producto no aparece en la lista de arriba, "
+            "NO EXISTE. Escribe 'No disponible en RMG' en esa celda. NUNCA "
+            "inventes un SKU, nombre o precio que no este literalmente en esta lista."
         )
     else:
         catalogo_str = "CATALOGO REAL RMG: Sin coincidencias para este segmento."
