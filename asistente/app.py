@@ -29,12 +29,15 @@ def _get_df():
         resp = requests.get(_ERP_URL, timeout=30)
         resp.raise_for_status()
         rows = resp.json()
-        seen, deduped = set(), []
+        # Deduplicate by lowest precio_venta_neto per SKU — same logic as
+        # frontend "Artículos únicos" tab (ListaPreciosPage.jsx line 60-76)
+        min_price: dict = {}
         for r in rows:
             sku = r.get("codigo_sku", "")
-            if sku not in seen:
-                seen.add(sku)
-                deduped.append(r)
+            precio = r.get("precio_venta_neto", 0) or 0
+            if sku not in min_price or precio < min_price[sku]["precio_venta_neto"]:
+                min_price[sku] = r
+        deduped = list(min_price.values())
         df = pd.DataFrame([{
             "Codigo SKU":                             r.get("codigo_sku", ""),
             "Descripcion Producto Original":          r.get("descripcion", ""),
