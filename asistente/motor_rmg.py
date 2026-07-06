@@ -4,7 +4,7 @@ import pandas as pd
 def deducir_y_buscar_360(query, client, df_precios):
     prompt_ia = f"""
     Eres un ingeniero mecánico automotriz e industrial y director comercial B2B. Analiza el input: "{query}"
-    
+
     Devuelve ÚNICAMENTE un objeto JSON estrictamente válido con esta estructura:
     {{
         "nombre_rubro": "Nombre formal del cliente o flota",
@@ -13,6 +13,8 @@ def deducir_y_buscar_360(query, client, df_precios):
         "segmento_mecanico": "LIVIANO" | "COMERCIAL_LIVIANO" | "REPARTO_MEDIO_PESADO" | "MAQUINARIA_MINERIA",
         "escala_detectada": "CHICA" | "GRANDE" | "DESCONOCIDA",
         "justificacion_escala": "Explicación de la escala y formato de envase",
+        "modelo_especificado": true,
+        "pregunta_modelo": null,
         "envases_validos": ["Galon", "Balde", "Tambor", "Unidad"],
         "insumos_necesarios": [
             {{"rol": "Aceite de Motor / Transmisión", "pilar": "🛢️ LUBRICANTES", "keywords": ["15W40", "5W30", "10W40"]}},
@@ -27,10 +29,18 @@ def deducir_y_buscar_360(query, client, df_precios):
     2. COMERCIAL_LIVIANO: Furgones escolares, camionetas 4x4, Sprinter, H1, utilitarios livianos.
     3. REPARTO_MEDIO_PESADO: Camiones repartidores de gas, camiones 3/4, camiones rígidos urbanos/interurbanos, flotas de camiones medianos o grandes.
     4. MAQUINARIA_MINERIA: Grúas telescópicas, excavadoras, cargadores frontales, camiones tolva pesados, áridos.
-    
+
     REGLAS DE ESCALA:
     - Si no menciona cantidades ni tamaño del negocio, pon "escala_detectada": "DESCONOCIDA".
     - Si menciona 1 a 5 unidades, pon "CHICA". Si menciona 6 o más, pon "GRANDE".
+
+    REGLAS DE MODELO ESPECÍFICO:
+    - Si el segmento es MAQUINARIA_MINERIA Y el usuario NO mencionó el modelo concreto de la máquina
+      (ej: dijo "excavadoras CAT" pero no "CAT 320D", "CAT 336", "Komatsu PC200", etc.):
+      • pon "modelo_especificado": false
+      • en "pregunta_modelo" genera una pregunta técnica corta y directa (ej: "¿Qué modelo de excavadora CAT operan? (320D, 326, 336, 390F...)")
+    - Para camiones de reparto, furgones y vehículos de vía pública el modelo no es crítico. Pon modelo_especificado: true.
+    - Si el modelo YA está en el input (ej: "CAT 320D", "Volvo FH16", "Komatsu PC200"), pon modelo_especificado: true.
     """
     
     try:
@@ -49,6 +59,8 @@ def deducir_y_buscar_360(query, client, df_precios):
             "segmento_mecanico": "REPARTO_MEDIO_PESADO",
             "escala_detectada": "GRANDE",
             "justificacion_escala": "Flota operativa comercial.",
+            "modelo_especificado": True,
+            "pregunta_modelo": None,
             "envases_validos": ["Balde", "Tambor", "Unidad"],
             "insumos_necesarios": [
                 {"rol": "Aceite Motor Diésel", "pilar": "🛢️ LUBRICANTES", "keywords": ["15W40"]},

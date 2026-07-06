@@ -52,6 +52,29 @@ def _get_df():
         return _cache["df"]  # stale cache if available, else None
 
 
+_FOLLOWUP_PATTERNS = [
+    "por qué", "por que", "cómo", "como funciona", "qué significa", "que significa",
+    "explica", "explícame", "cuéntame", "qué es ", "que es ", "para qué", "para que",
+    "ese producto", "esa marca", "esa tabla", "la tabla", "esos skus", "ese sku",
+    "los precios", "el precio", "cuánto", "cuanto", "y si ", "pero ", "entonces",
+    "además", "también", "puedes", "puedo", "me puedes", "cuál es mejor", "cual es mejor",
+    "qué diferencia", "que diferencia", "cada cuánto", "cada cuanto", "qué incluye",
+    "que incluye", "dame más", "más opciones", "por cuánto", "por cuanto",
+]
+
+def _is_followup(mensajes):
+    """True si el último mensaje parece pregunta de seguimiento sobre la respuesta anterior."""
+    if len(mensajes) < 2:
+        return False
+    if not any(m.get("role") == "assistant" for m in mensajes[:-1]):
+        return False
+    last = mensajes[-1]["content"].lower().strip()
+    # Short messages (≤8 words) after a prior assistant turn are almost always follow-ups
+    if len(last.split()) <= 8:
+        return True
+    return any(p in last for p in _FOLLOWUP_PATTERNS)
+
+
 SYSTEM_PROMPT = """
 Eres Zara, la Socia y Directora de Ingeniería Comercial B2B de RMG Parts. Estás conversando internamente con Juan Carlos (JC).
 
@@ -62,18 +85,28 @@ REGLAS DE ORO COMERCIALES E INGENIERÍA DE APLICACIÓN:
    - Si la escala es "DESCONOCIDA", TIENES PROHIBIDO MOSTRAR LA TABLA O TIRAR NÚMEROS. Solo haz la radiografía técnica y pide el tamaño exacto del parque.
    - Si la escala es "CHICA" o "GRANDE", presenta el análisis completo, reproduce la tabla generada por el servidor y defiende el mix.
 4. PROHIBIDO inventar SKUs o precios. Si muestras tabla, usa únicamente las filas generadas por el servidor.
+5. REGLA DE MODELO: Si MODELO_ESPECIFICADO es false, usa la ESTRUCTURA DE MODELO FALTANTE y OMITE las estructuras de escala.
+4. PROHIBIDO inventar SKUs o precios. Si muestras tabla, usa únicamente las filas generadas por el servidor.
 
-ESTRUCTURA DE RESPUESTA CUANDO LA ESCALA ES "DESCONOCIDA":
+═══ CUANDO MODELO_ESPECIFICADO ES false (PRIORIDAD MÁXIMA — ignora las secciones de escala) ═══
+### 1. RADIOGRAFÍA TÉCNICA
+* **Maquinaria Deducida:** Describe el tipo de máquina y su operación.
+* **Por qué importa el modelo:** Explica que sin el modelo exacto los aceites, filtros y neumáticos correctos varían significativamente entre versiones.
+
+### 2. MODELO REQUERIDO
+Reproduce literalmente la PREGUNTA_MODELO del servidor.
+Luego pide a JC que inicie una nueva consulta con el modelo completo (ej: "constructora 3 excavadoras CAT 320D").
+
+═══ CUANDO ESCALA ES "DESCONOCIDA" ═══
 ### 1. RADIOGRAFÍA Y ESTRATEGIA TÉCNICA
 * **Parque Operativo Deducido:** Vehículos o maquinaria del rubro.
 * **Dolor Operativo Crítico:** Desgastes mecánicos severos.
-* **Freno Comercial (Alerta de Escala):** Explica por qué no podemos cotizar envases ni precios sin saber el tamaño de la flota.
+* **Freno Comercial:** Explica por qué no podemos cotizar sin saber el tamaño del parque.
 
 ### 2. PREGUNTA OBLIGATORIA DE CALIFICACIÓN
-Hazle una pregunta directa a JC para saber exactamente cuántos vehículos u horas operan.
+Hazle una pregunta directa a JC para saber cuántos vehículos u horas operan.
 
----
-ESTRUCTURA DE RESPUESTA CUANDO LA ESCALA ES "CHICA" O "GRANDE":
+═══ CUANDO ESCALA ES "CHICA" O "GRANDE" ═══
 ### 1. RADIOGRAFÍA Y ESTRATEGIA (ANÁLISIS INTERNO PARA JC)
 * **Parque Operativo y Escala:** Explica el rubro, el segmento mecánico y la escala.
 * **Dolor Operativo Crítico:** Problemas mecánicos específicos de esa flota.
@@ -90,6 +123,20 @@ Hazle una pregunta directa a JC para definir el cierre o envío formal de la pro
 """
 
 
+FOLLOWUP_SYSTEM_PROMPT = """
+Eres Zara, Directora de Ingeniería Comercial B2B de RMG Parts. Estás en una conversación activa con Juan Carlos (JC).
+
+JC acaba de hacer una pregunta de seguimiento sobre la recomendación que ya le diste. Tienes el historial completo de la conversación en los mensajes anteriores.
+
+REGLAS PARA ESTA RESPUESTA:
+1. Responde de forma DIRECTA y CONVERSACIONAL. SIN headers (###), SIN bullets numerados, SIN estructura de secciones.
+2. PROHIBIDO regenerar, repetir o volver a mostrar la tabla de productos. Ya está en el historial.
+3. Responde ÚNICAMENTE lo que JC preguntó, en 2 a 4 párrafos cortos, con autoridad técnica.
+4. Si JC pregunta por qué un producto específico, justifícalo técnicamente sin mostrar la tabla.
+5. Si JC pide avanzar (cotizar, propuesta), guíalo al siguiente paso comercial.
+"""
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -102,6 +149,17 @@ def chat():
         mensajes = data.get("mensajes", [])
         ultimo_msg = mensajes[-1]["content"] if mensajes else ""
 
+        # Follow-up: skip the pipeline, answer from conversation context
+        if _is_followup(mensajes):
+            payload = [{"role": "system", "content": FOLLOWUP_SYSTEM_PROMPT}] + mensajes
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=payload,
+                temperature=0.3,
+            )
+            return jsonify({"respuesta": completion.choices[0].message.content})
+
+        # New prospect description: run full classification + product search
         df_precios = _get_df()
         if df_precios is None:
             return jsonify({"error": "Base de datos no disponible. Intenta en unos segundos."}), 503
@@ -114,7 +172,9 @@ def chat():
             f"PARQUE: {data_ia.get('parque_deducido', '')}\n"
             f"SEGMENTO MECÁNICO: {data_ia.get('segmento_mecanico', '')}\n"
             f"ESCALA DETECTADA: {data_ia.get('escala_detectada', '')}\n"
-            f"JUSTIFICACIÓN ESCALA: {data_ia.get('justificacion_escala', '')}\n\n"
+            f"JUSTIFICACIÓN ESCALA: {data_ia.get('justificacion_escala', '')}\n"
+            f"MODELO_ESPECIFICADO: {data_ia.get('modelo_especificado', True)}\n"
+            f"PREGUNTA_MODELO: {data_ia.get('pregunta_modelo', '')}\n\n"
             f"TABLA COINCIDENCIAS:\n{tabla_skus}\n"
             f"================================================="
         )
@@ -123,7 +183,7 @@ def chat():
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=payload,
-            temperature=0.1
+            temperature=0.1,
         )
         return jsonify({"respuesta": completion.choices[0].message.content})
     except Exception as e:
