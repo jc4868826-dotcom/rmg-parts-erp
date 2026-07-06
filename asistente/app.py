@@ -117,12 +117,29 @@ Refierete SIEMPRE al prospecto en tercera persona: "este cliente",
 "la constructora", "su flota". NUNCA uses "te", "tu", "usted" dirigido
 al vendedor como si fuera el cliente.
 
+AL LLENAR LAS TABLAS — INSTRUCCION CRITICA SOBRE PRODUCTOS:
+Recibirás un bloque "CATALOGO REAL RMG" con filas en formato:
+ROL_INSUMO | SKU | MARCA | DESCRIPCION | PRESENTACION | PRECIO_NETO
+
+Mapea cada ROL_INSUMO a la fila correspondiente de la tabla:
+- "Aceite de Motor"       → fila "Aceite motor"
+- "Aceite Hidráulico"     → fila "Aceite hidráulico"
+- "Grasa Multipropósito"  → fila "Grasa"
+- "Batería"               → fila "Bateria"
+- "Neumático"             → fila "Neumatico"
+- "Refrigerante / DEF"    → fila "Refrigerante"
+
+Para cada equipo, elige el producto del catalogo que mejor aplique a ese
+equipo. Puedes usar el mismo SKU en múltiples tablas si aplica.
+Si un ROL_INSUMO no aparece en el catalogo, pon "No disponible en RMG".
+
 REGLAS ABSOLUTAS (violar cualquiera es un error critico):
+- PROHIBIDO inventar SKUs, precios, marcas o descripciones que no estén
+  literalmente en el CATALOGO REAL RMG que recibes en los datos
 - PROHIBIDO responder con parrafos en vez de tablas para los productos
 - PROHIBIDO generar solo 1 tabla cuando hay multiples equipos
 - PROHIBIDO pedir mas datos antes de entregar la propuesta completa
 - PROHIBIDO hablarle al vendedor como si fuera el cliente final
-- PROHIBIDO recomendar productos que no esten en el catalogo real del ERP
 - Si el vendedor hace pregunta de seguimiento, responde conversando sin
   regenerar todas las tablas
 """
@@ -173,7 +190,7 @@ def chat():
         tabla_skus, data_ia = deducir_y_buscar_360(ultimo_msg, client, df_precios)
 
         bloque_datos = (
-            f"\n\n=== DATOS PROCESADOS POR MOTOR DINÁMICO RMG ===\n"
+            f"\n\n=== DATOS DEL PROSPECTO (PROCESADOS POR MOTOR RMG) ===\n"
             f"RUBRO: {data_ia.get('nombre_rubro', '')}\n"
             f"PARQUE: {data_ia.get('parque_deducido', '')}\n"
             f"SEGMENTO MECÁNICO: {data_ia.get('segmento_mecanico', '')}\n"
@@ -181,7 +198,7 @@ def chat():
             f"JUSTIFICACIÓN ESCALA: {data_ia.get('justificacion_escala', '')}\n"
             f"MODELO_ESPECIFICADO: {data_ia.get('modelo_especificado', True)}\n"
             f"PREGUNTA_MODELO: {data_ia.get('pregunta_modelo', '')}\n\n"
-            f"TABLA COINCIDENCIAS:\n{tabla_skus}\n"
+            f"{tabla_skus}\n"
             f"================================================="
         )
 

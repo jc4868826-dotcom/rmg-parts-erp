@@ -17,18 +17,19 @@ def deducir_y_buscar_360(query, client, df_precios):
         "pregunta_modelo": null,
         "envases_validos": ["Galon", "Balde", "Tambor", "Unidad"],
         "insumos_necesarios": [
-            {{"rol": "Aceite de Motor / Transmisión", "pilar": "🛢️ LUBRICANTES", "keywords": ["15W40", "5W30", "10W40"]}},
-            {{"rol": "Grasa Chasis / Rodamientos", "pilar": "⚙️ GRASAS", "keywords": ["EP-2 LITHIUM MULTIPROPOSITO"]}},
-            {{"rol": "Batería Cabina / Arranque", "pilar": "🔋 BATERÍAS", "keywords": ["100AMP", "120AMP", "N100", "75AMP"]}},
-            {{"rol": "Neumático Comercial / Carga", "pilar": "🔘 NEUMÁTICOS", "keywords": ["R17.5", "R22.5", "R16", "1200 R24"]}},
-            {{"rol": "Refrigerante Radiador / OAT", "pilar": "🧪 QUÍMICOS", "keywords": ["COOLANT ICE FREEZE"]}}
+            {{"rol": "Aceite de Motor", "pilar": "🛢️ LUBRICANTES:MOTOR", "keywords": ["15W40", "10W40", "5W30", "CK-4", "MAXFORCE", "MAXTECH"]}},
+            {{"rol": "Aceite Hidráulico", "pilar": "🛢️ LUBRICANTES:HIDRAULICO", "keywords": ["HYDRO", "HIDRAUL", "ISO 46", "ISO 68", "AW 46", "AW 68"]}},
+            {{"rol": "Grasa Multipropósito", "pilar": "⚙️ GRASAS", "keywords": ["EP-2 LITHIUM", "MULTIPROPOSITO", "MULTIPURPOSE", "LITIO"]}},
+            {{"rol": "Batería", "pilar": "🔋 BATERÍAS", "keywords": ["100AMP", "120AMP", "N100", "75AMP"]}},
+            {{"rol": "Neumático", "pilar": "🔘 NEUMÁTICOS", "keywords": ["R17.5", "R22.5", "R16", "1200 R24"]}},
+            {{"rol": "Refrigerante / DEF", "pilar": "🧪 REFRIGERANTES", "keywords": ["COOLANT", "ANTIFREEZE", "AIRBLUE", "DEF", "UREA", "ICE"]}}
         ]
     }}
     REGLAS DE CLASIFICACIÓN DE SEGMENTO MECÁNICO:
     1. LIVIANO: Autos particulares, sedanes, city cars.
     2. COMERCIAL_LIVIANO: Furgones escolares, camionetas 4x4, Sprinter, H1, utilitarios livianos.
     3. REPARTO_MEDIO_PESADO: Camiones repartidores de gas, camiones 3/4, camiones rígidos urbanos/interurbanos, flotas de camiones medianos o grandes.
-    4. MAQUINARIA_MINERIA: Grúas telescópicas, excavadoras, cargadores frontales, camiones tolva pesados, áridos.
+    4. MAQUINARIA_MINERIA: Grúas telescópicas, excavadoras, cargadores frontales, camiones tolva pesados, áridos, constructoras.
 
     REGLAS DE ESCALA:
     - Si no menciona cantidades ni tamaño del negocio, pon "escala_detectada": "DESCONOCIDA".
@@ -38,11 +39,14 @@ def deducir_y_buscar_360(query, client, df_precios):
     - Si el segmento es MAQUINARIA_MINERIA Y el usuario NO mencionó el modelo concreto de la máquina
       (ej: dijo "excavadoras CAT" pero no "CAT 320D", "CAT 336", "Komatsu PC200", etc.):
       • pon "modelo_especificado": false
-      • en "pregunta_modelo" genera una pregunta técnica corta y directa (ej: "¿Qué modelo de excavadora CAT operan? (320D, 326, 336, 390F...)")
+      • en "pregunta_modelo" genera una pregunta técnica corta y directa
     - Para camiones de reparto, furgones y vehículos de vía pública el modelo no es crítico. Pon modelo_especificado: true.
-    - Si el modelo YA está en el input (ej: "CAT 320D", "Volvo FH16", "Komatsu PC200"), pon modelo_especificado: true.
+    - Si el modelo YA está en el input, pon modelo_especificado: true.
+
+    REGLA CRÍTICA: Para maquinaria de construcción (grúas, excavadoras, cargadores, retroexcavadoras),
+    asegúrate de incluir SIEMPRE "Aceite Hidráulico" en insumos_necesarios con keywords HYDRO, ISO 46, ISO 68.
     """
-    
+
     try:
         resp = client.chat.completions.create(
             model="gpt-4o",
@@ -63,34 +67,37 @@ def deducir_y_buscar_360(query, client, df_precios):
             "pregunta_modelo": None,
             "envases_validos": ["Balde", "Tambor", "Unidad"],
             "insumos_necesarios": [
-                {"rol": "Aceite Motor Diésel", "pilar": "🛢️ LUBRICANTES", "keywords": ["15W40"]},
+                {"rol": "Aceite de Motor", "pilar": "🛢️ LUBRICANTES:MOTOR", "keywords": ["15W40"]},
+                {"rol": "Aceite Hidráulico", "pilar": "🛢️ LUBRICANTES:HIDRAULICO", "keywords": ["HYDRO", "ISO 46"]},
                 {"rol": "Grasa Multipropósito", "pilar": "⚙️ GRASAS", "keywords": ["EP-2 LITHIUM"]},
-                {"rol": "Batería Heavy Duty", "pilar": "🔋 BATERÍAS", "keywords": ["100AMP", "120AMP"]},
-                {"rol": "Neumático Tracción Carga", "pilar": "🔘 NEUMÁTICOS", "keywords": ["R17.5", "R22.5"]},
-                {"rol": "Refrigerante Larga Vida", "pilar": "🧪 QUÍMICOS", "keywords": ["COOLANT"]}
+                {"rol": "Batería", "pilar": "🔋 BATERÍAS", "keywords": ["100AMP", "120AMP"]},
+                {"rol": "Neumático", "pilar": "🔘 NEUMÁTICOS", "keywords": ["R17.5", "R22.5"]},
+                {"rol": "Refrigerante / DEF", "pilar": "🧪 REFRIGERANTES", "keywords": ["COOLANT", "AIRBLUE"]}
             ]
         }
-        
+
     df_w = df_precios.copy()
-    col_sku = 'Codigo SKU' if 'Codigo SKU' in df_w.columns else df_w.columns[7]
-    col_desc = 'Descripcion Producto Original' if 'Descripcion Producto Original' in df_w.columns else df_w.columns[8]
-    col_env = 'TIPO DE ENVASE' if 'TIPO DE ENVASE' in df_w.columns else df_w.columns[10]
-    col_cat = 'Categoria' if 'Categoria' in df_w.columns else df_w.columns[2]
+    col_sku   = 'Codigo SKU' if 'Codigo SKU' in df_w.columns else df_w.columns[7]
+    col_desc  = 'Descripcion Producto Original' if 'Descripcion Producto Original' in df_w.columns else df_w.columns[8]
+    col_env   = 'TIPO DE ENVASE' if 'TIPO DE ENVASE' in df_w.columns else df_w.columns[10]
+    col_cat   = 'Categoria' if 'Categoria' in df_w.columns else df_w.columns[2]
     col_marca = 'Marca' if 'Marca' in df_w.columns else df_w.columns[5]
     col_precio = 'Precio Venta RMG X ENVASE (+30% Neto)' if 'Precio Venta RMG X ENVASE (+30% Neto)' in df_w.columns else df_w.columns[14]
-    
+
     df_w['_p_num'] = pd.to_numeric(df_w[col_precio], errors='coerce').fillna(0)
     df_w = df_w[df_w['_p_num'] > 1000].copy()
-    
+
     seg = data_ia.get("segmento_mecanico", "REPARTO_MEDIO_PESADO")
-    tabla_out = "| ¿Qué insumo necesita? | Pilar 360° RMG | Marca | SKU Real | Descripción Original RMG | Envase / UM | Precio (+30% Neto) |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+
+    catalogo_lines = []
     skus_vistos = set()
-    
+    MAX_POR_CATEGORIA = 3
+
     for item in data_ia.get("insumos_necesarios", []):
         sub = df_w.copy()
-        
-        # Aduana Mecánica por Segmentos Estrictos
-        if "NEUMÁTICOS" in item["pilar"]:
+        pilar = item["pilar"]
+
+        if "NEUMÁTICOS" in pilar:
             sub = sub[sub[col_cat].astype(str).str.contains("Neuma", case=False, na=False)]
             if seg == "LIVIANO":
                 sub = sub[sub[col_desc].astype(str).str.contains("R13|R14|R15", case=False, na=False) & (sub['_p_num'] < 65000)]
@@ -100,7 +107,7 @@ def deducir_y_buscar_360(query, client, df_precios):
                 sub = sub[sub[col_desc].astype(str).str.contains("R17.5|R19.5|R22.5", case=False, na=False) & (sub['_p_num'] >= 90000)]
             elif seg == "MAQUINARIA_MINERIA":
                 sub = sub[sub[col_desc].astype(str).str.contains("1200 R24|R22.5|OTR", case=False, na=False) & (sub['_p_num'] >= 180000)]
-        elif "BATERÍAS" in item["pilar"]:
+        elif "BATERÍAS" in pilar:
             sub = sub[sub[col_cat].astype(str).str.contains("Bateria", case=False, na=False)]
             if seg == "LIVIANO":
                 sub = sub[(sub['_p_num'] >= 35000) & (sub['_p_num'] < 60000)]
@@ -110,28 +117,60 @@ def deducir_y_buscar_360(query, client, df_precios):
                 sub = sub[(sub['_p_num'] >= 100000) & (sub['_p_num'] <= 150000)]
             elif seg == "MAQUINARIA_MINERIA":
                 sub = sub[(sub['_p_num'] >= 130000)]
+        elif "LUBRICANTES:HIDRAULICO" in pilar:
+            sub = sub[sub[col_cat].astype(str).str.contains("Lubricante", case=False, na=False)]
+            mask = pd.Series(False, index=sub.index)
+            for kw in item["keywords"]:
+                mask = mask | sub[col_desc].astype(str).str.upper().str.contains(str(kw).upper(), na=False)
+            sub = sub[mask]
+            # Prefer gallon/balde presentation for hydraulic oil
+            mask_env = pd.Series(False, index=sub.index)
+            for env in data_ia.get("envases_validos", ["Galon", "Balde", "Unidad"]):
+                mask_env = mask_env | sub[col_env].astype(str).str.upper().str.contains(str(env).upper(), na=False)
+            if not sub[mask_env].empty:
+                sub = sub[mask_env]
+        elif "REFRIGERANTES" in pilar:
+            sub = sub[sub[col_cat].astype(str).str.contains("Refrigerante|Quimico|Aditivo", case=False, na=False)]
+            mask = pd.Series(False, index=sub.index)
+            for kw in item["keywords"]:
+                mask = mask | sub[col_desc].astype(str).str.upper().str.contains(str(kw).upper(), na=False)
+            sub = sub[mask]
         else:
             mask_spec = pd.Series(False, index=sub.index)
             for kw in item["keywords"]:
                 if len(str(kw)) >= 2:
                     mask_spec = mask_spec | sub[col_desc].astype(str).str.upper().str.contains(str(kw).upper(), na=False)
             sub = sub[mask_spec]
-            
+
             mask_env = pd.Series(False, index=sub.index)
             for env in data_ia.get("envases_validos", ["Galon", "Balde", "Unidad"]):
                 mask_env = mask_env | sub[col_env].astype(str).str.upper().str.contains(str(env).upper(), na=False)
             if not sub[mask_env].empty:
                 sub = sub[mask_env]
-                
+
         sub = sub.sort_values('_p_num')
+        conteo = 0
         for _, row in sub.iterrows():
+            if conteo >= MAX_POR_CATEGORIA:
+                break
             sku = str(row[col_sku]).split('.')[0]
             if sku in skus_vistos:
                 continue
             skus_vistos.add(sku)
             marca = str(row[col_marca]) if pd.notna(row[col_marca]) else "Vistony"
-            p_fmt = f"${row['_p_num']:,.0f} CLP".replace(',', '.')
-            tabla_out += f"| **{item['rol']}** | {item['pilar']} | **{marca}** | `{sku}` | {row[col_desc]} | {row[col_env]} | **{p_fmt}** |\n"
-            break
-            
-    return tabla_out, data_ia
+            p_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
+            catalogo_lines.append(
+                f"{item['rol']} | {sku} | {marca} | {row[col_desc]} | {row[col_env]} | {p_fmt}"
+            )
+            conteo += 1
+
+    if catalogo_lines:
+        catalogo_str = (
+            "CATALOGO REAL RMG — UNICOS PRODUCTOS VALIDOS (NUNCA INVENTES FUERA DE ESTA LISTA):\n"
+            "ROL_INSUMO | SKU | MARCA | DESCRIPCION | PRESENTACION | PRECIO_NETO\n"
+            + "\n".join(catalogo_lines)
+        )
+    else:
+        catalogo_str = "CATALOGO REAL RMG: Sin coincidencias para este segmento."
+
+    return catalogo_str, data_ia
