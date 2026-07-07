@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import requests
 import pandas as pd
@@ -43,7 +44,10 @@ def _get_df():
             "Descripcion Producto Original":          r.get("descripcion", ""),
             "Marca":                                  r.get("marca", ""),
             "Categoria":                              r.get("categoria", ""),
+            "Presentacion":                           r.get("presentacion", ""),
             "TIPO DE ENVASE":                         r.get("tipo_envase") or r.get("presentacion", ""),
+            "Unidades por Pack":                      r.get("unidades_por_pack") or 1,
+            "Costo Pack Neto":                        r.get("costo_pack_neto") or 0,
             "Precio Venta RMG X ENVASE (+30% Neto)": r.get("precio_venta_neto", 0),
         } for r in deduped])
         _cache["df"] = df
@@ -76,6 +80,36 @@ def _is_followup(mensajes):
     if len(last.split()) <= 8:
         return True
     return any(p in last for p in _FOLLOWUP_PATTERNS)
+
+
+def _parsear_skus(texto, df):
+    """Extrae SKUs reales del texto de ZARA y devuelve los datos del ERP para cada uno."""
+    skus = list(dict.fromkeys(re.findall(r'\b(\d{5,8})\b', texto)))
+    col_sku  = 'Codigo SKU'
+    col_desc = 'Descripcion Producto Original'
+    col_unit = 'Precio Venta RMG X ENVASE (+30% Neto)'
+    col_pack = 'Costo Pack Neto'
+    col_und  = 'Unidades por Pack'
+    productos = []
+    for sku in skus:
+        rows = df[df[col_sku].astype(str).str.split('.').str[0].str.strip() == sku]
+        if rows.empty:
+            continue
+        r = rows.iloc[0]
+        precio_unit = float(r[col_unit]) if pd.notna(r[col_unit]) else 0
+        pack_raw    = float(r[col_pack]) if pd.notna(r[col_pack]) else 0
+        precio_pack = pack_raw if pack_raw > 0 else precio_unit
+        und_raw     = float(r[col_und])  if pd.notna(r[col_und])  else 0
+        und_pack    = int(und_raw) if und_raw > 0 else 1
+        productos.append({
+            "codigo_sku":        sku,
+            "descripcion":       str(r[col_desc]),
+            "precio_venta_neto": precio_unit,
+            "cantidad":          1,
+            "precio_pack":       precio_pack,
+            "unidades_pack":     und_pack,
+        })
+    return productos
 
 
 SYSTEM_PROMPT = """
@@ -114,8 +148,8 @@ Para TIPO B (Distribuidor/Revendedor) el formato es:
 su catalogo con productos de calidad a precio mayorista."
 
 ### [Sub-categoria 1, ej: Aceites sinteticos para moto]
-| Producto | SKU | Especificacion | Presentacion | Precio Mayorista | Margen sugerido |
-|----------|-----|---------------|-------------|-----------------|----------------|
+| Producto | SKU | Presentacion | Und x Pack | Precio Pack | Precio Unit. | Margen | Proveedor |
+|----------|-----|-------------|-----------|------------|-------------|--------|----------|
 [todos los productos RMG reales que aplican a esa sub-categoria]
 
 ### [Sub-categoria 2, ej: Aceites semisinteticos para moto]
@@ -132,14 +166,14 @@ Para TIPO A (Operador de flota) el formato es:
 Minimo 5 equipos. Luego una tabla por cada equipo:
 
 ### [Nombre del equipo N]
-| Insumo | Producto RMG | SKU | Presentacion | Precio | Cambio estimado |
-|--------|-------------|-----|-------------|--------|----------------|
-| Aceite motor | [producto real] | [sku real] | [real] | [real] | Cada X hrs |
-| Aceite hidraulico | ... | ... | ... | ... | ... |
-| Grasa | ... | ... | ... | ... | ... |
-| Bateria | ... | ... | ... | ... | ... |
-| Neumatico | ... | ... | ... | ... | ... |
-| Refrigerante | ... | ... | ... | ... | ... |
+| Insumo | Producto RMG | SKU | Presentacion | Und x Pack | Precio Pack | Precio Unit. | Proveedor | Cambio estimado |
+|--------|-------------|-----|-------------|-----------|------------|-------------|----------|----------------|
+| Aceite motor | [producto real] | [sku real] | [real] | [und] | [pack] | [unit] | [marca] | Cada X hrs |
+| Aceite hidraulico | ... | ... | ... | ... | ... | ... | ... | ... |
+| Grasa | ... | ... | ... | ... | ... | ... | ... | ... |
+| Bateria | ... | ... | ... | ... | ... | ... | ... | ... |
+| Neumatico | ... | ... | ... | ... | ... | ... | ... | ... |
+| Refrigerante | ... | ... | ... | ... | ... | ... | ... | ... |
 
 Para TIPO C (Taller) el formato es:
 una tabla por tipo de vehiculo que atiende.
@@ -151,7 +185,13 @@ credito. Para un taller: rotacion, precio competitivo, entrega.
 
 INSTRUCCION CRITICA SOBRE PRODUCTOS:
 Recibirás un bloque "CATALOGO REAL RMG" con filas en formato:
-ROL_INSUMO | SKU | MARCA | DESCRIPCION | PRESENTACION | PRECIO_NETO
+ROL_INSUMO | SKU | MARCA | DESCRIPCION | PRESENTACION | UND_X_PACK | PRECIO_PACK | PRECIO_UNIT
+
+Donde:
+- UND_X_PACK = unidades por caja/pack (ej: 12 para CAJ12, 1 para unidades sueltas)
+- PRECIO_PACK = precio de la caja completa (costo_pack_neto del ERP)
+- PRECIO_UNIT = precio por unidad individual (precio_venta_neto del ERP)
+NUNCA calcules ni inventes estos precios. Usa EXCLUSIVAMENTE los valores del catalogo.
 
 Para TIPO A, mapea ROL_INSUMO a la fila de la tabla:
 - "Aceite de Motor"       → fila "Aceite motor"
@@ -210,7 +250,7 @@ def chat():
                 messages=payload,
                 temperature=0.3,
             )
-            return jsonify({"respuesta": completion.choices[0].message.content})
+            return jsonify({"respuesta": completion.choices[0].message.content, "productos_recomendados": []})
 
         # New prospect description: run full classification + product search
         df_precios = _get_df()
@@ -238,7 +278,9 @@ def chat():
             messages=payload,
             temperature=0.1,
         )
-        return jsonify({"respuesta": completion.choices[0].message.content})
+        respuesta_texto = completion.choices[0].message.content
+        productos_rec = _parsear_skus(respuesta_texto, df_precios)
+        return jsonify({"respuesta": respuesta_texto, "productos_recomendados": productos_rec})
     except Exception as e:
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
 

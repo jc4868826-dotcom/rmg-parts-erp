@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Send, Bot, Loader2, RotateCcw } from 'lucide-react'
+import { Send, Bot, Loader2, RotateCcw, ShoppingCart, X, Trash2 } from 'lucide-react'
+import api from '../utils/api'
 
 const ASISTENTE_URL = (import.meta.env.VITE_ASISTENTE_URL || 'http://localhost:5000').replace(/\/$/, '')
 
@@ -53,10 +55,20 @@ const MD_COMPONENTS = {
 }
 
 export default function AsistenteIAPage() {
-  const [messages, setMessages] = useState([])
-  const [input, setInput]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const bottomRef = useRef(null)
+  const [messages, setMessages]               = useState([])
+  const [input, setInput]                     = useState('')
+  const [loading, setLoading]                 = useState(false)
+  const bottomRef                             = useRef(null)
+  const navigate                              = useNavigate()
+
+  // Cotización modal state
+  const [cotizModal, setCotizModal]           = useState(null)   // null | { lineas: [...] }
+  const [cotizClientes, setCotizClientes]     = useState([])
+  const [clienteQuery, setClienteQuery]       = useState('')
+  const [clienteSeleccionado, setClienteSel]  = useState(null)
+  const [showClienteList, setShowClienteList] = useState(false)
+  const [cotizLoading, setCotizLoading]       = useState(false)
+  const [cotizError, setCotizError]           = useState(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -79,11 +91,12 @@ export default function AsistenteIAPage() {
       })
       const data = await res.json()
       setMessages([...next, {
-        role:    'assistant',
-        content: data.respuesta || `Error: ${data.error || 'respuesta inesperada'}`,
+        role:      'assistant',
+        content:   data.respuesta || `Error: ${data.error || 'respuesta inesperada'}`,
+        productos: data.productos_recomendados || [],
       }])
     } catch {
-      setMessages([...next, { role: 'assistant', content: '⚠️ Sin conexión con el Asistente IA. Verifica que el servicio esté activo.' }])
+      setMessages([...next, { role: 'assistant', content: '⚠️ Sin conexión con el Asistente IA. Verifica que el servicio esté activo.', productos: [] }])
     } finally {
       setLoading(false)
     }
@@ -92,6 +105,68 @@ export default function AsistenteIAPage() {
   function handleKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
+
+  // ── Cotización modal helpers ──────────────────────────────────────────────
+
+  async function abrirCotizModal(productos) {
+    setCotizModal({ lineas: productos.map(p => ({ ...p, cantidad: p.cantidad || 1 })) })
+    setCotizClientes([])
+    setClienteQuery('')
+    setClienteSel(null)
+    setShowClienteList(false)
+    setCotizError(null)
+    try {
+      const res = await api.get('/clientes')
+      setCotizClientes(res.data)
+    } catch { /* silently fail — user can still create */ }
+  }
+
+  function actualizarCantidad(idx, val) {
+    const lineas = [...cotizModal.lineas]
+    lineas[idx] = { ...lineas[idx], cantidad: Math.max(1, parseInt(val) || 1) }
+    setCotizModal({ ...cotizModal, lineas })
+  }
+
+  function quitarLinea(idx) {
+    setCotizModal({ ...cotizModal, lineas: cotizModal.lineas.filter((_, i) => i !== idx) })
+  }
+
+  async function confirmarCotizacion() {
+    if (!clienteSeleccionado) return setCotizError('Selecciona un cliente')
+    if (!cotizModal?.lineas.length) return setCotizError('Agrega al menos un producto')
+    setCotizLoading(true)
+    setCotizError(null)
+    try {
+      const items = cotizModal.lineas.map(l => ({
+        codigo:          l.codigo_sku,
+        descripcion:     l.descripcion,
+        cantidad:        l.cantidad,
+        precio_unitario: l.precio_venta_neto,
+        descuento_pct:   0,
+        subtotal:        Math.round(l.cantidad * l.precio_venta_neto),
+      }))
+      const neto  = items.reduce((a, b) => a + b.subtotal, 0)
+      const iva   = Math.round(neto * 0.19)
+      const total = neto + iva
+      const res = await api.post('/cotizaciones', {
+        cliente_id:   clienteSeleccionado.id,
+        cliente:      clienteSeleccionado.razon_social,
+        estado:       'borrador',
+        canal_origen: 'web',
+        neto, iva, total, items,
+      })
+      navigate(`/cotizaciones/${res.data.id}`)
+    } catch (e) {
+      setCotizError(e.response?.data?.error || 'Error al crear la cotización')
+      setCotizLoading(false)
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const clientesFiltrados = cotizClientes.filter(c =>
+    c.razon_social.toLowerCase().includes(clienteQuery.toLowerCase())
+  ).slice(0, 12)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--rmg-bg, #050f1c)' }}>
@@ -154,7 +229,25 @@ export default function AsistenteIAPage() {
             }}>
               {msg.role === 'user'
                 ? msg.content
-                : <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{msg.content}</ReactMarkdown>
+                : (
+                  <>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{msg.content}</ReactMarkdown>
+                    {msg.productos?.length > 0 && (
+                      <button
+                        onClick={() => abrirCotizModal(msg.productos)}
+                        style={{
+                          marginTop: 12, display: 'flex', alignItems: 'center', gap: 7,
+                          background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.35)',
+                          borderRadius: 8, padding: '8px 16px', color: '#a78bfa', fontSize: 12,
+                          fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        <ShoppingCart size={14} />
+                        Crear Cotización con estos productos ({msg.productos.length})
+                      </button>
+                    )}
+                  </>
+                )
               }
             </div>
           </div>
@@ -207,6 +300,151 @@ export default function AsistenteIAPage() {
           Enter para enviar · Shift+Enter para nueva línea
         </div>
       </div>
+
+      {/* ── Modal Crear Cotización ── */}
+      {cotizModal && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setCotizModal(null) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          <div style={{ background: '#0a1929', border: '1px solid rgba(56,182,255,0.18)', borderRadius: 14, width: '100%', maxWidth: 740, maxHeight: '92vh', overflowY: 'auto', padding: 28 }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <ShoppingCart size={18} style={{ color: '#a78bfa' }} />
+                <span style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>Crear Cotización</span>
+              </div>
+              <button onClick={() => setCotizModal(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', padding: 4 }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Cliente */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cliente</div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  value={clienteQuery}
+                  onChange={e => { setClienteQuery(e.target.value); setClienteSel(null); setShowClienteList(true) }}
+                  onFocus={() => setShowClienteList(true)}
+                  onBlur={() => setTimeout(() => setShowClienteList(false), 150)}
+                  placeholder="Buscar cliente por nombre..."
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(56,182,255,0.22)', borderRadius: 8, color: '#fff', fontSize: 13, outline: 'none' }}
+                />
+                {showClienteList && clienteQuery.length > 0 && !clienteSeleccionado && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#0d1f35', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, maxHeight: 200, overflowY: 'auto', zIndex: 10 }}>
+                    {clientesFiltrados.length === 0
+                      ? <div style={{ padding: '9px 13px', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Sin resultados</div>
+                      : clientesFiltrados.map(c => (
+                        <div
+                          key={c.id}
+                          onMouseDown={() => { setClienteSel(c); setClienteQuery(c.razon_social); setShowClienteList(false) }}
+                          style={{ padding: '9px 13px', color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(167,139,250,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >
+                          {c.razon_social}
+                          {c.rut && <span style={{ color: 'rgba(255,255,255,0.3)', marginLeft: 8, fontSize: 11 }}>{c.rut}</span>}
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
+              {clienteSeleccionado && (
+                <div style={{ marginTop: 7, color: '#38b6ff', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  ✓ <strong>{clienteSeleccionado.razon_social}</strong>
+                  {clienteSeleccionado.rut && <span style={{ color: 'rgba(255,255,255,0.35)' }}> · {clienteSeleccionado.rut}</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Productos */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Productos ({cotizModal.lineas.length})
+              </div>
+              <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid rgba(56,182,255,0.1)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(56,182,255,0.06)' }}>
+                      {['Producto', 'SKU', 'Precio Unit.', 'Cantidad', 'Subtotal', ''].map(h => (
+                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.45)', fontWeight: 600, borderBottom: '1px solid rgba(56,182,255,0.1)', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cotizModal.lineas.map((l, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <td style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.85)', maxWidth: 260 }}>{l.descripcion}</td>
+                        <td style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', fontSize: 11 }}>{l.codigo_sku}</td>
+                        <td style={{ padding: '8px 12px', color: '#38b6ff', whiteSpace: 'nowrap' }}>${Math.round(l.precio_venta_neto).toLocaleString('es-CL')}</td>
+                        <td style={{ padding: '8px 12px' }}>
+                          <input
+                            type="number" min={1} value={l.cantidad}
+                            onChange={e => actualizarCantidad(idx, e.target.value)}
+                            style={{ width: 60, padding: '4px 6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 5, color: '#fff', fontSize: 12, textAlign: 'center', outline: 'none' }}
+                          />
+                        </td>
+                        <td style={{ padding: '8px 12px', color: '#a78bfa', fontWeight: 600, whiteSpace: 'nowrap' }}>${Math.round(l.cantidad * l.precio_venta_neto).toLocaleString('es-CL')}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <button onClick={() => quitarLinea(idx)} title="Quitar" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', padding: 2, display: 'flex' }}>
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Totales */}
+            {(() => {
+              const neto = cotizModal.lineas.reduce((a, l) => a + Math.round(l.cantidad * l.precio_venta_neto), 0)
+              const iva  = Math.round(neto * 0.19)
+              return (
+                <div style={{ borderTop: '1px solid rgba(56,182,255,0.1)', paddingTop: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+                  <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>Neto: <span style={{ color: 'rgba(255,255,255,0.85)' }}>${neto.toLocaleString('es-CL')}</span></div>
+                  <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>IVA (19%): <span style={{ color: 'rgba(255,255,255,0.85)' }}>${iva.toLocaleString('es-CL')}</span></div>
+                  <div style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>Total: ${(neto + iva).toLocaleString('es-CL')}</div>
+                </div>
+              )
+            })()}
+
+            {/* Error */}
+            {cotizError && (
+              <div style={{ marginBottom: 14, padding: '8px 12px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 6, color: '#f87171', fontSize: 12 }}>
+                ⚠ {cotizError}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                onClick={() => setCotizModal(null)}
+                style={{ padding: '9px 18px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'rgba(255,255,255,0.4)', fontSize: 13, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarCotizacion}
+                disabled={cotizLoading || !clienteSeleccionado || !cotizModal.lineas.length}
+                style={{
+                  padding: '9px 20px', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  background: clienteSeleccionado && !cotizLoading && cotizModal.lineas.length ? '#a78bfa' : 'rgba(167,139,250,0.2)',
+                  color: clienteSeleccionado && !cotizLoading && cotizModal.lineas.length ? '#fff' : 'rgba(255,255,255,0.3)',
+                  cursor: clienteSeleccionado && !cotizLoading && cotizModal.lineas.length ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {cotizLoading ? 'Creando...' : 'Crear Cotización'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   )
 }

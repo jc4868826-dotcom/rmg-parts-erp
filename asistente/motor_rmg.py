@@ -93,12 +93,15 @@ def deducir_y_buscar_360(query, client, df_precios):
         }
 
     df_w = df_precios.copy()
-    col_sku    = 'Codigo SKU' if 'Codigo SKU' in df_w.columns else df_w.columns[7]
-    col_desc   = 'Descripcion Producto Original' if 'Descripcion Producto Original' in df_w.columns else df_w.columns[8]
-    col_env    = 'TIPO DE ENVASE' if 'TIPO DE ENVASE' in df_w.columns else df_w.columns[10]
-    col_cat    = 'Categoria' if 'Categoria' in df_w.columns else df_w.columns[2]
-    col_marca  = 'Marca' if 'Marca' in df_w.columns else df_w.columns[5]
-    col_precio = 'Precio Venta RMG X ENVASE (+30% Neto)' if 'Precio Venta RMG X ENVASE (+30% Neto)' in df_w.columns else df_w.columns[14]
+    col_sku       = 'Codigo SKU' if 'Codigo SKU' in df_w.columns else df_w.columns[7]
+    col_desc      = 'Descripcion Producto Original' if 'Descripcion Producto Original' in df_w.columns else df_w.columns[8]
+    col_env       = 'TIPO DE ENVASE' if 'TIPO DE ENVASE' in df_w.columns else df_w.columns[10]
+    col_cat       = 'Categoria' if 'Categoria' in df_w.columns else df_w.columns[2]
+    col_marca     = 'Marca' if 'Marca' in df_w.columns else df_w.columns[5]
+    col_precio    = 'Precio Venta RMG X ENVASE (+30% Neto)' if 'Precio Venta RMG X ENVASE (+30% Neto)' in df_w.columns else df_w.columns[14]
+    col_und_pack  = 'Unidades por Pack' if 'Unidades por Pack' in df_w.columns else None
+    col_pack_neto = 'Costo Pack Neto' if 'Costo Pack Neto' in df_w.columns else None
+    col_pres      = 'Presentacion' if 'Presentacion' in df_w.columns else col_env
 
     df_w['_p_num'] = pd.to_numeric(df_w[col_precio], errors='coerce').fillna(0)
     df_w = df_w[df_w['_p_num'] > 0].copy()
@@ -209,9 +212,13 @@ def deducir_y_buscar_360(query, client, df_precios):
                 continue
             skus_vistos.add(sku)
             marca = str(row[col_marca]) if pd.notna(row[col_marca]) else "Vistony"
-            p_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
+            _und   = int(float(row[col_und_pack]))  if col_und_pack  and pd.notna(row[col_und_pack])  and float(row[col_und_pack])  > 0 else 1
+            _pack  = float(row[col_pack_neto]) if col_pack_neto and pd.notna(row[col_pack_neto]) and float(row[col_pack_neto]) > 0 else row['_p_num']
+            _pres  = str(row[col_pres]) if pd.notna(row[col_pres]) else str(row[col_env])
+            pack_fmt = f"${_pack:,.0f}".replace(',', '.')
+            unit_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
             catalogo_lines.append(
-                f"{item['rol']} | {sku} | {marca} | {row[col_desc]} | {row[col_env]} | {p_fmt}"
+                f"{item['rol']} | {sku} | {marca} | {row[col_desc]} | {_pres} | {_und} | {pack_fmt} | {unit_fmt}"
             )
             conteo += 1
 
@@ -224,11 +231,15 @@ def deducir_y_buscar_360(query, client, df_precios):
         if sku in skus_vistos:
             continue  # already included with a ROL_INSUMO label above
         skus_vistos.add(sku)
-        marca = str(row[col_marca]) if pd.notna(row[col_marca]) else "Vistony"
-        p_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
-        cat_label = str(row[col_cat]) if pd.notna(row[col_cat]) else "General"
+        marca     = str(row[col_marca]) if pd.notna(row[col_marca]) else "Vistony"
+        cat_label = str(row[col_cat])   if pd.notna(row[col_cat])   else "General"
+        _und  = int(float(row[col_und_pack]))  if col_und_pack  and pd.notna(row[col_und_pack])  and float(row[col_und_pack])  > 0 else 1
+        _pack = float(row[col_pack_neto]) if col_pack_neto and pd.notna(row[col_pack_neto]) and float(row[col_pack_neto]) > 0 else row['_p_num']
+        _pres = str(row[col_pres]) if pd.notna(row[col_pres]) else str(row[col_env])
+        pack_fmt = f"${_pack:,.0f}".replace(',', '.')
+        unit_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
         full_catalog_lines.append(
-            f"{sku} | {marca} | {row[col_desc]} | {cat_label} | {row[col_env]} | {p_fmt}"
+            f"{sku} | {marca} | {row[col_desc]} | {cat_label} | {_pres} | {_und} | {pack_fmt} | {unit_fmt}"
         )
 
     total_unicos = len(catalogo_lines) + len(full_catalog_lines)
@@ -240,7 +251,7 @@ def deducir_y_buscar_360(query, client, df_precios):
     if catalogo_lines:
         seccion_rol = (
             "PRODUCTOS IDENTIFICADOS PARA ESTE RUBRO (con tipo de uso):\n"
-            "ROL_INSUMO | SKU | MARCA | DESCRIPCION | PRESENTACION | PRECIO_NETO\n"
+            "ROL_INSUMO | SKU | MARCA | DESCRIPCION | PRESENTACION | UND_X_PACK | PRECIO_PACK | PRECIO_UNIT\n"
             + "\n".join(catalogo_lines)
             + "\n\n"
         )
@@ -248,7 +259,7 @@ def deducir_y_buscar_360(query, client, df_precios):
     # Section 2: complete catalog — every real SKU available in RMG
     seccion_completa = (
         f"CATALOGO REAL RMG PARTS ({total_unicos} articulos unicos):\n"
-        "SKU | Marca | Descripcion | Categoria | Presentacion | Precio Venta Neto\n"
+        "SKU | Marca | Descripcion | Categoria | Presentacion | UND_X_PACK | PRECIO_PACK | PRECIO_UNIT\n"
         + "\n".join(full_catalog_lines)
     )
 
