@@ -12,19 +12,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     ? `https://wa.me/${WA}?text=${encodeURIComponent('Hola, me interesa cotizar en RMG Parts')}`
     : null;
 
-  // waFloat siempre visible; heroWaBtn y bulkWaBtn se ocultan si no hay número
   const waFloatEl = document.getElementById('waFloat');
   if (waFloatEl && waUrl) {
     waFloatEl.addEventListener('click', () => window.open(waUrl, '_blank', 'noopener'));
   }
 
-  ['heroWaBtn', 'bulkWaBtn'].forEach(id => {
+  ['heroWaBtn', 'bulkWaBtn', 'bulkWaBtnSec'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     if (waUrl) {
       el.addEventListener('click', () => window.open(waUrl, '_blank', 'noopener'));
     } else {
-      el.style.display = 'none';
+      if (id === 'heroWaBtn') {
+        el.addEventListener('click', () => {
+          document.querySelector('.finder-section')?.scrollIntoView({ behavior: 'smooth' });
+        });
+      }
     }
   });
 
@@ -33,6 +36,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (waUrl) { footerWa.href = waUrl; footerWa.target = '_blank'; footerWa.rel = 'noopener'; }
     else footerWa.style.display = 'none';
   }
+
+  // ── Carousel ──────────────────────────────────────────────────
+  _initCarousel();
+
+  // ── Category strip ────────────────────────────────────────────
+  document.querySelectorAll('.cat-strip-item[data-q]').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.cat-strip-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      _categoryFilter(item.dataset.q);
+    });
+  });
 
   // ── Badge carrito ─────────────────────────────────────────────
   _updateCartBadge();
@@ -51,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // ── Chips del finder ──────────────────────────────────────────
+  // ── Chips del finder / por-marca ──────────────────────────────
   document.querySelectorAll('.chip[data-q]').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
@@ -60,12 +75,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // ── Pair-cards de categorías ──────────────────────────────────
-  document.querySelectorAll('.pair-card[data-search]').forEach(card => {
-    card.style.cursor = 'pointer';
-    card.addEventListener('click', () => {
-      _categoryFilter(card.dataset.search);
-    });
+  // ── BNL Level 1 cards ─────────────────────────────────────────
+  document.querySelectorAll('.bnl-card[data-search]').forEach(card => {
+    card.addEventListener('click', () => _categoryFilter(card.dataset.search));
+  });
+
+  // ── BNL Level 2 cards ─────────────────────────────────────────
+  document.querySelectorAll('.bnl-card-sm[data-search]').forEach(card => {
+    card.addEventListener('click', () => _categoryFilter(card.dataset.search));
   });
 
   // ── Buscador ──────────────────────────────────────────────────
@@ -91,7 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     _showProductError();
   }
 
-  // ── Refine input (resultados de segmento) ────────────────────
+  // ── Refine input ──────────────────────────────────────────────
   document.getElementById('refineInput')?.addEventListener('input', function () {
     if (!STATE.activeResults) return;
     const q = this.value.trim().toLowerCase();
@@ -115,7 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 });
 
-// ══ GLOBALES (llamadas desde atributos onclick en HTML) ═══════
+// ══ GLOBALES ══════════════════════════════════════════════════
 
 function openCart() {
   _renderDrawerItems();
@@ -140,6 +157,7 @@ function switchFinder(i, el) {
 function clearSearch() {
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
   document.querySelectorAll('.seg-pill').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.cat-strip-item').forEach(i => i.classList.remove('active'));
   const input = document.getElementById('buscadorInput');
   if (input) input.value = '';
   document.getElementById('prodSectionTitle').textContent = 'Productos destacados';
@@ -178,7 +196,34 @@ function removeItem(id) {
   CartService.remove(id);
 }
 
-// ══ PRIVADOS ══════════════════════════════════════════════════
+function goToPage(n) {
+  _renderPage(n);
+  document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ══ CAROUSEL ═════════════════════════════════════════════════
+
+function _initCarousel() {
+  const track = document.getElementById('carouselTrack');
+  if (!track) return;
+  const dots = document.querySelectorAll('.carousel-dot');
+  let current = 0;
+  let timer = null;
+
+  function go(n) {
+    current = (n + dots.length) % dots.length;
+    track.style.transform = `translateX(-${current * 100}%)`;
+    dots.forEach((d, i) => d.classList.toggle('active', i === current));
+  }
+
+  dots.forEach((dot, i) => {
+    dot.addEventListener('click', () => { clearInterval(timer); go(i); timer = setInterval(() => go(current + 1), 3000); });
+  });
+
+  timer = setInterval(() => go(current + 1), 3000);
+}
+
+// ══ PRIVADOS ═════════════════════════════════════════════════
 
 function _fmt(n) {
   return '$' + Math.round(n).toLocaleString('es-CL');
@@ -193,10 +238,10 @@ function _updateCartBadge() {
 function _showProductError() {
   const grid = document.getElementById('prodGrid');
   if (grid) grid.innerHTML = `
-    <div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--text-dim);">
+    <div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--text-muted);">
       <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
-      <div style="font-weight:600;margin-bottom:8px;">Error cargando productos</div>
-      <div style="font-size:13px;color:var(--text-faint);">No se pudo conectar al catálogo. Intenta recargar la página o contáctanos.</div>
+      <div style="font-weight:600;margin-bottom:8px;color:var(--text-dark);">Error cargando productos</div>
+      <div style="font-size:13px;">No se pudo conectar al catálogo. Intenta recargar la página o contáctanos.</div>
       <button class="btn" style="margin-top:20px;" onclick="location.reload()">Reintentar</button>
     </div>
   `;
@@ -209,17 +254,22 @@ function _showSkeletons() {
   grid.innerHTML = Array(8).fill('<div class="prod-skeleton"></div>').join('');
 }
 
-function _renderProducts(products) {
-  const grid = document.getElementById('prodGrid');
-  if (!grid) return;
+// ── Pagination helpers ─────────────────────────────────────────
 
+const PAGE_SIZE = 12;
+
+function _renderProducts(products) {
   if (!products || !products.length) {
-    grid.className = 'prod-cards';
-    grid.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);">Sin resultados para esta búsqueda.</div>';
+    const grid = document.getElementById('prodGrid');
+    if (grid) {
+      grid.className = 'prod-cards';
+      grid.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);">Sin resultados para esta búsqueda.</div>';
+    }
+    _renderPagination(0, 0);
     return;
   }
 
-  const sorted = [...products].sort((a, b) => {
+  STATE.currentPageData = [...products].sort((a, b) => {
     const ca = (a.categoria || '').localeCompare(b.categoria || '', 'es');
     if (ca !== 0) return ca;
     const ma = (a.marca || '').localeCompare(b.marca || '', 'es');
@@ -227,8 +277,23 @@ function _renderProducts(products) {
     return (a.presentacion || '').localeCompare(b.presentacion || '', 'es');
   });
 
+  _renderPage(1);
+}
+
+function _renderPage(page) {
+  const grid = document.getElementById('prodGrid');
+  if (!grid) return;
+
+  const all = STATE.currentPageData || [];
+  const totalPages = Math.ceil(all.length / PAGE_SIZE);
+  const clampedPage = Math.max(1, Math.min(page, totalPages || 1));
+  STATE.currentPage = clampedPage;
+
+  const start = (clampedPage - 1) * PAGE_SIZE;
+  const pageItems = all.slice(start, start + PAGE_SIZE);
+
   grid.className = 'prod-cards';
-  grid.innerHTML = sorted.map(p => `
+  grid.innerHTML = pageItems.map(p => `
     <div class="prod-card" onclick="showProductDetail('${p.sku}')">
       <div class="prod-card-marca">${p.marca || '—'}</div>
       <div class="prod-card-desc">
@@ -240,6 +305,35 @@ function _renderProducts(products) {
       <button class="prod-card-add" onclick="event.stopPropagation();addToCart('${p.id}')" title="Agregar al carrito">+</button>
     </div>
   `).join('');
+
+  _renderPagination(clampedPage, totalPages);
+}
+
+function _renderPagination(page, total) {
+  let pag = document.getElementById('paginacionRow');
+  if (!pag) {
+    pag = document.createElement('div');
+    pag.id = 'paginacionRow';
+    pag.className = 'paginacion-row';
+    const container = document.querySelector('#destacados .container');
+    if (container) container.appendChild(pag);
+  }
+
+  if (total <= 1) { pag.innerHTML = ''; return; }
+
+  const max = 5;
+  let s = Math.max(1, page - Math.floor(max / 2));
+  let e = Math.min(total, s + max - 1);
+  if (e - s + 1 < max) s = Math.max(1, e - max + 1);
+
+  let html = '';
+  if (page > 1) html += `<button class="pag-btn" onclick="goToPage(${page - 1})">‹</button>`;
+  for (let i = s; i <= e; i++) {
+    html += `<button class="pag-btn${i === page ? ' active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+  }
+  if (page < total) html += `<button class="pag-btn" onclick="goToPage(${page + 1})">›</button>`;
+
+  pag.innerHTML = html;
 }
 
 function showProductDetail(sku) {
@@ -385,8 +479,8 @@ function _resetDrawer() {
         <span>Subtotal neto</span>
         <span class="amt mono" id="subtotal">${_fmt(CartService.subtotal())}</span>
       </div>
-      <button class="btn" id="pagarBtn" style="width:100%;justify-content:center;">Generar cotización →</button>
-      <div class="drawer-note">Precios netos, sin IVA. Al confirmar generamos una cotización formal en nuestro sistema.</div>
+      <button class="btn" id="pagarBtn" style="width:100%;justify-content:center;">Confirmar pedido →</button>
+      <div class="drawer-note">Precios netos, sin IVA. Te contactaremos por WhatsApp para coordinar el pago.</div>
     `;
     foot.querySelector('#pagarBtn')?.addEventListener('click', _showCheckoutForm);
   }
@@ -425,10 +519,10 @@ function _showCheckoutForm() {
     foot.style.display = '';
     foot.innerHTML = `
       <button class="btn" id="confirmarBtn" style="width:100%;justify-content:center;">
-        Confirmar y generar cotización →
+        Confirmar y enviar pedido →
       </button>
       <button onclick="_resetDrawer()"
-        style="background:none;border:none;color:var(--text-dim);font-size:13px;cursor:pointer;margin-top:10px;width:100%;">
+        style="background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;margin-top:10px;width:100%;">
         ← Volver al carrito
       </button>
     `;
@@ -455,13 +549,13 @@ async function _submitCheckout() {
 
   try {
     const res    = await OrderService.checkout(clienteData);
-    const numero = res?.numero_cotizacion || res?.numero || 'N/A';
+    const numero = res?.numero || res?.numero_pedido || 'N/A';
     CartService.clear();
     _showConfirmedView(numero, clienteData);
   } catch (e) {
     console.error('Checkout error:', e);
-    if (btn) { btn.disabled = false; btn.textContent = 'Confirmar y generar cotización →'; }
-    alert('Error al generar cotización. Por favor intenta nuevamente o contáctanos por WhatsApp.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirmar y enviar pedido →'; }
+    alert('Error al enviar el pedido. Por favor intenta nuevamente o contáctanos por WhatsApp.');
   }
 }
 
@@ -469,18 +563,19 @@ function _showConfirmedView(numero, cliente) {
   const items = document.getElementById('drawerItems');
   const foot  = document.getElementById('drawerFoot');
   const head  = document.querySelector('.drawer-head h3');
-  if (head) head.textContent = '¡Cotización generada!';
+  if (head) head.textContent = '¡Pedido recibido!';
 
   items.innerHTML = `
     <div style="text-align:center;padding:32px 16px;">
       <div style="font-size:52px;margin-bottom:14px;">✅</div>
-      <div class="mono" style="font-size:20px;font-weight:700;color:#fff;margin-bottom:8px;">${numero}</div>
-      <div style="color:var(--text-dim);font-size:14px;line-height:1.6;margin-bottom:24px;">
-        Un ejecutivo te contactará a<br><strong style="color:#fff;">${cliente.email || cliente.telefono}</strong><br>para coordinar condiciones y despacho.
+      <div class="mono" style="font-size:20px;font-weight:700;color:var(--blue);margin-bottom:8px;">${numero}</div>
+      <div style="color:var(--text-mid);font-size:14px;line-height:1.7;margin-bottom:20px;">
+        Pago coordinado por transferencia o contraentrega —<br>
+        te contactaremos por <strong style="color:var(--text-dark);">WhatsApp</strong> para confirmar el pago.
       </div>
-      <button class="btn" onclick="_downloadPdf('${numero}')" style="width:100%;justify-content:center;margin-bottom:10px;">
-        📄 Descargar cotización PDF
-      </button>
+      <div style="background:var(--section-alt);border:1.5px solid var(--card-border);border-radius:10px;padding:14px;font-size:13px;color:var(--text-mid);">
+        Confirmación enviada a<br><strong style="color:var(--text-dark);">${cliente.email || cliente.telefono}</strong>
+      </div>
     </div>
   `;
 
@@ -488,7 +583,7 @@ function _showConfirmedView(numero, cliente) {
     foot.style.display = '';
     foot.innerHTML = `
       <button class="btn" onclick="closeCart()"
-        style="width:100%;justify-content:center;background:rgba(255,255,255,0.08);border:1px solid var(--border);">
+        style="width:100%;justify-content:center;">
         Cerrar
       </button>
     `;

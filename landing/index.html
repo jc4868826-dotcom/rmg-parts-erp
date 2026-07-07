@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RMG Parts — Todo lo que tu vehículo necesita</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <!-- jsPDF para PDF real de cotización -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
@@ -33,40 +32,118 @@
     </a>
     <nav class="main-nav">
       <a href="#categorias">Categorías</a>
+      <a href="#por-marca">Por marca de equipo</a>
       <a href="#destacados">Destacados</a>
       <a href="#segmentos">Segmentos</a>
     </nav>
     <div class="nav-actions">
-      <button class="icon-btn" id="searchToggleBtn" title="Buscar">🔍</button>
+      <button class="icon-btn" id="searchToggleBtn" title="Buscar" onclick="document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'});setTimeout(()=>document.getElementById('buscadorInput').focus(),400)">🔍</button>
       <button class="icon-btn" onclick="openCart()" title="Carrito">
         🛒
         <span class="cart-count" id="cartCount">0</span>
       </button>
+      <button class="nav-contact-btn" id="heroWaBtn">Contacto</button>
     </div>
   </div>
 </header>
 
-<!-- ===== HERO ===== -->
-<section class="hero">
-  <div class="hero-bg">
-    <img src="assets/img/rmg_brand_hero.png" alt="RMG Parts">
+<!-- ===== CATEGORY STRIP ===== -->
+<div class="cat-strip">
+  <div class="cat-strip-inner">
+    <div class="cat-strip-item" data-q="bateria"><span class="cat-strip-icon">🔋</span>Baterías</div>
+    <div class="cat-strip-item" data-q="neumatico"><span class="cat-strip-icon">🛞</span>Neumáticos</div>
+    <div class="cat-strip-item" data-q="lubricante"><span class="cat-strip-icon">🛢️</span>Lubricantes</div>
+    <div class="cat-strip-item" data-q="grasa"><span class="cat-strip-icon">⚙️</span>Grasas</div>
+    <div class="cat-strip-item" data-q="refrigerante"><span class="cat-strip-icon">🌡️</span>Refrigerantes</div>
+    <div class="cat-strip-item" data-q="freno"><span class="cat-strip-icon">🔴</span>Líq. Frenos</div>
+    <div class="cat-strip-item" data-q="quimico"><span class="cat-strip-icon">🧪</span>Químicos</div>
+    <div class="cat-strip-item" data-q="aditivo"><span class="cat-strip-icon">💧</span>Aditivos</div>
   </div>
-  <div class="hero-content">
-    <div class="hero-eyebrow">Distribuidora B2B · Santiago, Chile</div>
-    <h1 class="hero-title">Lubricantes,<br>baterías y<br><em>neumáticos</em></h1>
-    <p class="hero-sub">+650 SKUs en catálogo real. Despacho a todo Chile. Crédito, factura y entrega coordinada para tu operación.</p>
-    <div class="hero-cta">
-      <button class="btn" onclick="document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'});setTimeout(()=>document.getElementById('buscadorInput').focus(),400)">Ver catálogo →</button>
-      <button class="btn btn-white" id="heroWaBtn">WhatsApp ejecutivo</button>
+</div>
+
+<!-- ===== HERO CAROUSEL ===== -->
+<div class="carousel" id="heroCarousel">
+  <div class="carousel-track" id="carouselTrack">
+
+    <!-- Slide 1 — Lubricantes -->
+    <div class="slide">
+      <div class="slide-bg">
+        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="70" y="10" width="60" height="120" rx="12" fill="#0B7FE0"/>
+          <rect x="80" y="0" width="40" height="18" rx="6" fill="#065AA3"/>
+          <rect x="60" y="130" width="80" height="60" rx="10" fill="#3FA5F5"/>
+          <rect x="75" y="145" width="50" height="8" rx="3" fill="#fff" opacity=".4"/>
+          <rect x="75" y="160" width="36" height="6" rx="3" fill="#fff" opacity=".25"/>
+        </svg>
+      </div>
+      <div class="slide-content">
+        <div class="slide-eyebrow">Distribuidora B2B · Santiago, Chile</div>
+        <h1 class="slide-title">Lubricantes<br>para tu <em>operación</em></h1>
+        <p class="slide-sub">Aceites en bidón, tambor e IBC. Más de 239 SKUs activos con entrega coordinada.</p>
+        <div class="slide-cta">
+          <button class="btn" onclick="_categoryFilter('lubricante')">Ver lubricantes →</button>
+          <button class="btn btn-outline" id="bulkWaBtn">Coordinar por WhatsApp</button>
+        </div>
+      </div>
     </div>
-    <div class="hero-stats">
-      <div class="hero-stat"><div class="num">+650</div><div class="lbl">SKUs activos</div></div>
-      <div class="hero-stat"><div class="num">7</div><div class="lbl">Categorías</div></div>
-      <div class="hero-stat"><div class="num">B2B</div><div class="lbl">Precio mayorista</div></div>
-      <div class="hero-stat"><div class="num">CHL</div><div class="lbl">Despacho nacional</div></div>
+
+    <!-- Slide 2 — Baterías -->
+    <div class="slide">
+      <div class="slide-bg">
+        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="30" y="50" width="140" height="110" rx="14" fill="#0B7FE0"/>
+          <rect x="70" y="35" width="28" height="20" rx="5" fill="#065AA3"/>
+          <rect x="102" y="35" width="28" height="20" rx="5" fill="#065AA3"/>
+          <rect x="50" y="80" width="30" height="50" rx="5" fill="#fff" opacity=".18"/>
+          <rect x="90" y="80" width="30" height="50" rx="5" fill="#fff" opacity=".18"/>
+          <rect x="130" y="80" width="20" height="50" rx="5" fill="#fff" opacity=".18"/>
+          <line x1="80" y1="115" x2="120" y2="95" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".5"/>
+        </svg>
+      </div>
+      <div class="slide-content">
+        <div class="slide-eyebrow">Baterías — Auto y Maquinaria</div>
+        <h1 class="slide-title">Baterías de<br><em>alto rendimiento</em></h1>
+        <p class="slide-sub">Platin y Yoko G&B para autos, tractores y maquinaria pesada. Crédito y factura incluidos.</p>
+        <div class="slide-cta">
+          <button class="btn" onclick="_categoryFilter('bateria')">Ver baterías →</button>
+          <button class="btn btn-outline" onclick="document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'})">Buscar por SKU</button>
+        </div>
+      </div>
     </div>
+
+    <!-- Slide 3 — Neumáticos -->
+    <div class="slide">
+      <div class="slide-bg">
+        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="100" cy="100" r="80" fill="#0B7FE0"/>
+          <circle cx="100" cy="100" r="50" fill="#EEF2F7"/>
+          <circle cx="100" cy="100" r="28" fill="#0B7FE0"/>
+          <circle cx="100" cy="100" r="14" fill="#065AA3"/>
+          <rect x="96" y="22" width="8" height="22" rx="4" fill="#3FA5F5" opacity=".6"/>
+          <rect x="96" y="156" width="8" height="22" rx="4" fill="#3FA5F5" opacity=".6"/>
+          <rect x="22" y="96" width="22" height="8" rx="4" fill="#3FA5F5" opacity=".6"/>
+          <rect x="156" y="96" width="22" height="8" rx="4" fill="#3FA5F5" opacity=".6"/>
+        </svg>
+      </div>
+      <div class="slide-content">
+        <div class="slide-eyebrow">Neumáticos — Auto, Camión y Tractor</div>
+        <h1 class="slide-title">Neumáticos para<br><em>toda maquinaria</em></h1>
+        <p class="slide-sub">Double Star, Kumho y Kenda. 138+ SKUs para auto, camión, tractor y maquinaria agrícola.</p>
+        <div class="slide-cta">
+          <button class="btn" onclick="_categoryFilter('neumatico')">Ver neumáticos →</button>
+          <button class="btn btn-outline" onclick="document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'})">Buscar por medida</button>
+        </div>
+      </div>
+    </div>
+
   </div>
-</section>
+
+  <div class="carousel-dots">
+    <button class="carousel-dot active" data-idx="0"></button>
+    <button class="carousel-dot" data-idx="1"></button>
+    <button class="carousel-dot" data-idx="2"></button>
+  </div>
+</div>
 
 <!-- ===== BUSCADOR ===== -->
 <section class="finder-section">
@@ -108,37 +185,106 @@
   </div>
 </section>
 
-<!-- ===== CATEGORIAS ===== -->
+<!-- ===== CATEGORIAS BNL ===== -->
 <section id="categorias" class="light-bg">
   <div class="container">
     <div class="section-head">
-      <div><h2>Repuestos para auto y maquinaria</h2></div>
-      <a class="see-all" href="#destacados">Ver productos →</a>
+      <div><h2>Baterías, Neumáticos y Lubricantes</h2><p>El catálogo completo para tu operación — un solo proveedor, un solo despacho.</p></div>
+      <a class="see-all" href="#destacados">Ver todos los productos →</a>
     </div>
-    <div class="pair-row">
-      <div class="pair-card" data-search="neumatico auto"><div class="tag">NEUMÁTICOS</div><h3>Para autos</h3><div class="count">Double Star · Kumho · Kenda</div><div class="bigicon">🛞</div></div>
-      <div class="pair-card" data-search="neumatico tractor"><div class="tag">NEUMÁTICOS</div><h3>Para tractores y camiones</h3><div class="count">138 SKU en total</div><div class="bigicon">🚜</div></div>
+
+    <!-- Level 1 — 3 big cards -->
+    <div class="bnl-row">
+      <div class="bnl-card" data-search="bateria">
+        <div>
+          <div class="bnl-card-tag">Baterías</div>
+          <div class="bnl-card-title">Baterías</div>
+          <div class="bnl-card-sub">83+ SKUs · Auto y maquinaria</div>
+          <div class="bnl-card-brands">
+            <span class="bnl-brand-chip">Platin</span>
+            <span class="bnl-brand-chip">Yoko G&amp;B</span>
+          </div>
+        </div>
+        <div class="bnl-card-icon">🔋</div>
+      </div>
+      <div class="bnl-card" data-search="neumatico">
+        <div>
+          <div class="bnl-card-tag">Neumáticos</div>
+          <div class="bnl-card-title">Neumáticos</div>
+          <div class="bnl-card-sub">138+ SKUs · Auto, camión y tractor</div>
+          <div class="bnl-card-brands">
+            <span class="bnl-brand-chip">Kumho</span>
+            <span class="bnl-brand-chip">Double Star</span>
+            <span class="bnl-brand-chip">Kenda</span>
+          </div>
+        </div>
+        <div class="bnl-card-icon">🛞</div>
+      </div>
+      <div class="bnl-card" data-search="lubricante">
+        <div>
+          <div class="bnl-card-tag">Lubricantes</div>
+          <div class="bnl-card-title">Lubricantes</div>
+          <div class="bnl-card-sub">239+ SKUs · Bidón, tambor e IBC</div>
+          <div class="bnl-card-brands">
+            <span class="bnl-brand-chip">Auster</span>
+            <span class="bnl-brand-chip">Sintek</span>
+            <span class="bnl-brand-chip">Vistony</span>
+          </div>
+        </div>
+        <div class="bnl-card-icon">🛢️</div>
+      </div>
     </div>
-    <div class="pair-row">
-      <div class="pair-card" data-search="bateria auto"><div class="tag">BATERÍAS</div><h3>Para autos</h3><div class="count">Platin · Yoko G&amp;B</div><div class="bigicon">🔋</div></div>
-      <div class="pair-card" data-search="bateria maquinaria"><div class="tag">BATERÍAS</div><h3>Para tractores y maquinaria</h3><div class="count">83 SKU en total</div><div class="bigicon">⚙️</div></div>
+
+    <!-- Level 2 — 5 compact cards -->
+    <div class="bnl-row-sm">
+      <div class="bnl-card-sm" data-search="grasa">
+        <div class="bnl-card-sm-icon">⚙️</div>
+        <div class="bnl-card-sm-tag">Grasas</div>
+        <div class="bnl-card-sm-count">49 SKU</div>
+      </div>
+      <div class="bnl-card-sm" data-search="refrigerante">
+        <div class="bnl-card-sm-icon">🌡️</div>
+        <div class="bnl-card-sm-tag">Refrigerantes / AdBlue</div>
+        <div class="bnl-card-sm-count">30 SKU</div>
+      </div>
+      <div class="bnl-card-sm" data-search="freno">
+        <div class="bnl-card-sm-icon">🔴</div>
+        <div class="bnl-card-sm-tag">Líq. de Frenos</div>
+        <div class="bnl-card-sm-count">17 SKU</div>
+      </div>
+      <div class="bnl-card-sm" data-search="quimico">
+        <div class="bnl-card-sm-icon">🧪</div>
+        <div class="bnl-card-sm-tag">Químicos</div>
+        <div class="bnl-card-sm-count">77 SKU</div>
+      </div>
+      <div class="bnl-card-sm" data-search="aditivo">
+        <div class="bnl-card-sm-icon">💧</div>
+        <div class="bnl-card-sm-tag">Aditivos</div>
+        <div class="bnl-card-sm-count">20 SKU</div>
+      </div>
     </div>
-    <div class="pair-row">
-      <div class="pair-card" data-search="aceite bidon"><div class="tag">ACEITES</div><h3>En bidón</h3><div class="count">Attom · Sintek · Auster</div><div class="bigicon">🧴</div></div>
-      <div class="pair-card" data-search="aceite tambor"><div class="tag">ACEITES</div><h3>En tambor / IBC</h3><div class="count">239 SKU en total</div><div class="bigicon">🛢️</div></div>
+  </div>
+</section>
+
+<!-- ===== POR MARCA DE EQUIPO ===== -->
+<section id="por-marca" class="alt-bg">
+  <div class="container">
+    <div class="section-head">
+      <div><h2>Por marca de equipo</h2><p>Filtra por tipo de maquinaria.</p></div>
     </div>
-    <div class="pair-row" style="grid-template-columns:repeat(5,1fr);margin-top:6px;">
-      <div class="pair-card" style="min-height:auto;padding:18px;" data-search="quimico"><div class="tag">QUÍMICOS</div><h3 style="font-size:16px;">77 SKU</h3></div>
-      <div class="pair-card" style="min-height:auto;padding:18px;" data-search="grasa"><div class="tag">GRASAS</div><h3 style="font-size:16px;">49 SKU</h3></div>
-      <div class="pair-card" style="min-height:auto;padding:18px;" data-search="refrigerante"><div class="tag">REFRIGERANTES</div><h3 style="font-size:16px;">30 SKU</h3></div>
-      <div class="pair-card" style="min-height:auto;padding:18px;" data-search="aditivo"><div class="tag">ADITIVOS</div><h3 style="font-size:16px;">20 SKU</h3></div>
-      <div class="pair-card" style="min-height:auto;padding:18px;" data-search="freno"><div class="tag">FRENOS</div><h3 style="font-size:16px;">17 SKU</h3></div>
+    <div class="chip-row">
+      <span class="chip" data-q="neumatico auto">🛞 Neumáticos auto</span>
+      <span class="chip" data-q="neumatico tractor">🚜 Neumáticos tractor</span>
+      <span class="chip" data-q="bateria auto">🔋 Baterías auto</span>
+      <span class="chip" data-q="bateria maquinaria">⚙️ Baterías maquinaria</span>
+      <span class="chip" data-q="aceite bidon">🧴 Aceites bidón</span>
+      <span class="chip" data-q="aceite tambor">🛢️ Aceites tambor/IBC</span>
     </div>
   </div>
 </section>
 
 <!-- ===== PRODUCTOS DESTACADOS ===== -->
-<section id="destacados" class="alt-bg" style="border-top:1.5px solid var(--card-border);border-bottom:1.5px solid var(--card-border);">
+<section id="destacados" class="light-bg" style="border-top:1.5px solid var(--card-border);border-bottom:1.5px solid var(--card-border);">
   <div class="container">
     <div class="section-head">
       <div>
@@ -160,7 +306,7 @@
 </section>
 
 <!-- ===== FORMATOS GRANDES ===== -->
-<section id="formatos-grandes" class="light-bg">
+<section id="formatos-grandes" class="alt-bg">
   <div class="container">
     <div class="bulk-banner">
       <div>
@@ -171,7 +317,7 @@
           <span class="bulk-tag">IBC 1.000L</span><span class="bulk-tag">AdBlue / Urea</span>
         </div>
       </div>
-      <button class="btn btn-wa" id="bulkWaBtn">
+      <button class="btn btn-wa" id="bulkWaBtnSec">
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.001 2.003c-5.522 0-10 4.477-10 10 0 1.765.46 3.464 1.334 4.965L2 22l5.164-1.323A9.953 9.953 0 0012 22.003c5.523 0 10-4.477 10-10s-4.477-10-9.999-10zm0 18.166a8.14 8.14 0 01-4.16-1.14l-.298-.177-3.065.785.82-2.988-.194-.307a8.16 8.16 0 01-1.264-4.339c0-4.512 3.672-8.183 8.184-8.183 4.512 0 8.183 3.671 8.183 8.183-.002 4.512-3.672 8.166-8.206 8.166z"/></svg>
         Coordinar por WhatsApp
       </button>
@@ -307,8 +453,8 @@
   </div>
   <div class="drawer-foot" id="drawerFoot">
     <div class="subtotal-row"><span>Subtotal neto</span><span class="amt mono" id="subtotal">$0</span></div>
-    <button class="btn" id="pagarBtn" style="width:100%;justify-content:center;">Generar cotización →</button>
-    <div class="drawer-note">Precios netos, sin IVA. Al confirmar generamos una cotización formal en nuestro sistema.</div>
+    <button class="btn" id="pagarBtn" style="width:100%;justify-content:center;">Confirmar pedido →</button>
+    <div class="drawer-note">Precios netos, sin IVA. Te contactaremos por WhatsApp para coordinar el pago.</div>
   </div>
 </div>
 

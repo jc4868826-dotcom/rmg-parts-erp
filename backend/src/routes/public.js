@@ -4,10 +4,14 @@
  */
 
 const router = require('express').Router()
-const { createDesdeLanding } = require('../controllers/cotizacionesController')
+const { createDesdeLanding: createCotizacionLanding } = require('../controllers/cotizacionesController')
+const { createDesdeLanding: createPedidoLanding }     = require('../controllers/pedidosController')
 
 // POST /api/public/cotizaciones
-// Body: { cliente: {nombre, telefono, email?, rut?}, lineas: [{codigo_sku, cantidad, precio_venta_neto}] }
-router.post('/cotizaciones', createDesdeLanding)
+router.post('/cotizaciones', createCotizacionLanding)
+
+// POST /api/public/pedidos
+// Body: { cliente: {nombre, telefono, email?, rut?}, lineas: [{codigo_sku, descripcion, cantidad, precio_venta_neto}] }
+router.post('/pedidos', createPedidoLanding)
 
 module.exports = router

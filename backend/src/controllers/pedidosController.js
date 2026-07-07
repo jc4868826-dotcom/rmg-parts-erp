@@ -136,4 +136,72 @@ const cambiarEstado = (req, res) => {
   }
 }
 
-module.exports = { getAll, getOne, create, createFromCotizacion, update, cambiarEstado }
+const createDesdeLanding = (req, res) => {
+  try {
+    const { cliente: clienteData, lineas } = req.body
+    if (!clienteData || !clienteData.nombre) {
+      return res.status(400).json({ error: 'Se requiere cliente.nombre' })
+    }
+    if (!Array.isArray(lineas) || lineas.length === 0) {
+      return res.status(400).json({ error: 'Se requiere al menos una línea de producto' })
+    }
+
+    let clienteId = null
+    let existente = null
+    if (clienteData.rut) {
+      existente = db.prepare('SELECT id FROM clientes WHERE rut = ?').get(clienteData.rut)
+    }
+    if (!existente && clienteData.email) {
+      existente = db.prepare('SELECT id FROM clientes WHERE email = ? AND activo = 1').get(clienteData.email)
+    }
+    if (existente) {
+      clienteId = existente.id
+    } else {
+      clienteId = uuidv4()
+      db.prepare(`INSERT INTO clientes
+        (id, razon_social, rut, segmento, etapa_pipeline, contacto_nombre, telefono, email)
+        VALUES (?, ?, ?, 'taller', 'prospecto', ?, ?, ?)`)
+        .run(clienteId, clienteData.nombre, clienteData.rut || null,
+             clienteData.nombre, clienteData.telefono || null, clienteData.email || null)
+    }
+
+    const items = lineas.map(l => ({
+      codigo_sku:      l.codigo_sku,
+      descripcion:     l.descripcion || l.codigo_sku,
+      cantidad:        Number(l.cantidad) || 1,
+      precio_unitario: Number(l.precio_venta_neto) || 0,
+      descuento_pct:   0,
+      subtotal:        Math.round((Number(l.cantidad) || 1) * (Number(l.precio_venta_neto) || 0))
+    }))
+    const neto  = items.reduce((a, b) => a + b.subtotal, 0)
+    const iva   = Math.round(neto * 0.19)
+    const total = neto + iva
+
+    const count = db.prepare('SELECT COUNT(*) as n FROM pedidos').get().n
+    const numero = `PED-2026-L${String(count + 1).padStart(3, '0')}`
+    const id = uuidv4()
+
+    db.prepare(`INSERT INTO pedidos
+      (id,numero,cliente_id,cliente,estado,neto,iva,total,condicion_pago,notas)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(id, numero, clienteId, clienteData.nombre, 'pendiente',
+           neto, iva, total, 'Contado',
+           `Pedido landing — ${clienteData.telefono || clienteData.email || ''}`)
+
+    const ins = db.prepare(`
+      INSERT INTO pedido_items
+        (pedido_id, codigo_sku, descripcion, cantidad, precio_unitario, descuento_pct, subtotal)
+      VALUES (?,?,?,?,?,?,?)
+    `)
+    for (const item of items) {
+      ins.run(id, item.codigo_sku || null, item.descripcion || null,
+        item.cantidad, item.precio_unitario, item.descuento_pct, item.subtotal)
+    }
+
+    res.status(201).json({ pedido_id: id, numero, total })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getAll, getOne, create, createFromCotizacion, update, cambiarEstado, createDesdeLanding }

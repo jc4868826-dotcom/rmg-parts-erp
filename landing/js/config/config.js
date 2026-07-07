@@ -10,6 +10,7 @@ const CONFIG = {
     categorias: 'mock',
     login:      '/api/auth/login',
     carrito:    '/api/public/cotizaciones',
+    pedidos:    '/api/public/pedidos',
     inventario: '/api/inventario'
   },
 

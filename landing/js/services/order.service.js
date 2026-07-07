@@ -10,7 +10,7 @@ const OrderService = {
 
     if (CONFIG.USE_MOCK_DATA) {
       const order = {
-        numero:    `DEMO-${Date.now()}`,
+        numero:    `PED-DEMO-${Date.now()}`,
         total:     CartService.total(),
         items:     STATE.cart,
         createdAt: new Date().toISOString()
@@ -20,7 +20,7 @@ const OrderService = {
       return order;
     }
 
-    const res = await api.post(CONFIG.ENDPOINTS.carrito, {
+    const res = await api.post(CONFIG.ENDPOINTS.pedidos, {
       cliente: clienteData,
       lineas
     });
