@@ -214,8 +214,8 @@ function _renderProducts(products) {
   if (!grid) return;
 
   if (!products || !products.length) {
-    grid.className = 'prod-list';
-    grid.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--text-dim);">Sin resultados para esta búsqueda.</div>';
+    grid.className = 'prod-cards';
+    grid.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--text-muted);">Sin resultados para esta búsqueda.</div>';
     return;
   }
 
@@ -227,17 +227,17 @@ function _renderProducts(products) {
     return (a.presentacion || '').localeCompare(b.presentacion || '', 'es');
   });
 
-  grid.className = 'prod-list';
+  grid.className = 'prod-cards';
   grid.innerHTML = sorted.map(p => `
-    <div class="prod-row" onclick="showProductDetail('${p.sku}')">
-      <div class="prod-row-marca">${p.marca || '—'}</div>
-      <div class="prod-row-desc">
-        <span class="prod-row-name">${p.nombre}</span>
-        <span class="prod-row-sku mono">${p.sku || p.id || ''}</span>
+    <div class="prod-card" onclick="showProductDetail('${p.sku}')">
+      <div class="prod-card-marca">${p.marca || '—'}</div>
+      <div class="prod-card-desc">
+        <span class="prod-card-name">${p.nombre}</span>
+        <span class="prod-card-sku mono">${p.sku || p.id || ''}</span>
       </div>
-      <div class="prod-row-pres">${p.presentacion || ''}</div>
-      <div class="prod-row-price mono">${_fmt(p.precio)}</div>
-      <button class="prod-row-add" onclick="event.stopPropagation();addToCart('${p.id}')" title="Agregar al carrito">+</button>
+      <div class="prod-card-pres">${p.presentacion || ''}</div>
+      <div class="prod-card-price mono">${_fmt(p.precio)}</div>
+      <button class="prod-card-add" onclick="event.stopPropagation();addToCart('${p.id}')" title="Agregar al carrito">+</button>
     </div>
   `).join('');
 }
