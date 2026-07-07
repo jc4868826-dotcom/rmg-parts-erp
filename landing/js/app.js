@@ -201,6 +201,20 @@ function goToPage(n) {
   document.getElementById('destacados')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function _openWa() {
+  const WA = CONFIG.WHATSAPP;
+  if (!WA) return;
+  window.open(
+    `https://wa.me/${WA}?text=${encodeURIComponent('Hola, me interesa cotizar en RMG Parts')}`,
+    '_blank', 'noopener'
+  );
+}
+
+function _focusBusqueda() {
+  document.querySelector('.finder-section')?.scrollIntoView({ behavior: 'smooth' });
+  setTimeout(() => document.getElementById('buscadorInput')?.focus(), 400);
+}
+
 // ══ CAROUSEL ═════════════════════════════════════════════════
 
 function _initCarousel() {

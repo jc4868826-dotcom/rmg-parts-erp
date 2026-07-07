@@ -67,72 +67,37 @@
 
     <!-- Slide 1 — Lubricantes -->
     <div class="slide">
-      <div class="slide-bg">
-        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="70" y="10" width="60" height="120" rx="12" fill="#0B7FE0"/>
-          <rect x="80" y="0" width="40" height="18" rx="6" fill="#065AA3"/>
-          <rect x="60" y="130" width="80" height="60" rx="10" fill="#3FA5F5"/>
-          <rect x="75" y="145" width="50" height="8" rx="3" fill="#fff" opacity=".4"/>
-          <rect x="75" y="160" width="36" height="6" rx="3" fill="#fff" opacity=".25"/>
-        </svg>
-      </div>
-      <div class="slide-content">
-        <div class="slide-eyebrow">Distribuidora B2B · Santiago, Chile</div>
-        <h1 class="slide-title">Lubricantes<br>para tu <em>operación</em></h1>
-        <p class="slide-sub">Aceites en bidón, tambor e IBC. Más de 239 SKUs activos con entrega coordinada.</p>
-        <div class="slide-cta">
-          <button class="btn" onclick="_categoryFilter('lubricante')">Ver lubricantes →</button>
-          <button class="btn btn-outline" id="bulkWaBtn">Coordinar por WhatsApp</button>
-        </div>
+      <div class="slide-img-wrap">
+        <img src="assets/img/hero/hero-lubricantes.png" alt="Lubricantes RMG Parts">
+        <div class="slide-zone" style="left:3%;width:13%;top:82%;height:11%;" onclick="_categoryFilter('lubricante')"></div>
+        <div class="slide-zone" style="left:17%;width:17%;top:82%;height:11%;" onclick="_openWa()"></div>
       </div>
     </div>
 
     <!-- Slide 2 — Baterías -->
     <div class="slide">
-      <div class="slide-bg">
-        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="30" y="50" width="140" height="110" rx="14" fill="#0B7FE0"/>
-          <rect x="70" y="35" width="28" height="20" rx="5" fill="#065AA3"/>
-          <rect x="102" y="35" width="28" height="20" rx="5" fill="#065AA3"/>
-          <rect x="50" y="80" width="30" height="50" rx="5" fill="#fff" opacity=".18"/>
-          <rect x="90" y="80" width="30" height="50" rx="5" fill="#fff" opacity=".18"/>
-          <rect x="130" y="80" width="20" height="50" rx="5" fill="#fff" opacity=".18"/>
-          <line x1="80" y1="115" x2="120" y2="95" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".5"/>
-        </svg>
-      </div>
-      <div class="slide-content">
-        <div class="slide-eyebrow">Baterías — Auto y Maquinaria</div>
-        <h1 class="slide-title">Baterías de<br><em>alto rendimiento</em></h1>
-        <p class="slide-sub">Platin y Yoko G&B para autos, tractores y maquinaria pesada. Crédito y factura incluidos.</p>
-        <div class="slide-cta">
-          <button class="btn" onclick="_categoryFilter('bateria')">Ver baterías →</button>
-          <button class="btn btn-outline" onclick="document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'})">Buscar por SKU</button>
-        </div>
+      <div class="slide-img-wrap">
+        <img src="assets/img/hero/hero-baterias.png" alt="Baterías RMG Parts">
+        <div class="slide-zone" style="left:4%;width:11%;top:85%;height:10%;" onclick="_categoryFilter('bateria')"></div>
+        <div class="slide-zone" style="left:17%;width:12%;top:85%;height:10%;" onclick="_focusBusqueda()"></div>
       </div>
     </div>
 
     <!-- Slide 3 — Neumáticos -->
     <div class="slide">
-      <div class="slide-bg">
-        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="100" cy="100" r="80" fill="#0B7FE0"/>
-          <circle cx="100" cy="100" r="50" fill="#EEF2F7"/>
-          <circle cx="100" cy="100" r="28" fill="#0B7FE0"/>
-          <circle cx="100" cy="100" r="14" fill="#065AA3"/>
-          <rect x="96" y="22" width="8" height="22" rx="4" fill="#3FA5F5" opacity=".6"/>
-          <rect x="96" y="156" width="8" height="22" rx="4" fill="#3FA5F5" opacity=".6"/>
-          <rect x="22" y="96" width="22" height="8" rx="4" fill="#3FA5F5" opacity=".6"/>
-          <rect x="156" y="96" width="22" height="8" rx="4" fill="#3FA5F5" opacity=".6"/>
-        </svg>
+      <div class="slide-img-wrap">
+        <img src="assets/img/hero/hero-neumaticos.png" alt="Neumáticos RMG Parts">
+        <div class="slide-zone" style="left:3%;width:13%;top:85%;height:10%;" onclick="_categoryFilter('neumatico')"></div>
+        <div class="slide-zone" style="left:18%;width:15%;top:85%;height:10%;" onclick="_focusBusqueda()"></div>
       </div>
-      <div class="slide-content">
-        <div class="slide-eyebrow">Neumáticos — Auto, Camión y Tractor</div>
-        <h1 class="slide-title">Neumáticos para<br><em>toda maquinaria</em></h1>
-        <p class="slide-sub">Double Star, Kumho y Kenda. 138+ SKUs para auto, camión, tractor y maquinaria agrícola.</p>
-        <div class="slide-cta">
-          <button class="btn" onclick="_categoryFilter('neumatico')">Ver neumáticos →</button>
-          <button class="btn btn-outline" onclick="document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'})">Buscar por medida</button>
-        </div>
+    </div>
+
+    <!-- Slide 4 — Industrial -->
+    <div class="slide">
+      <div class="slide-img-wrap">
+        <img src="assets/img/hero/hero-industrial.png" alt="Industrial RMG Parts">
+        <div class="slide-zone" style="left:4%;width:13%;top:87%;height:10%;" onclick="clearSearch()"></div>
+        <div class="slide-zone" style="left:18%;width:16%;top:87%;height:10%;" onclick="_openWa()"></div>
       </div>
     </div>
 
@@ -142,6 +107,7 @@
     <button class="carousel-dot active" data-idx="0"></button>
     <button class="carousel-dot" data-idx="1"></button>
     <button class="carousel-dot" data-idx="2"></button>
+    <button class="carousel-dot" data-idx="3"></button>
   </div>
 </div>
 
