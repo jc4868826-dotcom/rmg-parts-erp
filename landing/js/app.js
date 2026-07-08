@@ -2,7 +2,20 @@
 //  RMG Parts — App principal (arquitectura HTML estático + JS)
 // ──────────────────────────────────────────────────────────────
 
-let _lastCartItems = []; // snapshot para PDF post-clear
+let _lastCartItems = [];
+
+// Productos destacados fijos — fallback para addToCart antes de que cargue ERP
+const FEATURED_PRODUCTS = [
+  { id:'351404',  sku:'351404',  nombre:'BATERIA YOKO KR 12N24-4 26AMP',          marca:'YOKO G&B',    presentacion:'Unidad',      precio:39281 },
+  { id:'352410',  sku:'352410',  nombre:'BATERIA YOKO KR 35AMP NS40ZL',            marca:'YOKO G&B',    presentacion:'Unidad',      precio:40704 },
+  { id:'PT55566', sku:'PT55566', nombre:'55566 55Ah-390CCA',                       marca:'Platin',      presentacion:'Unidad',      precio:40950 },
+  { id:'210122',  sku:'210122',  nombre:'155/65 R13 DH05',                         marca:'DOUBLE STAR', presentacion:'Unidad',      precio:22099 },
+  { id:'210105',  sku:'210105',  nombre:'175/70 R13 DH05 82T',                     marca:'DOUBLE STAR', presentacion:'Unidad',      precio:28781 },
+  { id:'210125',  sku:'210125',  nombre:'155/65 R14 DH08 75T',                     marca:'DOUBLE STAR', presentacion:'Unidad',      precio:29090 },
+  { id:'7000035', sku:'7000035', nombre:'AUSTER 4T 10W40 1L',                      marca:'AUSTER',      presentacion:'1L',          precio:3384  },
+  { id:'1000622', sku:'1000622', nombre:'SINTEK OIL RAYVON 4T 10W40 JASO MA2 1L', marca:'Vistony',     presentacion:'1L caja x12', precio:4602  },
+  { id:'1000368', sku:'1000368', nombre:'ATTOM RAYVON 4T 15W50 SN JASO MA2 1LT',  marca:'Vistony',     presentacion:'1LT',         precio:4999  },
+];
 
 document.addEventListener('DOMContentLoaded', async () => {
 
@@ -98,14 +111,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Enter' && input.value.trim()) _searchAndRender(input.value.trim());
   });
 
-  // ── Cargar productos ──────────────────────────────────────────
-  _showSkeletons();
+  // ── Cargar productos (silencioso; se muestran sólo al buscar) ─
   try {
     STATE.products = await ProductService.getAll();
-    _renderProducts(_dedup(STATE.products));
   } catch (e) {
     console.error('Error cargando productos del ERP:', e.message);
-    _showProductError();
   }
 
   // ── Refine input ──────────────────────────────────────────────
@@ -166,12 +176,26 @@ function clearSearch() {
   STATE.activeResults = null;
   const refineRow = document.getElementById('refineRow');
   if (refineRow) refineRow.style.display = 'none';
-  _renderProducts(_dedup(STATE.products));
+  _showFeatured();
+}
+
+function _showFeatured() {
+  document.getElementById('prodGrid').style.display = 'none';
+  document.getElementById('featuredGrid').style.display = '';
+  const pag = document.getElementById('paginacionRow');
+  if (pag) pag.innerHTML = '';
+}
+
+function _showResults() {
+  document.getElementById('featuredGrid').style.display = 'none';
+  document.getElementById('prodGrid').style.display = '';
 }
 
 function addToCart(id) {
-  const product = STATE.products.find(p => String(p.id) === String(id))
-               || (STATE.searchResults || []).find(p => String(p.id) === String(id));
+  const match = p => String(p.id) === String(id) || String(p.sku) === String(id);
+  const product = STATE.products.find(match)
+               || (STATE.searchResults || []).find(match)
+               || FEATURED_PRODUCTS.find(match);
   if (!product) return;
   CartService.add(product);
   _showToast('Agregado al carrito');
@@ -405,6 +429,7 @@ function _norm(s) {
 }
 
 function _categoryFilter(q) {
+  _showResults();
   document.getElementById('prodSectionTitle').textContent = `Resultados: "${q}"`;
   document.getElementById('prodSectionSub').textContent = '';
   document.getElementById('clearSearchBtn').style.display = '';
@@ -420,6 +445,7 @@ function _categoryFilter(q) {
 }
 
 function _segmentFilter(segmento) {
+  _showResults();
   document.getElementById('prodSectionTitle').textContent = `Segmento: ${segmento}`;
   document.getElementById('prodSectionSub').textContent = '';
   document.getElementById('clearSearchBtn').style.display = '';
@@ -433,6 +459,7 @@ function _segmentFilter(segmento) {
 }
 
 async function _searchAndRender(q) {
+  _showResults();
   document.getElementById('prodSectionTitle').textContent = `Resultados: "${q}"`;
   document.getElementById('prodSectionSub').textContent = '';
   document.getElementById('clearSearchBtn').style.display = '';
