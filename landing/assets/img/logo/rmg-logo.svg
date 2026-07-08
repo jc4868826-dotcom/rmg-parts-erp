@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 92" width="300" height="92">
+  <g transform="skewX(-10)">
+    <rect x="10" y="8" width="13" height="76" fill="#27A8E0"/>
+    <rect x="30" y="8" width="13" height="76" fill="#016EB9"/>
+    <rect x="50" y="8" width="13" height="76" fill="#415463"/>
+  </g>
+  <text x="78" y="62" font-family="'Space Grotesk','Arial',sans-serif" font-weight="800" font-size="52" letter-spacing="0" fill="#2C3A44">RMG</text>
+  <text x="185" y="80" font-family="'Space Grotesk','Arial',sans-serif" font-weight="700" font-size="15" letter-spacing="3" fill="#0F5A93">PARTS</text>
+</svg>
