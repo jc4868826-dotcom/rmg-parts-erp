@@ -59,6 +59,10 @@ img{max-width:100%;display:block;}
 .topbar .container{display:flex;justify-content:space-between;align-items:center;height:34px;}
 .topbar .contact{display:flex;gap:20px;}
 .topbar strong{color:#fff;}
+.topbar-right{display:flex;gap:16px;align-items:center;}
+.topbar-social{display:flex;gap:12px;align-items:center;}
+.topbar-social a{color:#6A7A8E;display:flex;transition:color .15s;}
+.topbar-social a:hover{color:#fff;}
 
 /* ===== HEADER (dark) ===== */
 header{
