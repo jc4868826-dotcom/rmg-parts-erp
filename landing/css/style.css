@@ -149,7 +149,7 @@ nav.main-nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
   position:relative;background:var(--section-bg);
   overflow:hidden;user-select:none;
 }
-.carousel-track{display:flex;transition:transform .5s cubic-bezier(.4,0,.2,1);}
+.carousel-track{display:flex;transition:transform .8s cubic-bezier(.4,0,.2,1);}
 .slide{
   min-width:100%;
   aspect-ratio:1746/900;

@@ -255,10 +255,10 @@ function _initCarousel() {
   }
 
   dots.forEach((dot, i) => {
-    dot.addEventListener('click', () => { clearInterval(timer); go(i); timer = setInterval(() => go(current + 1), 3000); });
+    dot.addEventListener('click', () => { clearInterval(timer); go(i); timer = setInterval(() => go(current + 1), 4500); });
   });
 
-  timer = setInterval(() => go(current + 1), 3000);
+  timer = setInterval(() => go(current + 1), 4500);
 }
 
 // ══ PRIVADOS ═════════════════════════════════════════════════
