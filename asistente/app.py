@@ -246,13 +246,13 @@ REGLAS PARA ESTA RESPUESTA:
 
 @app.route("/catalogo-ingenieria")
 def catalogo_ingenieria():
-    """Expone el catálogo de ingeniería como JSON para el ERP (proxy server-to-server)."""
+    """Expone el catálogo de ingeniería completo para la pestaña Catálogo del ERP.
+    Incluye jerarquía (Familia/Subfamilia/Sub-subfamilia) y datos técnicos."""
     df = _load_ing()
     if df is None:
         return jsonify([])
-    cols = ['Artículo', 'Composición (Ingeniería)', 'Resistencia Técnica / Aplicación']
-    available = [c for c in cols if c in df.columns]
-    records = df[available].where(pd.notna(df[available]), other=None).to_dict(orient='records')
+    # Devolver todos los campos disponibles (el JSON ya tiene la jerarquía completa)
+    records = df.where(pd.notna(df), other=None).to_dict(orient='records')
     return jsonify(records)
 
 

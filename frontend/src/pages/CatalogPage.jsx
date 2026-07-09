@@ -1,203 +1,357 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
-import { formatCLP } from '@utils/format'
-import { Search, Package, FlaskConical } from 'lucide-react'
+import { Search, ChevronRight, FlaskConical } from 'lucide-react'
 
-const CATS = [
-  { key: '', label: 'Todos' },
-  { key: 'bateria', label: 'Baterías' },
-  { key: 'lubricante', label: 'Lubricantes' },
-  { key: 'neumatico', label: 'Neumáticos' },
-]
-
-const CAT_COLOR = {
-  bateria:   { bg: 'rgba(56,182,255,0.12)',  text: 'var(--rmg-blt)',    label: 'Batería' },
-  lubricante:{ bg: 'rgba(45,201,138,0.12)',  text: 'var(--rmg-teal)',   label: 'Lubricante' },
-  neumatico: { bg: 'rgba(244,162,60,0.12)',  text: 'var(--rmg-gold)',   label: 'Neumático' },
-  grasa:     { bg: 'rgba(123,97,196,0.12)',  text: 'var(--rmg-purple)', label: 'Grasa' },
-}
-
-/** Match parcial: igual criterio que enriquecer_descripcion() en motor_rmg.py.
- *  El catálogo llega ordenado por longitud desc → primer hit es el más específico. */
-function matchIngenieria(desc, catalog) {
-  const descUpper = (desc || '').toUpperCase()
-  for (const row of catalog) {
-    const art = (row['Artículo'] || '').toUpperCase().trim()
-    if (art.length > 3 && descUpper.includes(art)) {
-      return {
-        composicion: row['Composición (Ingeniería)'] || 'No especificada por proveedor',
-        aplicacion:  row['Resistencia Técnica / Aplicación'] || 'No especificada por proveedor',
-      }
-    }
-  }
-  return null
-}
-
-/** Badge reutilizable para datos técnicos en validación. */
+// ─── Badge único reutilizable ────────────────────────────────────────────────
 function ValidationBadge() {
   return (
     <span
-      title="Datos de Composición y Aplicación en revisión contra fichas técnicas del fabricante"
+      title="Datos técnicos del proveedor en revisión contra fichas del fabricante"
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 4,
+        display: 'inline-flex', alignItems: 'center', gap: 3,
         fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-        padding: '2px 7px', borderRadius: 100,
+        padding: '1px 6px', borderRadius: 100,
         background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)',
         border: '1px solid rgba(244,162,60,0.3)', whiteSpace: 'nowrap',
+        verticalAlign: 'middle',
       }}
     >
-      <FlaskConical size={10} />
+      <FlaskConical size={9} />
       En validación
     </span>
   )
 }
 
+// ─── Fila de artículo (nivel 4 — hoja) ──────────────────────────────────────
+function ArticuloRow({ row, i }) {
+  return (
+    <tr
+      style={{
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)',
+      }}
+      className="hover:bg-white/[0.02] transition-colors"
+    >
+      <td className="px-4 py-3" style={{ minWidth: 180 }}>
+        <div className="font-semibold text-sm" style={{ color: 'var(--rmg-off)' }}>
+          {row['Artículo']}
+        </div>
+        {row['Marca(s)'] && (
+          <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-blt)' }}>
+            {row['Marca(s)']}
+          </div>
+        )}
+        {row['Proveedor(es)'] && (
+          <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+            {row['Proveedor(es)']}
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)', minWidth: 100 }}>
+        {row['Tipo / Especificación'] || <span style={{ opacity: 0.3 }}>—</span>}
+      </td>
+      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)', minWidth: 180 }}>
+        {row['Presentaciones'] || <span style={{ opacity: 0.3 }}>—</span>}
+      </td>
+      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)', maxWidth: 220 }}>
+        {row['Composición (Ingeniería)'] || <span style={{ opacity: 0.3 }}>—</span>}
+      </td>
+      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)', maxWidth: 260 }}>
+        {row['Resistencia Técnica / Aplicación'] || <span style={{ opacity: 0.3 }}>—</span>}
+      </td>
+    </tr>
+  )
+}
+
+// ─── Encabezado de tabla de artículos (reutilizado en cada bloque) ───────────
+function ArticuloTableHeader() {
+  return (
+    <thead>
+      <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+        {[
+          'Artículo / Marca',
+          'Tipo / Especificación',
+          'Presentaciones',
+        ].map(h => (
+          <th key={h} className="text-left px-4 py-2 text-xs uppercase tracking-wider font-semibold"
+              style={{ color: 'var(--rmg-muted)' }}>
+            {h}
+          </th>
+        ))}
+        <th className="text-left px-4 py-2 text-xs uppercase tracking-wider font-semibold"
+            style={{ color: 'var(--rmg-muted)' }}>
+          Composición&nbsp;<ValidationBadge />
+        </th>
+        <th className="text-left px-4 py-2 text-xs uppercase tracking-wider font-semibold"
+            style={{ color: 'var(--rmg-muted)' }}>
+          Resistencia / Aplicación&nbsp;<ValidationBadge />
+        </th>
+      </tr>
+    </thead>
+  )
+}
+
+// ─── Colores por Familia ──────────────────────────────────────────────────────
+const FAM_COLOR = {
+  'LUBRICANTES':                   { bg: 'rgba(45,201,138,0.12)',  text: 'var(--rmg-teal)' },
+  'BATERÍAS':                      { bg: 'rgba(56,182,255,0.12)',  text: 'var(--rmg-blt)'  },
+  'NEUMÁTICOS':                    { bg: 'rgba(244,162,60,0.12)',  text: 'var(--rmg-gold)' },
+  'GRASAS':                        { bg: 'rgba(123,97,196,0.12)', text: 'var(--rmg-purple)' },
+  'QUÍMICOS Y CUIDADO VEHICULAR':  { bg: 'rgba(244,80,80,0.10)',  text: 'var(--rmg-red)'  },
+  'REFRIGERANTES Y ADITIVOS DIESEL':{ bg: 'rgba(56,182,255,0.08)', text: 'var(--rmg-blt)' },
+  'ADITIVOS':                      { bg: 'rgba(45,201,138,0.08)', text: 'var(--rmg-teal)' },
+  'LÍQUIDO DE FRENOS':             { bg: 'rgba(244,162,60,0.08)', text: 'var(--rmg-gold)' },
+}
+
+function famColor(fam) {
+  return FAM_COLOR[fam] || { bg: 'rgba(255,255,255,0.06)', text: 'var(--rmg-muted)' }
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 export default function CatalogPage() {
-  const [cat, setCat]         = useState('')
-  const [search, setSearch]   = useState('')
+  const [search, setSearch]       = useState('')
+  const [openFam, setOpenFam]     = useState(null)
+  const [openSub, setOpenSub]     = useState(null)    // "Fam::Sub"
+  const [openSubSub, setOpenSubSub] = useState(null)  // "Fam::Sub::SubSub"
 
-  const { data: productos = [], isLoading } = useQuery({
-    queryKey: ['productos', cat],
-    queryFn: () => api.get('/productos', { params: { categoria: cat || undefined } }).then(r => r.data),
-  })
-
-  const { data: ingenieria = [] } = useQuery({
-    queryKey: ['catalogo-ingenieria'],
+  const { data: catalog = [], isLoading } = useQuery({
+    queryKey: ['catalogo-ing'],
     queryFn:  () => api.get('/public/catalogo-ingenieria').then(r => r.data),
-    staleTime: 10 * 60 * 1000,   // estático — 10 min antes de refrescar
+    staleTime: 15 * 60 * 1000,
     retry: 1,
   })
 
-  const filtered = productos.filter(p => {
-    if (!search) return true
+  // Filtrar por búsqueda
+  const filtered = useMemo(() => {
+    if (!search.trim()) return catalog
     const q = search.toLowerCase()
-    return p.descripcion.toLowerCase().includes(q) || p.codigo.includes(q) || p.marca.toLowerCase().includes(q)
-  })
+    return catalog.filter(row =>
+      (row['Artículo']    || '').toLowerCase().includes(q) ||
+      (row['Marca(s)']    || '').toLowerCase().includes(q) ||
+      (row['Familia']     || '').toLowerCase().includes(q) ||
+      (row['Subfamilia']  || '').toLowerCase().includes(q)
+    )
+  }, [catalog, search])
+
+  // Construir árbol Familia → Subfamilia → Sub-subfamilia → [artículos]
+  const tree = useMemo(() => {
+    const t = {}
+    filtered.forEach(row => {
+      const fam    = row['Familia']         || 'Sin clasificar'
+      const sub    = row['Subfamilia']      || 'General'
+      const subsub = row['Sub-subfamilia']  || '__direct__'
+      if (!t[fam])        t[fam] = {}
+      if (!t[fam][sub])   t[fam][sub] = {}
+      if (!t[fam][sub][subsub]) t[fam][sub][subsub] = []
+      t[fam][sub][subsub].push(row)
+    })
+    return t
+  }, [filtered])
+
+  const isSearching = search.trim().length > 0
+  const famKeys = Object.keys(tree)
+
+  function toggleFam(fam) {
+    setOpenFam(prev => prev === fam ? null : fam)
+    setOpenSub(null)
+    setOpenSubSub(null)
+  }
+  function toggleSub(fam, sub) {
+    const key = `${fam}::${sub}`
+    setOpenSub(prev => prev === key ? null : key)
+    setOpenSubSub(null)
+  }
+  function toggleSubSub(fam, sub, subsub) {
+    const key = `${fam}::${sub}::${subsub}`
+    setOpenSubSub(prev => prev === key ? null : key)
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
 
-      <div className="flex justify-between items-start">
+      {/* Encabezado */}
+      <div className="flex justify-between items-start flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Catálogo de productos</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>KUMHO · AUSTER · YOKO G&B · DOUBLE STAR — precios mayoristas B2B neto sin IVA</p>
+          <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>
+            Catálogo de ingeniería
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+            {isLoading ? '…' : `${catalog.length} artículos`}
+            {' · '}Familia › Subfamilia › Sub-subfamilia › Artículo
+          </p>
         </div>
-        <div className="text-sm font-semibold px-3 py-1.5 rounded-lg" style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)', border: '1px solid rgba(56,182,255,0.2)' }}>
-          {filtered.length} SKUs
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--rmg-muted)' }} />
+        {/* Buscador */}
+        <div className="relative" style={{ minWidth: 280 }}>
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--rmg-muted)' }} />
           <input
-            className="rmg-input pl-9"
-            placeholder="Buscar por descripción, código o marca..."
+            className="rmg-input pl-9 w-full"
+            placeholder="Artículo, marca, familia o subfamilia…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-1">
-          {CATS.map(c => (
-            <button
-              key={c.key}
-              onClick={() => setCat(c.key)}
-              className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
-              style={cat === c.key
-                ? { background: 'var(--rmg-blue)', color: '#fff' }
-                : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
-              }
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Tabla */}
-      <div className="rmg-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Código</th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Descripción</th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Categoría</th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>
-                <span style={{ marginRight: 6 }}>Composición</span>
-                <ValidationBadge />
-              </th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>
-                <span style={{ marginRight: 6 }}>Aplicación</span>
-                <ValidationBadge />
-              </th>
-              <th className="text-right px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>P. B2B Base</th>
-              <th className="text-right px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Stock</th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Unidad</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading
-              ? Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    {Array.from({ length: 8 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)', width: `${60 + j * 5}%` }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              : filtered.map((p, i) => {
-                  const style    = CAT_COLOR[p.categoria] || CAT_COLOR.grasa
-                  const stockOk  = p.stock_actual > p.stock_minimo * 1.5
-                  const stockBajo = p.stock_actual <= p.stock_minimo
-                  const ing      = matchIngenieria(p.descripcion, ingenieria)
-                  return (
-                    <tr
-                      key={p.codigo}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
-                      className="hover:bg-white/[0.02] transition-colors"
-                    >
-                      <td className="px-4 py-3 font-mono text-xs font-semibold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium" style={{ color: 'var(--rmg-off)' }}>{p.marca}</div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{p.descripcion}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: style.bg, color: style.text }}>
-                          {style.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)', maxWidth: 220 }}>
-                        {ing ? ing.composicion : <span style={{ opacity: 0.3 }}>—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)', maxWidth: 220 }}>
-                        {ing ? ing.aplicacion : <span style={{ opacity: 0.3 }}>—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>
-                        {formatCLP(p.precio_b2b_base)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="font-bold" style={{ color: stockBajo ? 'var(--rmg-red)' : stockOk ? 'var(--rmg-teal)' : 'var(--rmg-gold)' }}>
-                          {p.stock_actual}
-                        </span>
-                        <span className="text-xs ml-1" style={{ color: 'var(--rmg-muted)' }}>/ mín {p.stock_minimo}</span>
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{p.unidad}</td>
-                    </tr>
-                  )
-                })
-            }
-          </tbody>
-        </table>
-        {!isLoading && filtered.length === 0 && (
-          <div className="py-16 text-center" style={{ color: 'var(--rmg-muted)' }}>
-            <Package size={32} className="mx-auto mb-3 opacity-30" />
-            <p>No se encontraron productos para "{search}"</p>
-          </div>
-        )}
-      </div>
+      {/* Estado de carga */}
+      {isLoading && (
+        <div className="rmg-card p-8 text-center" style={{ color: 'var(--rmg-muted)' }}>
+          <div className="h-4 w-48 rounded animate-pulse mx-auto" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <p className="mt-3 text-sm">Cargando catálogo…</p>
+        </div>
+      )}
+
+      {/* Vista árbol */}
+      {!isLoading && (
+        <div className="space-y-2">
+          {famKeys.length === 0 && (
+            <div className="rmg-card py-16 text-center" style={{ color: 'var(--rmg-muted)' }}>
+              <Search size={28} className="mx-auto mb-3 opacity-30" />
+              <p>Sin resultados para «{search}»</p>
+            </div>
+          )}
+
+          {famKeys.map(fam => {
+            const subKeys   = Object.keys(tree[fam])
+            const famTotal  = subKeys.reduce((n, s) =>
+              n + Object.values(tree[fam][s]).reduce((m, arr) => m + arr.length, 0), 0)
+            const isFamOpen = isSearching || openFam === fam
+            const col       = famColor(fam)
+
+            return (
+              <div key={fam} className="rmg-card overflow-hidden">
+                {/* Nivel 1 — Familia */}
+                <button
+                  className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors"
+                  style={{ background: isFamOpen ? col.bg : 'transparent' }}
+                  onClick={() => toggleFam(fam)}
+                >
+                  <ChevronRight
+                    size={16}
+                    style={{
+                      color: col.text,
+                      transform: isFamOpen ? 'rotate(90deg)' : 'none',
+                      transition: 'transform 0.18s',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span className="font-bold text-sm tracking-wide" style={{ color: col.text }}>
+                    {fam}
+                  </span>
+                  <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full"
+                        style={{ background: col.bg, color: col.text }}>
+                    {famTotal} artículo{famTotal !== 1 ? 's' : ''}
+                  </span>
+                </button>
+
+                {isFamOpen && (
+                  <div style={{ borderTop: `1px solid rgba(255,255,255,0.06)` }}>
+                    {subKeys.map(sub => {
+                      const subSubKeys = Object.keys(tree[fam][sub])
+                      const subTotal   = subSubKeys.reduce((n, ss) => n + tree[fam][sub][ss].length, 0)
+                      const subKey     = `${fam}::${sub}`
+                      const isSubOpen  = isSearching || openSub === subKey
+                      // Si hay solo __direct__ (sin Sub-subfamilia), mostrar artículos directo
+                      const directOnly = subSubKeys.length === 1 && subSubKeys[0] === '__direct__'
+
+                      return (
+                        <div key={sub}>
+                          {/* Nivel 2 — Subfamilia */}
+                          <button
+                            className="w-full flex items-center gap-3 px-8 py-2.5 text-left transition-colors hover:bg-white/[0.02]"
+                            style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+                            onClick={() => toggleSub(fam, sub)}
+                          >
+                            <ChevronRight
+                              size={13}
+                              style={{
+                                color: 'var(--rmg-muted)',
+                                transform: isSubOpen ? 'rotate(90deg)' : 'none',
+                                transition: 'transform 0.15s',
+                                flexShrink: 0,
+                              }}
+                            />
+                            <span className="text-sm font-semibold" style={{ color: 'var(--rmg-off)' }}>{sub}</span>
+                            <span className="ml-auto text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                              {subTotal}
+                            </span>
+                          </button>
+
+                          {isSubOpen && (
+                            directOnly
+                              /* Sin Sub-subfamilia → tabla directa */
+                              ? (
+                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                  <table className="w-full text-sm">
+                                    <ArticuloTableHeader />
+                                    <tbody>
+                                      {tree[fam][sub]['__direct__'].map((row, i) => (
+                                        <ArticuloRow key={row['Artículo']} row={row} i={i} />
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )
+                              /* Con Sub-subfamilia */
+                              : subSubKeys.map(subsub => {
+                                  const ssKey   = `${fam}::${sub}::${subsub}`
+                                  const isSsOpen = isSearching || openSubSub === ssKey
+                                  const items   = tree[fam][sub][subsub]
+                                  const label   = subsub === '__direct__' ? 'General' : subsub
+
+                                  return (
+                                    <div key={subsub}>
+                                      {/* Nivel 3 — Sub-subfamilia */}
+                                      <button
+                                        className="w-full flex items-center gap-3 px-12 py-2 text-left transition-colors hover:bg-white/[0.02]"
+                                        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+                                        onClick={() => toggleSubSub(fam, sub, subsub)}
+                                      >
+                                        <ChevronRight
+                                          size={11}
+                                          style={{
+                                            color: 'var(--rmg-muted)',
+                                            transform: isSsOpen ? 'rotate(90deg)' : 'none',
+                                            transition: 'transform 0.15s',
+                                            flexShrink: 0,
+                                            opacity: 0.6,
+                                          }}
+                                        />
+                                        <span className="text-xs font-medium" style={{ color: 'var(--rmg-muted)' }}>
+                                          {label}
+                                        </span>
+                                        <span className="ml-auto text-xs" style={{ color: 'var(--rmg-muted)', opacity: 0.6 }}>
+                                          {items.length}
+                                        </span>
+                                      </button>
+
+                                      {/* Nivel 4 — Artículos */}
+                                      {isSsOpen && (
+                                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                          <table className="w-full text-sm">
+                                            <ArticuloTableHeader />
+                                            <tbody>
+                                              {items.map((row, i) => (
+                                                <ArticuloRow key={row['Artículo']} row={row} i={i} />
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -24,7 +24,10 @@ def _load_ing():
         try:
             with open(json_path, encoding='utf-8') as f:
                 records = json.load(f)
-            _DF_ING = pd.DataFrame(records)
+            df = pd.DataFrame(records)
+            # Ordenar por longitud desc para que el match más específico gane
+            df = df.sort_values(by='Artículo', key=lambda s: s.str.len(), ascending=False).reset_index(drop=True)
+            _DF_ING = df
             print(f'[motor_rmg] Catálogo de ingeniería (JSON): {len(_DF_ING)} artículos cargados')
             return _DF_ING
         except Exception as e:
