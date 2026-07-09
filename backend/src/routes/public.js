@@ -4,12 +4,24 @@
  */
 
 const router = require('express').Router()
-const axios  = require('axios')
+const fs     = require('fs')
+const path   = require('path')
 const { createDesdeLanding: createCotizacionLanding } = require('../controllers/cotizacionesController')
 const { createDesdeLanding: createPedidoLanding }     = require('../controllers/pedidosController')
 const { db, uuidv4 } = require('../../config/database')
 
-const ASISTENTE_URL = process.env.ASISTENTE_URL || 'https://asistente-7st0.onrender.com'
+// Ruta al JSON de ingeniería — comprometido en el repo, accesible en cualquier servicio Render
+// (desde backend/src/routes/ → ../../../asistente/catalogo_ingenieria.json)
+const _CATALOGO_ING_PATH = path.join(__dirname, '..', '..', '..', 'asistente', 'catalogo_ingenieria.json')
+let _catalogoIngCache = null
+
+function _getCatalogoIng() {
+  if (_catalogoIngCache) return _catalogoIngCache
+  const raw = fs.readFileSync(_CATALOGO_ING_PATH, 'utf8')
+  _catalogoIngCache = JSON.parse(raw)
+  console.log(`[catalogo-ingenieria] Cargados ${_catalogoIngCache.length} artículos desde JSON local`)
+  return _catalogoIngCache
+}
 
 // POST /api/public/cotizaciones
 router.post('/cotizaciones', createCotizacionLanding)
@@ -66,16 +78,15 @@ router.post('/prospectos', (req, res) => {
   }
 })
 
-// GET /api/public/catalogo-ingenieria — proxy server-to-server al asistente ZARA
-// Devuelve Artículo + Composición (Ingeniería) + Resistencia Técnica / Aplicación
-// Nota: datos en revisión contra fichas técnicas del fabricante (ver badge en frontend)
-router.get('/catalogo-ingenieria', async (req, res) => {
+// GET /api/public/catalogo-ingenieria — catálogo de ingeniería con jerarquía completa
+// Lee directamente desde catalogo_ingenieria.json (sin depender del asistente ZARA,
+// que puede estar en cold-start en Render free tier y causar timeout → dataset vacío)
+router.get('/catalogo-ingenieria', (req, res) => {
   try {
-    const { data } = await axios.get(`${ASISTENTE_URL}/catalogo-ingenieria`, { timeout: 10000 })
-    res.json(data)
+    res.json(_getCatalogoIng())
   } catch (err) {
-    // Si el asistente no responde, retornar lista vacía — el frontend omite enriquecimiento
-    res.json([])
+    console.error('[catalogo-ingenieria] Error leyendo JSON:', err.message)
+    res.status(500).json({ error: 'No se pudo cargar el catálogo de ingeniería' })
   }
 })
 
