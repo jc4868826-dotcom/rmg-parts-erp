@@ -6,24 +6,44 @@ import pandas as pd
 _DF_ING = None
 
 def _load_ing():
-    """Carga y cachea RMG_Catalogo_Ingenieria.xlsx al startup.
-    Ordena por longitud de Artículo desc para que el match más específico gane
-    (ej. 'AUSTER MAXFORCE 15W40 CK-4' captura antes que el genérico 'AUSTER')."""
+    """Carga y cachea el catálogo de ingeniería al startup.
+
+    Lee catalogo_ingenieria.json (archivo comprometido en git → presente en Render).
+    Si no existe el JSON, intenta RMG_Catalogo_Ingenieria.xlsx como fallback local.
+    El JSON ya viene pre-ordenado por longitud de Artículo desc (match más
+    específico gana: 'AUSTER MAXFORCE 15W40 CK-4' antes que 'AUSTER')."""
     global _DF_ING
     if _DF_ING is not None:
         return _DF_ING
-    xlsx_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'RMG_Catalogo_Ingenieria.xlsx')
+
+    base = os.path.dirname(os.path.abspath(__file__))
+
+    # ── Opción 1: JSON comprometido en git (producción) ──────────────────────
+    json_path = os.path.join(base, 'catalogo_ingenieria.json')
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, encoding='utf-8') as f:
+                records = json.load(f)
+            _DF_ING = pd.DataFrame(records)
+            print(f'[motor_rmg] Catálogo de ingeniería (JSON): {len(_DF_ING)} artículos cargados')
+            return _DF_ING
+        except Exception as e:
+            print(f'[motor_rmg] Error leyendo JSON: {e}')
+
+    # ── Opción 2: xlsx local (desarrollo) ────────────────────────────────────
+    xlsx_path = os.path.join(base, 'RMG_Catalogo_Ingenieria.xlsx')
     if not os.path.exists(xlsx_path):
-        print('[motor_rmg] RMG_Catalogo_Ingenieria.xlsx no encontrado — enriquecimiento deshabilitado')
+        print('[motor_rmg] Catálogo de ingeniería no encontrado — enriquecimiento deshabilitado')
         return None
     try:
         df = pd.read_excel(xlsx_path)
+        df = df[df['Artículo'].notna()].copy()
         df['Artículo'] = df['Artículo'].astype(str).str.upper().str.strip()
         df = df.sort_values(by='Artículo', key=lambda s: s.str.len(), ascending=False).reset_index(drop=True)
         _DF_ING = df
-        print(f'[motor_rmg] Catálogo de ingeniería cargado: {len(df)} artículos (ordenados por especificidad)')
+        print(f'[motor_rmg] Catálogo de ingeniería (xlsx): {len(_DF_ING)} artículos cargados')
     except Exception as e:
-        print(f'[motor_rmg] Error cargando catálogo de ingeniería: {e}')
+        print(f'[motor_rmg] Error cargando xlsx: {e}')
     return _DF_ING
 
 
