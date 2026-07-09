@@ -10,7 +10,7 @@ def _load_ing():
 
     Lee catalogo_ingenieria.json (archivo comprometido en git → presente en Render).
     Si no existe el JSON, intenta RMG_Catalogo_Ingenieria.xlsx como fallback local.
-    El JSON ya viene pre-ordenado por longitud de Artículo desc (match más
+    El JSON ya viene pre-ordenado por longitud de Línea desc (match más
     específico gana: 'AUSTER MAXFORCE 15W40 CK-4' antes que 'AUSTER')."""
     global _DF_ING
     if _DF_ING is not None:
@@ -26,9 +26,9 @@ def _load_ing():
                 records = json.load(f)
             df = pd.DataFrame(records)
             # Ordenar por longitud desc para que el match más específico gane
-            df = df.sort_values(by='Artículo', key=lambda s: s.str.len(), ascending=False).reset_index(drop=True)
+            df = df.sort_values(by='Línea', key=lambda s: s.str.len(), ascending=False).reset_index(drop=True)
             _DF_ING = df
-            print(f'[motor_rmg] Catálogo de ingeniería (JSON): {len(_DF_ING)} artículos cargados')
+            print(f'[motor_rmg] Catálogo de ingeniería (JSON): {len(_DF_ING)} líneas cargadas')
             return _DF_ING
         except Exception as e:
             print(f'[motor_rmg] Error leyendo JSON: {e}')
@@ -40,9 +40,9 @@ def _load_ing():
         return None
     try:
         df = pd.read_excel(xlsx_path)
-        df = df[df['Artículo'].notna()].copy()
-        df['Artículo'] = df['Artículo'].astype(str).str.upper().str.strip()
-        df = df.sort_values(by='Artículo', key=lambda s: s.str.len(), ascending=False).reset_index(drop=True)
+        df = df[df['Línea'].notna()].copy()
+        df['Línea'] = df['Línea'].astype(str).str.upper().str.strip()
+        df = df.sort_values(by='Línea', key=lambda s: s.str.len(), ascending=False).reset_index(drop=True)
         _DF_ING = df
         print(f'[motor_rmg] Catálogo de ingeniería (xlsx): {len(_DF_ING)} artículos cargados')
     except Exception as e:
@@ -51,7 +51,7 @@ def _load_ing():
 
 
 def enriquecer_descripcion(desc_original, df_ing=None):
-    """Match parcial: busca si algún Artículo del catálogo de ingeniería aparece
+    """Match parcial: busca si alguna Línea del catálogo de ingeniería aparece
     como subcadena de la descripción del producto. Devuelve HTML enriquecido si
     hay match, o la descripción original intacta si no hay.
 
@@ -63,7 +63,7 @@ def enriquecer_descripcion(desc_original, df_ing=None):
         return str(desc_original)
     desc_upper = str(desc_original).upper()
     # df_ing ya está ordenado por longitud desc → primer hit es el más específico
-    mask = df_ing['Artículo'].apply(lambda x: len(x) > 3 and x in desc_upper)
+    mask = df_ing['Línea'].apply(lambda x: len(x) > 3 and x in desc_upper)
     match = df_ing[mask]
     if match.empty:
         return str(desc_original)
