@@ -4,9 +4,12 @@
  */
 
 const router = require('express').Router()
+const axios  = require('axios')
 const { createDesdeLanding: createCotizacionLanding } = require('../controllers/cotizacionesController')
 const { createDesdeLanding: createPedidoLanding }     = require('../controllers/pedidosController')
 const { db, uuidv4 } = require('../../config/database')
+
+const ASISTENTE_URL = process.env.ASISTENTE_URL || 'https://asistente-7st0.onrender.com'
 
 // POST /api/public/cotizaciones
 router.post('/cotizaciones', createCotizacionLanding)
@@ -60,6 +63,19 @@ router.post('/prospectos', (req, res) => {
     res.json({ ok: true, prospecto_id: id })
   } catch (err) {
     res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/public/catalogo-ingenieria — proxy server-to-server al asistente ZARA
+// Devuelve Artículo + Composición (Ingeniería) + Resistencia Técnica / Aplicación
+// Nota: datos en revisión contra fichas técnicas del fabricante (ver badge en frontend)
+router.get('/catalogo-ingenieria', async (req, res) => {
+  try {
+    const { data } = await axios.get(`${ASISTENTE_URL}/catalogo-ingenieria`, { timeout: 10000 })
+    res.json(data)
+  } catch (err) {
+    // Si el asistente no responde, retornar lista vacía — el frontend omite enriquecimiento
+    res.json([])
   }
 })
 

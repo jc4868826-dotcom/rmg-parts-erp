@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP } from '@utils/format'
-import { Search, Package } from 'lucide-react'
+import { Search, Package, FlaskConical } from 'lucide-react'
 
 const CATS = [
   { key: '', label: 'Todos' },
@@ -18,6 +18,41 @@ const CAT_COLOR = {
   grasa:     { bg: 'rgba(123,97,196,0.12)',  text: 'var(--rmg-purple)', label: 'Grasa' },
 }
 
+/** Match parcial: igual criterio que enriquecer_descripcion() en motor_rmg.py.
+ *  El catálogo llega ordenado por longitud desc → primer hit es el más específico. */
+function matchIngenieria(desc, catalog) {
+  const descUpper = (desc || '').toUpperCase()
+  for (const row of catalog) {
+    const art = (row['Artículo'] || '').toUpperCase().trim()
+    if (art.length > 3 && descUpper.includes(art)) {
+      return {
+        composicion: row['Composición (Ingeniería)'] || 'No especificada por proveedor',
+        aplicacion:  row['Resistencia Técnica / Aplicación'] || 'No especificada por proveedor',
+      }
+    }
+  }
+  return null
+}
+
+/** Badge reutilizable para datos técnicos en validación. */
+function ValidationBadge() {
+  return (
+    <span
+      title="Datos de Composición y Aplicación en revisión contra fichas técnicas del fabricante"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+        padding: '2px 7px', borderRadius: 100,
+        background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)',
+        border: '1px solid rgba(244,162,60,0.3)', whiteSpace: 'nowrap',
+      }}
+    >
+      <FlaskConical size={10} />
+      En validación
+    </span>
+  )
+}
+
 export default function CatalogPage() {
   const [cat, setCat]         = useState('')
   const [search, setSearch]   = useState('')
@@ -25,6 +60,13 @@ export default function CatalogPage() {
   const { data: productos = [], isLoading } = useQuery({
     queryKey: ['productos', cat],
     queryFn: () => api.get('/productos', { params: { categoria: cat || undefined } }).then(r => r.data),
+  })
+
+  const { data: ingenieria = [] } = useQuery({
+    queryKey: ['catalogo-ingenieria'],
+    queryFn:  () => api.get('/public/catalogo-ingenieria').then(r => r.data),
+    staleTime: 10 * 60 * 1000,   // estático — 10 min antes de refrescar
+    retry: 1,
   })
 
   const filtered = productos.filter(p => {
@@ -82,6 +124,14 @@ export default function CatalogPage() {
               <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Código</th>
               <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Descripción</th>
               <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Categoría</th>
+              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>
+                <span style={{ marginRight: 6 }}>Composición</span>
+                <ValidationBadge />
+              </th>
+              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>
+                <span style={{ marginRight: 6 }}>Aplicación</span>
+                <ValidationBadge />
+              </th>
               <th className="text-right px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>P. B2B Base</th>
               <th className="text-right px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Stock</th>
               <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Unidad</th>
@@ -91,17 +141,18 @@ export default function CatalogPage() {
             {isLoading
               ? Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
-                        <div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)', width: `${60 + j * 10}%` }} />
+                        <div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)', width: `${60 + j * 5}%` }} />
                       </td>
                     ))}
                   </tr>
                 ))
               : filtered.map((p, i) => {
-                  const style = CAT_COLOR[p.categoria] || CAT_COLOR.grasa
-                  const stockOk = p.stock_actual > p.stock_minimo * 1.5
+                  const style    = CAT_COLOR[p.categoria] || CAT_COLOR.grasa
+                  const stockOk  = p.stock_actual > p.stock_minimo * 1.5
                   const stockBajo = p.stock_actual <= p.stock_minimo
+                  const ing      = matchIngenieria(p.descripcion, ingenieria)
                   return (
                     <tr
                       key={p.codigo}
@@ -117,6 +168,12 @@ export default function CatalogPage() {
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: style.bg, color: style.text }}>
                           {style.label}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)', maxWidth: 220 }}>
+                        {ing ? ing.composicion : <span style={{ opacity: 0.3 }}>—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)', maxWidth: 220 }}>
+                        {ing ? ing.aplicacion : <span style={{ opacity: 0.3 }}>—</span>}
                       </td>
                       <td className="px-4 py-3 text-right font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>
                         {formatCLP(p.precio_b2b_base)}

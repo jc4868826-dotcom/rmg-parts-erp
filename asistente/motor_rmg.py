@@ -1,65 +1,107 @@
 import json
+import os
 import pandas as pd
+
+# ─── Catálogo de ingeniería: cargado UNA sola vez al importar el módulo ────────
+_DF_ING = None
+
+def _load_ing():
+    """Carga y cachea RMG_Catalogo_Ingenieria.xlsx al startup.
+    Ordena por longitud de Artículo desc para que el match más específico gane
+    (ej. 'AUSTER MAXFORCE 15W40 CK-4' captura antes que el genérico 'AUSTER')."""
+    global _DF_ING
+    if _DF_ING is not None:
+        return _DF_ING
+    xlsx_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'RMG_Catalogo_Ingenieria.xlsx')
+    if not os.path.exists(xlsx_path):
+        print('[motor_rmg] RMG_Catalogo_Ingenieria.xlsx no encontrado — enriquecimiento deshabilitado')
+        return None
+    try:
+        df = pd.read_excel(xlsx_path)
+        df['Artículo'] = df['Artículo'].astype(str).str.upper().str.strip()
+        df = df.sort_values(by='Artículo', key=lambda s: s.str.len(), ascending=False).reset_index(drop=True)
+        _DF_ING = df
+        print(f'[motor_rmg] Catálogo de ingeniería cargado: {len(df)} artículos (ordenados por especificidad)')
+    except Exception as e:
+        print(f'[motor_rmg] Error cargando catálogo de ingeniería: {e}')
+    return _DF_ING
+
+
+def enriquecer_descripcion(desc_original, df_ing=None):
+    """Match parcial: busca si algún Artículo del catálogo de ingeniería aparece
+    como subcadena de la descripción del producto. Devuelve HTML enriquecido si
+    hay match, o la descripción original intacta si no hay.
+
+    Los campos vacíos o nan se reemplazan por 'No especificada por proveedor'
+    en lugar de dejarse en blanco o delegarse al LLM."""
+    if df_ing is None:
+        df_ing = _load_ing()
+    if df_ing is None:
+        return str(desc_original)
+    desc_upper = str(desc_original).upper()
+    # df_ing ya está ordenado por longitud desc → primer hit es el más específico
+    mask = df_ing['Artículo'].apply(lambda x: len(x) > 3 and x in desc_upper)
+    match = df_ing[mask]
+    if match.empty:
+        return str(desc_original)
+    row = match.iloc[0]
+    comp_raw = str(row.get('Composición (Ingeniería)', ''))
+    res_raw  = str(row.get('Resistencia Técnica / Aplicación', ''))
+    comp  = comp_raw if comp_raw and comp_raw != 'nan' else 'No especificada por proveedor'
+    aplic = res_raw  if res_raw  and res_raw  != 'nan' else 'No especificada por proveedor'
+    return f"{desc_original}<br>• <b>Comp:</b> {comp}<br>• <b>Aplicación:</b> {aplic}"
+
+
+def enriquecer_df(df_precios):
+    """Precalcula 'Descripcion_Enriquecida' sobre todo el DF de precios.
+    Debe llamarse UNA vez al construir/refrescar el cache, no por consulta."""
+    df_ing = _load_ing()
+    col_desc = (
+        'Descripcion Producto Original'
+        if 'Descripcion Producto Original' in df_precios.columns
+        else df_precios.columns[1]
+    )
+    df = df_precios.copy()
+    df['Descripcion_Enriquecida'] = df[col_desc].apply(
+        lambda d: enriquecer_descripcion(d, df_ing)
+    )
+    return df
+
+
+# Cargar al importar el módulo (startup del servidor)
+_load_ing()
+
 
 def deducir_y_buscar_360(query, client, df_precios):
     prompt_ia = f"""
-    Eres un clasificador B2B experto para RMG Parts Chile. Analiza: "{query}"
+    Eres un ingeniero mecánico automotriz e industrial y director comercial B2B. Analiza el input: "{query}"
 
     Devuelve ÚNICAMENTE un objeto JSON estrictamente válido con esta estructura:
     {{
         "nombre_rubro": "Nombre formal del cliente o flota",
-        "parque_deducido": "Descripción de lo que opera o distribuye",
-        "dolor_critico": "Dolor operativo o comercial principal",
-        "tipo_cliente": "FLOTA" | "DISTRIBUIDOR" | "TALLER" | "TIENDA",
+        "parque_deducido": "Vehículos o maquinaria exacta que operan",
+        "dolor_critico": "Dolor operativo y mecánico principal",
         "segmento_mecanico": "LIVIANO" | "COMERCIAL_LIVIANO" | "REPARTO_MEDIO_PESADO" | "MAQUINARIA_MINERIA",
         "escala_detectada": "CHICA" | "GRANDE" | "DESCONOCIDA",
-        "justificacion_escala": "Explicación de la escala",
-        "modelo_especificado": true,
-        "pregunta_modelo": null,
+        "justificacion_escala": "Explicación de la escala y formato de envase",
         "envases_validos": ["Galon", "Balde", "Tambor", "Unidad"],
-        "insumos_necesarios": [...]
+        "insumos_necesarios": [
+            {{"rol": "Aceite de Motor / Transmisión", "pilar": "🛢️ LUBRICANTES", "keywords": ["15W40", "5W30", "10W40", "FORZA", "ATTOM", "AUSTER"]}},
+            {{"rol": "Grasa Chasis / Rodamientos", "pilar": "⚙️ GRASAS", "keywords": ["EP-2", "LITHIUM", "MOLIBDENO", "COMPLEX"]}},
+            {{"rol": "Batería Cabina / Arranque", "pilar": "🔋 BATERÍAS", "keywords": ["100AMP", "120AMP", "N100", "75AMP", "90AMP", "85D26L", "YOKO", "PLATIN"]}},
+            {{"rol": "Neumático Comercial / Carga", "pilar": "🔘 NEUMÁTICOS", "keywords": ["R17.5", "R22.5", "R16", "R15", "DOUBLE STAR", "KUMHO"]}},
+            {{"rol": "Refrigerante Radiador / OAT", "pilar": "🧪 QUÍMICOS", "keywords": ["COOLANT", "ICE FREEZE", "ORGANIC", "NOAT"]}}
+        ]
     }}
-
-    REGLA PARA tipo_cliente:
-    - FLOTA: constructora, minera, transportista, agrícola — tiene equipos propios
-    - DISTRIBUIDOR: distribuye/revende productos a terceros, mayorista, catalogo
-    - TALLER: repara o hace mantenimiento a vehículos de terceros
-    - TIENDA: vende al mostrador, retail de repuestos
-
-    REGLA PARA insumos_necesarios SEGÚN tipo_cliente:
-
-    Si tipo_cliente = FLOTA:
-    Lista los insumos de mantenimiento de sus equipos. Ejemplo:
-    [
-        {{"rol": "Aceite de Motor", "pilar": "🛢️ LUBRICANTES:MOTOR", "keywords": ["15W40","10W40","5W30","CK-4","MAXFORCE","MAXTECH"]}},
-        {{"rol": "Aceite Hidráulico", "pilar": "🛢️ LUBRICANTES:HIDRAULICO", "keywords": ["HYDRO","HIDRAUL","ISO 46","ISO 68","AW 46","AW 68"]}},
-        {{"rol": "Grasa Multipropósito", "pilar": "⚙️ GRASAS", "keywords": ["EP-2 LITHIUM","MULTIPROPOSITO","MULTIPURPOSE","LITIO"]}},
-        {{"rol": "Batería", "pilar": "🔋 BATERÍAS", "keywords": ["100AMP","120AMP","N100","75AMP"]}},
-        {{"rol": "Neumático", "pilar": "🔘 NEUMÁTICOS", "keywords": ["R17.5","R22.5","R16","1200 R24"]}},
-        {{"rol": "Refrigerante / DEF", "pilar": "🧪 REFRIGERANTES", "keywords": ["COOLANT","ANTIFREEZE","AIRBLUE","DEF","UREA","ICE"]}}
-    ]
-    Para maquinaria pesada (MAQUINARIA_MINERIA) incluye siempre Aceite Hidráulico.
-
-    Si tipo_cliente = DISTRIBUIDOR o TALLER o TIENDA:
-    Lista las CATEGORÍAS DE PRODUCTO de su nicho (no equipos). Ejemplo para
-    distribuidor de aceites de moto:
-    [
-        {{"rol": "Aceite Moto 4T Sintético", "pilar": "🛢️ LUBRICANTES:MOTO", "keywords": ["SINTEK","SYNTHETIC","AGROX","4T"]}},
-        {{"rol": "Aceite Moto 4T Semisintético", "pilar": "🛢️ LUBRICANTES:MOTO", "keywords": ["ATTOM RAYVON","J6000","J8000","4T"]}},
-        {{"rol": "Aceite Moto 4T Mineral", "pilar": "🛢️ LUBRICANTES:MOTO", "keywords": ["RAYVON SUPER 4T","AQUAOIL 4T","SCOOTER","4T"]}},
-        {{"rol": "Aceite Moto 2T", "pilar": "🛢️ LUBRICANTES:MOTO", "keywords": ["2T","RAYVON 2T","AQUAOIL 2T"]}}
-    ]
-    Adapta los keywords exactamente al nicho del cliente. Para talleres o tiendas de
-    auto incluye aceite motor, filtros de aceite, líquidos de frenos, etc.
-
     REGLAS DE CLASIFICACIÓN DE SEGMENTO MECÁNICO:
     1. LIVIANO: Autos particulares, sedanes, city cars.
-    2. COMERCIAL_LIVIANO: Furgones, camionetas 4x4, Sprinter, H1.
-    3. REPARTO_MEDIO_PESADO: Camiones repartidores, flotas medianas/grandes.
-    4. MAQUINARIA_MINERIA: Grúas, excavadoras, cargadores, constructoras, mineras.
+    2. COMERCIAL_LIVIANO: Furgones escolares, camionetas 4x4, Sprinter, H1, utilitarios livianos.
+    3. REPARTO_MEDIO_PESADO: Camiones repartidores de gas, camiones 3/4, camiones rígidos urbanos/interurbanos, flotas de camiones.
+    4. MAQUINARIA_MINERIA: Grúas telescópicas, excavadoras, cargadores frontales, camiones tolva pesados, áridos.
 
-    REGLA: Para DISTRIBUIDOR/TALLER/TIENDA usa segmento_mecanico del producto
-    que venden (ej: distribuidor motos → LIVIANO; taller camiones → REPARTO_MEDIO_PESADO).
+    REGLAS DE ESCALA:
+    - Si no menciona cantidades ni tamaño del negocio, pon "escala_detectada": "DESCONOCIDA".
+    - Si menciona 1 a 5 unidades, pon "CHICA". Si menciona 6 o más, pon "GRANDE".
     """
 
     try:
@@ -72,203 +114,80 @@ def deducir_y_buscar_360(query, client, df_precios):
         data_ia = json.loads(resp.choices[0].message.content)
     except Exception:
         data_ia = {
-            "nombre_rubro": "Flota Comercial / Industrial B2B",
-            "parque_deducido": "Vehículos comerciales pesados o livianos.",
+            "nombre_rubro": "Flota Comercial B2B",
+            "parque_deducido": "Vehículos o maquinaria comercial.",
             "dolor_critico": "Mantenimiento preventivo continuo.",
-            "tipo_cliente": "FLOTA",
             "segmento_mecanico": "REPARTO_MEDIO_PESADO",
-            "escala_detectada": "GRANDE",
-            "justificacion_escala": "Flota operativa comercial.",
-            "modelo_especificado": True,
-            "pregunta_modelo": None,
-            "envases_validos": ["Balde", "Tambor", "Unidad"],
-            "insumos_necesarios": [
-                {"rol": "Aceite de Motor", "pilar": "🛢️ LUBRICANTES:MOTOR", "keywords": ["15W40"]},
-                {"rol": "Aceite Hidráulico", "pilar": "🛢️ LUBRICANTES:HIDRAULICO", "keywords": ["HYDRO", "ISO 46"]},
-                {"rol": "Grasa Multipropósito", "pilar": "⚙️ GRASAS", "keywords": ["EP-2 LITHIUM"]},
-                {"rol": "Batería", "pilar": "🔋 BATERÍAS", "keywords": ["100AMP", "120AMP"]},
-                {"rol": "Neumático", "pilar": "🔘 NEUMÁTICOS", "keywords": ["R17.5", "R22.5"]},
-                {"rol": "Refrigerante / DEF", "pilar": "🧪 REFRIGERANTES", "keywords": ["COOLANT", "AIRBLUE"]}
-            ]
+            "escala_detectada": "CHICA",
+            "justificacion_escala": "Escala estándar.",
+            "envases_validos": ["Galon", "Balde", "Unidad"],
+            "insumos_necesarios": []
         }
 
     df_w = df_precios.copy()
-    col_sku       = 'Codigo SKU' if 'Codigo SKU' in df_w.columns else df_w.columns[7]
-    col_desc      = 'Descripcion Producto Original' if 'Descripcion Producto Original' in df_w.columns else df_w.columns[8]
-    col_env       = 'TIPO DE ENVASE' if 'TIPO DE ENVASE' in df_w.columns else df_w.columns[10]
-    col_cat       = 'Categoria' if 'Categoria' in df_w.columns else df_w.columns[2]
-    col_marca     = 'Marca' if 'Marca' in df_w.columns else df_w.columns[5]
-    col_precio    = 'Precio Venta RMG X ENVASE (+30% Neto)' if 'Precio Venta RMG X ENVASE (+30% Neto)' in df_w.columns else df_w.columns[14]
-    col_und_pack  = 'Unidades por Pack' if 'Unidades por Pack' in df_w.columns else None
-    col_pack_neto = 'Costo Pack Neto' if 'Costo Pack Neto' in df_w.columns else None
-    col_pres      = 'Presentacion' if 'Presentacion' in df_w.columns else col_env
+    col_sku  = 'Codigo SKU' if 'Codigo SKU' in df_w.columns else df_w.columns[7]
+    col_desc = 'Descripcion Producto Original' if 'Descripcion Producto Original' in df_w.columns else df_w.columns[8]
+    col_env  = 'TIPO DE ENVASE' if 'TIPO DE ENVASE' in df_w.columns else df_w.columns[10]
+    col_cat  = 'Categoria' if 'Categoria' in df_w.columns else df_w.columns[2]
+    col_marca = 'Marca' if 'Marca' in df_w.columns else df_w.columns[5]
+    col_precio = 'Precio Venta RMG X ENVASE (+30% Neto)' if 'Precio Venta RMG X ENVASE (+30% Neto)' in df_w.columns else df_w.columns[14]
+    # Usa descripción enriquecida si ya fue precalculada por enriquecer_df()
+    col_desc_enr = 'Descripcion_Enriquecida' if 'Descripcion_Enriquecida' in df_w.columns else col_desc
 
     df_w['_p_num'] = pd.to_numeric(df_w[col_precio], errors='coerce').fillna(0)
-    df_w = df_w[df_w['_p_num'] > 0].copy()
+    df_w = df_w[df_w['_p_num'] > 1000].copy()
 
-    seg         = data_ia.get("segmento_mecanico", "REPARTO_MEDIO_PESADO")
-    tipo_cliente = data_ia.get("tipo_cliente", "FLOTA")
-
-    # Distributors/talleres/tiendas get more options and no envase restriction
-    is_distribuidor = tipo_cliente in ("DISTRIBUIDOR", "TALLER", "TIENDA")
-    MAX_POR_CATEGORIA = 8 if is_distribuidor else 3
-
-    catalogo_lines = []
+    seg = data_ia.get("segmento_mecanico", "REPARTO_MEDIO_PESADO")
+    tabla_out = "| ¿Qué insumo necesita? | Pilar 360° RMG | Marca | SKU Real | Descripción Original RMG | Envase / UM | Precio (+30% Neto) |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
     skus_vistos = set()
 
     for item in data_ia.get("insumos_necesarios", []):
         sub = df_w.copy()
-        pilar = item["pilar"]
 
-        if "NEUMÁTICOS" in pilar:
+        if "NEUMÁTICOS" in item["pilar"]:
             sub = sub[sub[col_cat].astype(str).str.contains("Neuma", case=False, na=False)]
-            if not is_distribuidor:
-                if seg == "LIVIANO":
-                    sub = sub[sub[col_desc].astype(str).str.contains("R13|R14|R15", case=False, na=False) & (sub['_p_num'] < 65000)]
-                elif seg == "COMERCIAL_LIVIANO":
-                    sub = sub[sub[col_desc].astype(str).str.contains("R16|R15C", case=False, na=False) & (sub['_p_num'] >= 38000) & (sub['_p_num'] < 120000)]
-                elif seg == "REPARTO_MEDIO_PESADO":
-                    sub = sub[sub[col_desc].astype(str).str.contains("R17.5|R19.5|R22.5", case=False, na=False) & (sub['_p_num'] >= 90000)]
-                elif seg == "MAQUINARIA_MINERIA":
-                    sub = sub[sub[col_desc].astype(str).str.contains("1200 R24|R22.5|OTR", case=False, na=False) & (sub['_p_num'] >= 180000)]
-
-        elif "BATERÍAS" in pilar:
+            if seg == "LIVIANO":
+                sub = sub[sub[col_desc].astype(str).str.contains("R13|R14|R15", case=False, na=False) & (sub['_p_num'] < 65000)]
+            elif seg == "COMERCIAL_LIVIANO":
+                sub = sub[sub[col_desc].astype(str).str.contains("R16|R15C", case=False, na=False) & (sub['_p_num'] >= 38000) & (sub['_p_num'] < 120000)]
+            elif seg == "REPARTO_MEDIO_PESADO":
+                sub = sub[sub[col_desc].astype(str).str.contains("R17.5|R19.5|R22.5", case=False, na=False) & (sub['_p_num'] >= 90000)]
+            elif seg == "MAQUINARIA_MINERIA":
+                sub = sub[sub[col_desc].astype(str).str.contains("1200 R24|R22.5|OTR", case=False, na=False) & (sub['_p_num'] >= 180000)]
+        elif "BATERÍAS" in item["pilar"]:
             sub = sub[sub[col_cat].astype(str).str.contains("Bateria", case=False, na=False)]
-            if not is_distribuidor:
-                if seg == "LIVIANO":
-                    sub = sub[(sub['_p_num'] >= 35000) & (sub['_p_num'] < 60000)]
-                elif seg == "COMERCIAL_LIVIANO":
-                    sub = sub[(sub['_p_num'] >= 55000) & (sub['_p_num'] <= 98000)]
-                elif seg == "REPARTO_MEDIO_PESADO":
-                    sub = sub[(sub['_p_num'] >= 100000) & (sub['_p_num'] <= 150000)]
-                elif seg == "MAQUINARIA_MINERIA":
-                    sub = sub[(sub['_p_num'] >= 130000)]
-
-        elif "LUBRICANTES:MOTOR" in pilar and not is_distribuidor:
-            # Heavy/diesel motor oils for fleet — exclude motorcycle-specific oils
-            sub = sub[sub[col_cat].astype(str).str.contains("Lubricante", case=False, na=False)]
-            moto_excl = sub[col_desc].astype(str).str.upper().str.contains(r"4T |2T |MOTO|RAYVON|SCOOTER|JASO", na=False)
-            sub = sub[~moto_excl]
-            mask = pd.Series(False, index=sub.index)
-            for kw in item["keywords"]:
-                if len(str(kw)) >= 2:
-                    mask = mask | sub[col_desc].astype(str).str.upper().str.contains(str(kw).upper(), na=False)
-            sub = sub[mask]
-            mask_env = pd.Series(False, index=sub.index)
-            for env in data_ia.get("envases_validos", ["Galon", "Balde", "Unidad"]):
-                mask_env = mask_env | sub[col_env].astype(str).str.upper().str.contains(str(env).upper(), na=False)
-            if not sub[mask_env].empty:
-                sub = sub[mask_env]
-
-        elif "LUBRICANTES:HIDRAULICO" in pilar:
-            sub = sub[sub[col_cat].astype(str).str.contains("Lubricante", case=False, na=False)]
-            mask = pd.Series(False, index=sub.index)
-            for kw in item["keywords"]:
-                mask = mask | sub[col_desc].astype(str).str.upper().str.contains(str(kw).upper(), na=False)
-            sub = sub[mask]
-            if not is_distribuidor:
-                mask_env = pd.Series(False, index=sub.index)
-                for env in data_ia.get("envases_validos", ["Galon", "Balde", "Unidad"]):
-                    mask_env = mask_env | sub[col_env].astype(str).str.upper().str.contains(str(env).upper(), na=False)
-                if not sub[mask_env].empty:
-                    sub = sub[mask_env]
-
-        elif "LUBRICANTES:MOTO" in pilar:
-            sub = sub[sub[col_cat].astype(str).str.contains("Lubricante", case=False, na=False)]
-            mask = pd.Series(False, index=sub.index)
-            for kw in item["keywords"]:
-                mask = mask | sub[col_desc].astype(str).str.upper().str.contains(str(kw).upper(), na=False)
-            # Must also contain a moto indicator to avoid mixing with car oils
-            moto_mask = sub[col_desc].astype(str).str.upper().str.contains("MOTO|4T |2T |SCOOTER|RAYVON|AQUAOIL", na=False)
-            sub = sub[mask & moto_mask]
-
-        elif "REFRIGERANTES" in pilar:
-            sub = sub[sub[col_cat].astype(str).str.contains("Refrigerante|Quimico|Aditivo", case=False, na=False)]
-            mask = pd.Series(False, index=sub.index)
-            for kw in item["keywords"]:
-                mask = mask | sub[col_desc].astype(str).str.upper().str.contains(str(kw).upper(), na=False)
-            sub = sub[mask]
-
+            if seg == "LIVIANO":
+                sub = sub[(sub['_p_num'] >= 35000) & (sub['_p_num'] < 60000)]
+            elif seg == "COMERCIAL_LIVIANO":
+                sub = sub[(sub['_p_num'] >= 55000) & (sub['_p_num'] <= 98000)]
+            elif seg == "REPARTO_MEDIO_PESADO":
+                sub = sub[(sub['_p_num'] >= 95000) & (sub['_p_num'] <= 150000)]
+            elif seg == "MAQUINARIA_MINERIA":
+                sub = sub[(sub['_p_num'] >= 130000)]
         else:
             mask_spec = pd.Series(False, index=sub.index)
             for kw in item["keywords"]:
                 if len(str(kw)) >= 2:
                     mask_spec = mask_spec | sub[col_desc].astype(str).str.upper().str.contains(str(kw).upper(), na=False)
             sub = sub[mask_spec]
-            if not is_distribuidor:
-                mask_env = pd.Series(False, index=sub.index)
-                for env in data_ia.get("envases_validos", ["Galon", "Balde", "Unidad"]):
-                    mask_env = mask_env | sub[col_env].astype(str).str.upper().str.contains(str(env).upper(), na=False)
-                if not sub[mask_env].empty:
-                    sub = sub[mask_env]
+
+            mask_env = pd.Series(False, index=sub.index)
+            for env in data_ia.get("envases_validos", ["Galon", "Balde", "Unidad"]):
+                mask_env = mask_env | sub[col_env].astype(str).str.upper().str.contains(str(env).upper(), na=False)
+            if not sub[mask_env].empty:
+                sub = sub[mask_env]
 
         sub = sub.sort_values('_p_num')
-        conteo = 0
         for _, row in sub.iterrows():
-            if conteo >= MAX_POR_CATEGORIA:
-                break
             sku = str(row[col_sku]).split('.')[0]
             if sku in skus_vistos:
                 continue
             skus_vistos.add(sku)
             marca = str(row[col_marca]) if pd.notna(row[col_marca]) else "Vistony"
-            _und   = int(float(row[col_und_pack]))  if col_und_pack  and pd.notna(row[col_und_pack])  and float(row[col_und_pack])  > 0 else 1
-            _pack  = float(row[col_pack_neto]) if col_pack_neto and pd.notna(row[col_pack_neto]) and float(row[col_pack_neto]) > 0 else row['_p_num']
-            _pres  = str(row[col_pres]) if pd.notna(row[col_pres]) else str(row[col_env])
-            pack_fmt = f"${_pack:,.0f}".replace(',', '.')
-            unit_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
-            catalogo_lines.append(
-                f"{item['rol']} | {sku} | {marca} | {row[col_desc]} | {_pres} | {_und} | {pack_fmt} | {unit_fmt}"
-            )
-            conteo += 1
+            p_fmt = f"${row['_p_num']:,.0f} CLP".replace(',', '.')
+            # Descripción ya enriquecida por enriquecer_df() al cargar el cache
+            desc_final = str(row[col_desc_enr])
+            tabla_out += f"| **{item['rol']}** | {item['pilar']} | **{marca}** | `{sku}` | {desc_final} | {row[col_env]} | **{p_fmt}** |\n"
+            break
 
-    # Build the COMPLETE catalog from all 653 deduplicated SKUs (same source as
-    # frontend "Artículos únicos" tab). Products already in catalogo_lines keep
-    # their ROL_INSUMO label; remaining ones are appended with their category.
-    full_catalog_lines = []
-    for _, row in df_w.sort_values('_p_num').iterrows():
-        sku = str(row[col_sku]).split('.')[0]
-        if sku in skus_vistos:
-            continue  # already included with a ROL_INSUMO label above
-        skus_vistos.add(sku)
-        marca     = str(row[col_marca]) if pd.notna(row[col_marca]) else "Vistony"
-        cat_label = str(row[col_cat])   if pd.notna(row[col_cat])   else "General"
-        _und  = int(float(row[col_und_pack]))  if col_und_pack  and pd.notna(row[col_und_pack])  and float(row[col_und_pack])  > 0 else 1
-        _pack = float(row[col_pack_neto]) if col_pack_neto and pd.notna(row[col_pack_neto]) and float(row[col_pack_neto]) > 0 else row['_p_num']
-        _pres = str(row[col_pres]) if pd.notna(row[col_pres]) else str(row[col_env])
-        pack_fmt = f"${_pack:,.0f}".replace(',', '.')
-        unit_fmt = f"${row['_p_num']:,.0f}".replace(',', '.')
-        full_catalog_lines.append(
-            f"{sku} | {marca} | {row[col_desc]} | {cat_label} | {_pres} | {_und} | {pack_fmt} | {unit_fmt}"
-        )
-
-    total_unicos = len(catalogo_lines) + len(full_catalog_lines)
-    print(f"[MOTOR] Catálogo inyectado a GPT: {total_unicos} artículos únicos "
-          f"({len(catalogo_lines)} con ROL + {len(full_catalog_lines)} catálogo completo)")
-
-    # Section 1: contextual products with ROL_INSUMO label (aids GPT table mapping)
-    seccion_rol = ""
-    if catalogo_lines:
-        seccion_rol = (
-            "PRODUCTOS IDENTIFICADOS PARA ESTE RUBRO (con tipo de uso):\n"
-            "ROL_INSUMO | SKU | MARCA | DESCRIPCION | PRESENTACION | UND_X_PACK | PRECIO_PACK | PRECIO_UNIT\n"
-            + "\n".join(catalogo_lines)
-            + "\n\n"
-        )
-
-    # Section 2: complete catalog — every real SKU available in RMG
-    seccion_completa = (
-        f"CATALOGO REAL RMG PARTS ({total_unicos} articulos unicos):\n"
-        "SKU | Marca | Descripcion | Categoria | Presentacion | UND_X_PACK | PRECIO_PACK | PRECIO_UNIT\n"
-        + "\n".join(full_catalog_lines)
-    )
-
-    catalogo_str = (
-        seccion_rol
-        + seccion_completa
-        + "\nREGLA CRITICA: si un producto no aparece en las listas de arriba, "
-        "NO EXISTE en RMG. Escribe 'No disponible en RMG' en esa celda. NUNCA "
-        "inventes un SKU, nombre o precio que no este literalmente en estas listas."
-    )
-
-    return catalogo_str, data_ia
+    return tabla_out, data_ia

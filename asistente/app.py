@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
 from dotenv import load_dotenv
-from motor_rmg import deducir_y_buscar_360
+from motor_rmg import deducir_y_buscar_360, enriquecer_df, _load_ing
 
 load_dotenv()
 
@@ -50,9 +50,10 @@ def _get_df():
             "Costo Pack Neto":                        r.get("costo_pack_neto") or 0,
             "Precio Venta RMG X ENVASE (+30% Neto)": r.get("precio_venta_neto", 0),
         } for r in deduped])
+        df = enriquecer_df(df)   # precalcula Descripcion_Enriquecida una vez por cache TTL
         _cache["df"] = df
         _cache["ts"] = now
-        print(f"\n---> CEREBRO DINÁMICO RMG: {len(df)} SKUs conectados desde ERP <---\n")
+        print(f"\n---> CEREBRO DINÁMICO RMG: {len(df)} SKUs conectados desde ERP (con cruce de ingeniería) <---\n")
         return df
     except Exception as e:
         print(f"[ERP] Error al cargar datos: {e}")
@@ -205,6 +206,19 @@ Para TIPO B, usa los productos del catalogo agrupados por sub-categoria
 de producto segun lo que necesita el distribuidor. Muestra TODOS los
 productos disponibles en cada sub-categoria, no solo uno.
 
+INSTRUCCION ANTI-ALUCINACION — DATOS DE COMPOSICION Y APLICACION:
+Algunas descripciones de producto incluyen campos "Comp:" y "Aplicación:" que provienen
+del cruce con el catálogo de ingeniería del proveedor. Estos datos son provisorios y están
+en proceso de validación contra fichas técnicas del fabricante.
+- No debes inferir, calcular ni completar especificaciones por tu cuenta: reproduce la
+  tabla tal como se te entrega.
+- Justifica tu recomendación basándote exclusivamente en los datos de Composición y
+  Aplicación de esa tabla.
+- Si la tabla indica "No especificada por proveedor", dilo explícitamente al cliente en
+  vez de completarlo con tu propio conocimiento.
+- Presenta los datos de Composición/Aplicación como "información técnica del proveedor"
+  (no como garantía de RMG).
+
 REGLAS ABSOLUTAS:
 - SOLO productos reales del catalogo RMG (los datos que recibes del ERP)
 - NUNCA inventes SKUs, precios ni productos
@@ -228,6 +242,18 @@ REGLAS PARA ESTA RESPUESTA:
 5. ROL INTERNO — NUNCA CLIENTE FINAL: El usuario es el vendedor, no el comprador. Refiérete al prospecto en tercera persona ("su cliente", "la constructora", "su flota"). Si pide avanzar, sugiere el próximo paso que ÉL debería dar con SU cliente.
 6. PRODUCTOS FUERA DE CATÁLOGO: Si algo no está en el catálogo visible en el historial, dilo en una línea y sugiere cómo igual cerrar negocio con lo que sí tiene RMG.
 """
+
+
+@app.route("/catalogo-ingenieria")
+def catalogo_ingenieria():
+    """Expone el catálogo de ingeniería como JSON para el ERP (proxy server-to-server)."""
+    df = _load_ing()
+    if df is None:
+        return jsonify([])
+    cols = ['Artículo', 'Composición (Ingeniería)', 'Resistencia Técnica / Aplicación']
+    available = [c for c in cols if c in df.columns]
+    records = df[available].where(pd.notna(df[available]), other=None).to_dict(orient='records')
+    return jsonify(records)
 
 
 @app.route("/")
