@@ -1168,6 +1168,42 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('stock_seed_v1')
     console.log('✅ Migración stock_seed_v1 — stock_actual = 10 en todos los productos')
   }
+
+  // Migration 12: catalogo_campos_v1 — rubro + aplicacion en lista_precios
+  const m12 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('catalogo_campos_v1')
+  if (!m12) {
+    const cols12 = db.prepare('PRAGMA table_info(lista_precios)').all()
+    if (!cols12.some(c => c.name === 'rubro')) db.exec('ALTER TABLE lista_precios ADD COLUMN rubro TEXT')
+    if (!cols12.some(c => c.name === 'aplicacion')) db.exec('ALTER TABLE lista_precios ADD COLUMN aplicacion TEXT')
+    // Populate rubro from segmento_negocio
+    db.prepare(`UPDATE lista_precios SET rubro = CASE
+      WHEN segmento_negocio = 'Talleres' THEN 'Talleres'
+      WHEN segmento_negocio = 'Concesionarios' THEN 'Concesionarios'
+      WHEN segmento_negocio = 'Flotas' THEN 'Flotas'
+      WHEN segmento_negocio = 'Construccion (agro)' THEN 'Agricola'
+      WHEN segmento_negocio = 'Construccion' THEN 'Construccion'
+      WHEN segmento_negocio = 'Industria' THEN 'Industria'
+      WHEN segmento_negocio = 'Venta Libre (No Especifico)' AND marca = 'AUSTER' THEN 'Flotas,Talleres'
+      ELSE 'Talleres,Concesionarios'
+    END WHERE rubro IS NULL`).run()
+    // Populate aplicacion from categoria + descripcion
+    db.prepare(`UPDATE lista_precios SET aplicacion = CASE
+      WHEN categoria = 'neumatico' AND (descripcion LIKE '%R22.5%' OR descripcion LIKE '%17.5R%' OR descripcion LIKE '%295/80%' OR descripcion LIKE '%315/80%' OR descripcion LIKE '%1200 R%' OR descripcion LIKE '%11 R22%' OR descripcion LIKE '%12 R22%' OR descripcion LIKE '%13 R22%') THEN 'camion_flota'
+      WHEN categoria = 'neumatico' AND (descripcion LIKE '30X%' OR descripcion LIKE '31X%' OR descripcion LIKE '27X%') THEN 'maquinaria_agricola'
+      WHEN categoria = 'neumatico' THEN 'liviano'
+      WHEN categoria = 'lubricante' AND (descripcion LIKE '%HYDRO%' OR descripcion LIKE '%ISO 46%' OR descripcion LIKE '%ISO 68%' OR descripcion LIKE '%GREASE%' OR descripcion LIKE '%LITHIUM%') THEN 'industrial'
+      WHEN categoria = 'lubricante' AND (descripcion LIKE '%15W40%' OR descripcion LIKE '%15W-40%' OR descripcion LIKE '%CK-4%' OR descripcion LIKE '%CK4%' OR descripcion LIKE '%80W90%' OR descripcion LIKE '%80W-90%' OR descripcion LIKE '%75W90%' OR descripcion LIKE '%75W-90%') THEN 'camion_flota'
+      WHEN categoria = 'lubricante' THEN 'liviano'
+      WHEN categoria = 'bateria' AND (descripcion LIKE '%N100%' OR descripcion LIKE '%N120%' OR descripcion LIKE '%N150%' OR descripcion LIKE '%N200%' OR descripcion LIKE '%180 A%') THEN 'camion_flota'
+      WHEN categoria = 'bateria' THEN CASE
+        WHEN CAST(SUBSTR(descripcion, INSTR(descripcion, ' ') + 1, 3) AS INTEGER) >= 70 THEN 'camion_flota'
+        ELSE 'liviano'
+      END
+      ELSE 'liviano'
+    END WHERE aplicacion IS NULL`).run()
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('catalogo_campos_v1')
+    console.log('✅ Migración catalogo_campos_v1 — rubro y aplicacion añadidos a lista_precios')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

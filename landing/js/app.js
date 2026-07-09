@@ -130,15 +130,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ── Router: detalle de producto ───────────────────────────────
   Router.on('/producto/:sku', ({ sku }) => _showProductDetail(decodeURIComponent(sku)));
-  Router.init();
-  window.addEventListener('hashchange', () => {
-    if (!location.hash.startsWith('#/producto/')) {
-      document.getElementById('productModal')?.classList.remove('open');
-    }
-  });
 
   // ── Pagar btn ─────────────────────────────────────────────────
   document.getElementById('pagarBtn')?.addEventListener('click', _showCheckoutForm);
+
+  // ── Routing hash SPA ─────────────────────────────────────────────────────
+  function _showView(name) {
+    const catEl    = document.getElementById('view-catalogo');
+    const tiendaEl = document.getElementById('view-tienda');
+    if (catEl)    catEl.style.display    = name === 'catalogo' ? '' : 'none';
+    if (tiendaEl) tiendaEl.style.display = name === 'tienda'   ? '' : 'none';
+    document.getElementById('navCatalogo')?.classList.toggle('active', name === 'catalogo');
+    document.getElementById('navTienda')?.classList.toggle('active',   name === 'tienda');
+    if (name === 'catalogo') Catalogo.init();
+  }
+
+  Router.on('/', () => _showView('catalogo'));
+  Router.on('/tienda', () => _showView('tienda'));
+  Router.init();
 
 });
 

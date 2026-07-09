@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/catalogo.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
@@ -29,6 +30,8 @@
       <img src="assets/img/logo/rmg-logo-v2.svg" alt="RMG Parts" class="logo-img">
     </a>
     <nav class="main-nav">
+      <a href="#/" class="nav-link-catalogo" id="navCatalogo">Catálogo Industrial</a>
+      <a href="#/tienda" class="nav-link-tienda" id="navTienda">Tienda</a>
       <a href="#" onclick="event.preventDefault();document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'})">Buscar</a>
       <a href="#destacados" onclick="clearSearch()">Destacados</a>
       <a href="#segmentos">Segmentos</a>
@@ -52,6 +55,12 @@
     </div>
   </div>
 </header>
+
+<!-- ===== CATÁLOGO INDUSTRIAL VIEW ===== -->
+<div id="view-catalogo" style="display:none;"></div>
+
+<!-- ===== TIENDA VIEW WRAPPER ===== -->
+<div id="view-tienda">
 
 <!-- ===== CATEGORY STRIP ===== -->
 <div class="cat-strip">
@@ -434,6 +443,8 @@
   </div>
 </section>
 
+</div><!-- /#view-tienda -->
+
 <footer>
   <div class="container">
     <div class="footer-grid">
@@ -516,6 +527,7 @@
 
 <!-- APP -->
 <script src="js/app.js"></script>
+<script src="js/catalogo.js"></script>
 
 </body>
 </html>
