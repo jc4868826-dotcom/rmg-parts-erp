@@ -703,3 +703,278 @@
   color: var(--ci-blue);
   font-weight: 700;
 }
+
+/* ══ HERO CON IMAGEN ════════════════════════════════════════════════════════════ */
+.ci-hero-wrap {
+  position: relative;
+  overflow: hidden;
+  min-height: 280px;
+  max-height: 480px;
+}
+
+.ci-hero-img {
+  width: 100%;
+  max-height: 480px;
+  object-fit: cover;
+  display: block;
+}
+
+.ci-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(11,127,224,0.84) 0%, rgba(41,170,225,0.74) 100%);
+  display: flex;
+  align-items: center;
+  padding: 56px 0 48px;
+  color: #fff;
+}
+
+.ci-hero-overlay .ci-hero-body {
+  max-width: 720px;
+}
+
+/* ══ SECCIÓN CHIPS DE RUBRO (debajo del hero) ══════════════════════════════════ */
+.ci-rubros-section {
+  background: #fff;
+  padding: 14px 0;
+  border-bottom: 1.5px solid var(--ci-border);
+}
+
+/* Chips en contexto claro (fondo blanco) */
+.ci-rubros-section .ci-chip {
+  background: #f0f7ff;
+  border-color: #c3dbf5;
+  color: var(--ci-blue);
+}
+
+.ci-rubros-section .ci-chip:hover {
+  background: #dbeeff;
+  border-color: var(--ci-blue);
+  color: var(--ci-blue);
+  transform: translateY(-1px);
+}
+
+.ci-rubros-section .ci-chip.active {
+  background: var(--ci-blue);
+  border-color: var(--ci-blue);
+  color: #fff;
+}
+
+/* ══ BUSCADOR CON DROPDOWN ══════════════════════════════════════════════════════ */
+.ci-search-wrap {
+  position: relative;
+}
+
+.ci-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1.5px solid var(--ci-border);
+  border-radius: 8px;
+  box-shadow: var(--ci-shadow-lg);
+  z-index: 200;
+  overflow: hidden;
+}
+
+.ci-sugg-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--ci-border);
+  transition: background 0.12s;
+}
+
+.ci-sugg-item:last-child { border-bottom: none; }
+
+.ci-sugg-item:hover { background: #f0f7ff; }
+
+.ci-sugg-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.ci-sugg-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ci-sugg-desc {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ci-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ci-sugg-meta {
+  font-size: 11px;
+  color: var(--ci-muted);
+}
+
+/* ══ ETIQUETA RESULTADOS DE BÚSQUEDA ════════════════════════════════════════════ */
+.ci-search-results-label {
+  font-size: 14px;
+  color: var(--ci-muted);
+  margin-bottom: 14px;
+  padding: 4px 0;
+}
+
+.ci-search-results-label strong { color: var(--ci-text); }
+
+/* ══ ACORDEÓN 3 NIVELES ═════════════════════════════════════════════════════════ */
+.ci-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Nivel 1 — Categoría */
+.ci-acc-cat {
+  background: #fff;
+  border: 1.5px solid var(--ci-border);
+  border-radius: var(--ci-radius);
+  overflow: hidden;
+  box-shadow: var(--ci-shadow);
+}
+
+.ci-acc-cat-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: none;
+  border: none;
+  border-bottom: 1.5px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 15px;
+  color: var(--ci-text);
+  transition: background 0.14s, border-color 0.14s;
+}
+
+.ci-acc-cat-btn:hover { background: #f8fafc; }
+
+.ci-acc-cat-btn.open {
+  background: #eff6ff;
+  border-bottom-color: var(--ci-border);
+}
+
+.ci-acc-cat-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.ci-acc-cat-name {
+  flex: 1;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.ci-acc-cat-count {
+  font-size: 12px;
+  color: var(--ci-muted);
+  font-weight: 500;
+  background: #f1f5f9;
+  padding: 2px 10px;
+  border-radius: 100px;
+}
+
+.ci-acc-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--ci-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.ci-acc-chevron.open { transform: rotate(180deg); }
+
+.ci-acc-cat-body { /* visible/hidden via JS style.display */ }
+
+/* Nivel 2 — Aplicación */
+.ci-acc-aplic {
+  border-bottom: 1px solid var(--ci-border);
+}
+
+.ci-acc-aplic:last-child { border-bottom: none; }
+
+.ci-acc-aplic-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px 11px 28px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  color: var(--ci-dark);
+  transition: background 0.14s;
+}
+
+.ci-acc-aplic-btn:hover { background: #f0f7ff; }
+
+.ci-acc-aplic-btn.open { background: #e4f1fb; }
+
+.ci-acc-aplic-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ci-blue-lt);
+  flex-shrink: 0;
+}
+
+.ci-acc-aplic-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.ci-acc-aplic-count {
+  font-size: 11px;
+  color: var(--ci-muted);
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+
+.ci-acc-chevron.sm {
+  width: 14px;
+  height: 14px;
+}
+
+.ci-acc-aplic-body {
+  padding: 16px 18px;
+  background: #fafbfc;
+  border-top: 1px solid var(--ci-border);
+}
+
+/* ══ GRID INTERIOR (dentro del acordeón o resultados de búsqueda) ═══════════════ */
+.ci-grid-inner {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 1100px) {
+  .ci-grid-inner { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .ci-grid-inner { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .ci-grid-inner { grid-template-columns: 1fr; }
+  .ci-hero-wrap { max-height: 320px; min-height: 200px; }
+}
