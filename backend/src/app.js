@@ -56,6 +56,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
+// ─── Archivos de landing (disco persistente) ────────────────
+const LANDING_UPLOADS_DIR = process.env.LANDING_UPLOADS_DIR || '/var/data/landing-uploads';
+const fs_static = require('fs');
+if (!fs_static.existsSync(LANDING_UPLOADS_DIR)) {
+  fs_static.mkdirSync(LANDING_UPLOADS_DIR, { recursive: true });
+}
+app.use('/uploads/landing', express.static(LANDING_UPLOADS_DIR));
+
 // ─── Rutas públicas (sin auth, CORS abierto para landing) ──
 app.use('/api/public', cors({ origin: '*' }), require('./routes/public'));
 
@@ -75,6 +83,7 @@ app.use('/api/compras',                require('./routes/compras'));   // Compra
 app.use('/api/cxc',                    require('./routes/cxc'));       // Cuentas por cobrar
 app.use('/api/bodega',                 require('./routes/bodega'));    // Bodegas
 app.use('/api/admin',                  require('./routes/admin'));     // TEMP: reset-db
+app.use('/api/admin/landing',          require('./routes/landingAdmin')); // Landing CMS
 app.use('/api/pricing',                require('./routes/pricing'));   // Pricing multi-proveedor + benchmarks
 app.use('/api/prospeccion',            require('./routes/prospeccion')); // Pipeline Prospección
 app.use('/api/lista-precios',          require('./routes/listaPrecios')); // Lista de Precios

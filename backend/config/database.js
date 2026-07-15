@@ -1204,6 +1204,37 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('catalogo_campos_v1')
     console.log('✅ Migración catalogo_campos_v1 — rubro y aplicacion añadidos a lista_precios')
   }
+
+  // Migration 13: landing_tables_v1 — tablas propias para landing (desacopladas del ERP)
+  const m13 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_tables_v1')
+  if (!m13) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS landing_productos (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        familia       TEXT,
+        subfamilia    TEXT,
+        descripcion   TEXT,
+        um            TEXT,
+        presentacion  TEXT,
+        precio        REAL,
+        detalles_tecnicos TEXT,
+        foto_path     TEXT,
+        activo        INTEGER DEFAULT 1,
+        orden         INTEGER DEFAULT 0,
+        created_at    TEXT DEFAULT (datetime('now')),
+        updated_at    TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS landing_banners (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        foto_path TEXT,
+        orden     INTEGER DEFAULT 0,
+        activo    INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `)
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_tables_v1')
+    console.log('✅ Migración landing_tables_v1 — tablas landing_productos y landing_banners creadas')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
