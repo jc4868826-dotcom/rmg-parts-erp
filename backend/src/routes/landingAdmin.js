@@ -24,8 +24,12 @@ function deleteFile(relPath) {
   } catch (_) {}
 }
 
-function lastId() {
-  return db.prepare('SELECT last_insert_rowid() as id').get().id
+function lastInsertedProducto() {
+  return db.prepare('SELECT * FROM landing_productos ORDER BY rowid DESC LIMIT 1').get()
+}
+
+function lastInsertedBanner() {
+  return db.prepare('SELECT * FROM landing_banners ORDER BY rowid DESC LIMIT 1').get()
 }
 
 // ─── PRODUCTOS ────────────────────────────────────────────────────────────────
@@ -64,7 +68,7 @@ router.post('/productos', [...guard, uploadProducto.single('foto')], (req, res) 
       foto_path, parseInt(activo), parseInt(orden)
     )
 
-    const newRow = db.prepare('SELECT * FROM landing_productos WHERE id = ?').get(lastId())
+    const newRow = lastInsertedProducto()
     res.status(201).json(newRow)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -157,7 +161,7 @@ router.post('/banners', [...guard, uploadBanner.single('foto')], (req, res) => {
       VALUES (?,?,?)
     `).run(foto_path, parseInt(orden), parseInt(activo))
 
-    const newRow = db.prepare('SELECT * FROM landing_banners WHERE id = ?').get(lastId())
+    const newRow = lastInsertedBanner()
     res.status(201).json(newRow)
   } catch (err) {
     res.status(500).json({ error: err.message })
