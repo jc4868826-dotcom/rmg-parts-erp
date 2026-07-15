@@ -10,7 +10,7 @@ const fs      = require('fs')
 const router  = express.Router()
 const { db }  = require('../../config/database')
 const { authenticate, requireRole } = require('../middleware/auth')
-const { uploadProducto, uploadBanner, uploadSubfamilia, UPLOADS_DIR } = require('../middleware/upload')
+const { uploadProducto, uploadBanner, uploadSubfamilia, uploadFamilia, UPLOADS_DIR } = require('../middleware/upload')
 
 const guard = [authenticate, requireRole('admin')]
 
@@ -35,6 +35,44 @@ function lastInsertedBanner() {
 function lastInsertedSubfamilia() {
   return db.prepare('SELECT * FROM landing_subfamilias ORDER BY rowid DESC LIMIT 1').get()
 }
+
+// ─── FAMILIAS ─────────────────────────────────────────────────────────────────
+
+const VALID_FAMILIAS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
+
+// GET /api/admin/landing/familias
+router.get('/familias', guard, (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM landing_familias ORDER BY familia ASC').all()
+    res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/admin/landing/familias/:familia  — solo actualiza foto_path
+router.put('/familias/:familia', [...guard, uploadFamilia.single('foto')], (req, res) => {
+  try {
+    const { familia } = req.params
+    if (!VALID_FAMILIAS.includes(familia)) return res.status(400).json({ error: 'Familia inválida' })
+
+    const existing = db.prepare('SELECT * FROM landing_familias WHERE familia = ?').get(familia)
+    if (!existing) return res.status(404).json({ error: 'Familia no encontrada' })
+
+    if (!req.file) return res.status(400).json({ error: 'Se requiere archivo de imagen (campo: foto)' })
+
+    deleteFile(existing.foto_path)
+    const foto_path = 'familias/' + req.file.filename
+
+    db.prepare(`
+      UPDATE landing_familias SET foto_path = ?, updated_at = datetime('now') WHERE familia = ?
+    `).run(foto_path, familia)
+
+    res.json(db.prepare('SELECT * FROM landing_familias WHERE familia = ?').get(familia))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // ─── SUBFAMILIAS ──────────────────────────────────────────────────────────────
 

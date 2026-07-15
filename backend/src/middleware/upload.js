@@ -38,5 +38,6 @@ function makeUpload(subfolder) {
 const uploadProducto    = makeUpload('productos')
 const uploadBanner      = makeUpload('banners')
 const uploadSubfamilia  = makeUpload('subfamilias')
+const uploadFamilia     = makeUpload('familias')
 
-module.exports = { uploadProducto, uploadBanner, uploadSubfamilia, UPLOADS_DIR }
+module.exports = { uploadProducto, uploadBanner, uploadSubfamilia, uploadFamilia, UPLOADS_DIR }

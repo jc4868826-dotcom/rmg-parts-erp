@@ -1269,6 +1269,24 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_subfamilias_v1')
     console.log('✅ Migración landing_subfamilias_v1 — tabla landing_subfamilias + subfamilia_id en landing_productos')
   }
+
+  // Migration 16: landing_familias_v1 — fotos de las 3 familias padre
+  const m16 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_familias_v1')
+  if (!m16) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS landing_familias (
+        familia    TEXT PRIMARY KEY,
+        foto_path  TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `)
+    const stmt = db.prepare("INSERT OR IGNORE INTO landing_familias (familia) VALUES (?)")
+    stmt.run('NEUMATICOS')
+    stmt.run('BATERIAS')
+    stmt.run('LUBRICANTES')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_familias_v1')
+    console.log('✅ Migración landing_familias_v1 — tabla landing_familias con 3 filas iniciales')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

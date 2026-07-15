@@ -90,6 +90,16 @@ router.get('/catalogo-ingenieria', (req, res) => {
   }
 })
 
+// GET /api/public/landing/familias — las 3 familias con sus fotos
+router.get('/landing/familias', (_req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM landing_familias ORDER BY familia ASC').all()
+    res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/public/landing/subfamilias — solo activas, ordenadas por familia, orden
 router.get('/landing/subfamilias', (_req, res) => {
   try {

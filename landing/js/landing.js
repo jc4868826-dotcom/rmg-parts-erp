@@ -14,6 +14,7 @@
   let _productos   = [];
   let _banners     = [];
   let _subfamilias = [];
+  let _familias    = [];  // fotos de las 3 familias padre desde landing_familias
   let _catalogo    = [];  // data/catalogo.json para búsqueda estática
 
   let _heroIdx   = 0;
@@ -25,15 +26,17 @@
 
   // ─── Init ──────────────────────────────────────────────────────────────────
   async function init() {
-    const [prods, bans, subs, cat] = await Promise.allSettled([
+    const [prods, bans, subs, fams, cat] = await Promise.allSettled([
       fetch(ERP + '/api/public/landing/productos').then(r => r.ok ? r.json() : []),
       fetch(ERP + '/api/public/landing/banners').then(r => r.ok ? r.json() : []),
       fetch(ERP + '/api/public/landing/subfamilias').then(r => r.ok ? r.json() : []),
+      fetch(ERP + '/api/public/landing/familias').then(r => r.ok ? r.json() : []),
       fetch('data/catalogo.json').then(r => r.ok ? r.json() : []),
     ]);
     _productos   = prods.status === 'fulfilled'  ? (Array.isArray(prods.value)  ? prods.value  : []) : [];
     _banners     = bans.status === 'fulfilled'   ? (Array.isArray(bans.value)   ? bans.value   : []) : [];
     _subfamilias = subs.status === 'fulfilled'   ? (Array.isArray(subs.value)   ? subs.value   : []) : [];
+    _familias    = fams.status === 'fulfilled'   ? (Array.isArray(fams.value)   ? fams.value   : []) : [];
     _catalogo    = cat.status === 'fulfilled'    ? (Array.isArray(cat.value)    ? cat.value    : []) : [];
 
     _buildNavDropdowns();
@@ -126,9 +129,13 @@
       const countTxt = subCount > 0
         ? `<span class="catbox-count">${subCount} subfamilias</span>`
         : prodCount > 0 ? `<span class="catbox-count">${prodCount} productos</span>` : '';
+      // Prioridad: foto de landing_familias → primera subfamilia con foto → primera primera con foto → nulo (mostrará ícono)
+      const famRow   = _familias.find(f => f.familia === fam.key);
       const firstSub = _subfamilias.find(s => s.familia === fam.key && s.foto_path);
       const firstProd = _productos.find(p => p.familia === fam.key && p.foto_path);
-      const imgSrc = firstSub ? _imgSrc(firstSub.foto_path) : (firstProd ? _imgSrc(firstProd.foto_path) : null);
+      const imgSrc = (famRow && famRow.foto_path)
+        ? _imgSrc(famRow.foto_path)
+        : (firstSub ? _imgSrc(firstSub.foto_path) : (firstProd ? _imgSrc(firstProd.foto_path) : null));
 
       return `
         <div class="catbox" onclick="Landing.selectFamilia('${fam.key}')">

@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 // ─── Constantes ───────────────────────────────────────────
 const FAMILIAS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
 
-const API_BASE = import.meta.env.VITE_API_URL || ''
+const API_BASE = import.meta.env.VITE_API_URL || 'https://rmg-parts-erp.onrender.com'
 
 const THUMB_URL = (foto_path) =>
   foto_path ? `${API_BASE}/uploads/landing/${foto_path}` : null
@@ -465,6 +465,77 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
   )
 }
 
+// ─── Tab Familias ─────────────────────────────────────────
+const FAM_META = {
+  NEUMATICOS:  { label: 'Neumáticos',  icon: '🛞' },
+  BATERIAS:    { label: 'Baterías',    icon: '🔋' },
+  LUBRICANTES: { label: 'Lubricantes', icon: '🛢️' },
+}
+function TabFamilias({ familias = [], isLoading }) {
+  const qc = useQueryClient()
+  const fotoRefs = { NEUMATICOS: useRef(null), BATERIAS: useRef(null), LUBRICANTES: useRef(null) }
+
+  const updateMut = useMutation({
+    mutationFn: ({ familia, fd }) => api.put(`/admin/landing/familias/${familia}`, fd).then(r => r.data),
+    onSuccess: (_, { familia }) => {
+      qc.invalidateQueries(['landing-familias'])
+      toast.success(`Foto de ${FAM_META[familia]?.label || familia} actualizada`)
+    },
+    onError: () => toast.error('Error al actualizar foto'),
+  })
+
+  const handleUpload = (familia) => {
+    const file = fotoRefs[familia]?.current?.files[0]
+    if (!file) { toast.error('Selecciona una imagen primero'); return }
+    const fd = new FormData()
+    fd.append('foto', file)
+    updateMut.mutate({ familia, fd })
+    if (fotoRefs[familia]?.current) fotoRefs[familia].current.value = ''
+  }
+
+  if (isLoading) return <div className="py-12 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando…</div>
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
+        Foto de portada para cada categoría principal. Aparece en las cajas grandes de la home.
+      </p>
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+        {['NEUMATICOS', 'BATERIAS', 'LUBRICANTES'].map(famKey => {
+          const row  = familias.find(f => f.familia === famKey)
+          const meta = FAM_META[famKey]
+          const src  = row?.foto_path ? `${API_BASE}/uploads/landing/${row.foto_path}` : null
+          return (
+            <div key={famKey} className="rounded-xl overflow-hidden border"
+              style={{ background: 'var(--rmg-card)', borderColor: 'rgba(56,182,255,0.12)' }}>
+              {/* Imagen actual */}
+              <div className="flex items-center justify-center" style={{ height: 140, background: 'rgba(255,255,255,0.04)' }}>
+                {src
+                  ? <img src={src} alt={meta?.label} className="w-full h-full object-cover" />
+                  : <span style={{ fontSize: 48, opacity: 0.3 }}>{meta?.icon}</span>
+                }
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="font-bold text-sm">{meta?.icon} {meta?.label}</div>
+                <input ref={fotoRefs[famKey]} type="file" accept="image/jpeg,image/png,image/webp"
+                  className="w-full text-xs" style={{ color: 'var(--rmg-muted)' }} />
+                <button
+                  className="w-full py-2 rounded-lg text-sm font-semibold transition-colors"
+                  style={{ background: 'var(--rmg-blue)', color: '#fff' }}
+                  onClick={() => handleUpload(famKey)}
+                  disabled={updateMut.isPending}
+                >
+                  {updateMut.isPending ? 'Subiendo…' : 'Cambiar foto'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Tab Banners ──────────────────────────────────────────
 function TabBanners({ banners = [], isLoading }) {
   const qc = useQueryClient()
@@ -614,13 +685,20 @@ function TabBanners({ banners = [], isLoading }) {
 
 // ─── Página principal ─────────────────────────────────────
 export default function ConfigurarLandingPage() {
-  const [tab, setTab] = useState('subfamilias')
+  const [tab, setTab] = useState('familias')
 
   const TABS = [
+    { k: 'familias',    l: 'Familias',    Icon: LayoutTemplate },
     { k: 'subfamilias', l: 'Subfamilias', Icon: LayoutTemplate },
     { k: 'productos',   l: 'Productos',   Icon: LayoutTemplate },
     { k: 'banners',     l: 'Banners',     Icon: LayoutTemplate },
   ]
+
+  const { data: familias = [], isLoading: loadingFam } = useQuery({
+    queryKey: ['landing-familias'],
+    queryFn: () => api.get('/admin/landing/familias').then(r => r.data),
+    staleTime: 30_000,
+  })
 
   const { data: subfamilias = [], isLoading: loadingSF } = useQuery({
     queryKey: ['landing-subfamilias'],
@@ -668,6 +746,9 @@ export default function ConfigurarLandingPage() {
       </div>
 
       {/* Contenido */}
+      {tab === 'familias' && (
+        <TabFamilias familias={familias} isLoading={loadingFam} />
+      )}
       {tab === 'subfamilias' && (
         <TabSubfamilias subfamilias={subfamilias} isLoading={loadingSF} />
       )}
