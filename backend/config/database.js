@@ -1235,6 +1235,16 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_tables_v1')
     console.log('✅ Migración landing_tables_v1 — tablas landing_productos y landing_banners creadas')
   }
+
+  // Migration 14: landing_codigo_v1 — codigo y marca en landing_productos
+  const m14 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_codigo_v1')
+  if (!m14) {
+    const cols14 = db.prepare('PRAGMA table_info(landing_productos)').all().map(c => c.name)
+    if (!cols14.includes('codigo')) db.exec('ALTER TABLE landing_productos ADD COLUMN codigo TEXT')
+    if (!cols14.includes('marca'))  db.exec('ALTER TABLE landing_productos ADD COLUMN marca TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_codigo_v1')
+    console.log('✅ Migración landing_codigo_v1 — codigo y marca añadidos a landing_productos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

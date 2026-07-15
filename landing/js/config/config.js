@@ -5,13 +5,15 @@ const CONFIG = {
   BASE_URL: 'https://rmg-parts-erp.onrender.com',
 
   ENDPOINTS: {
-    productos:  '/api/lista-precios',
-    buscar:     '/api/lista-precios/buscar',
-    categorias: 'mock',
-    login:      '/api/auth/login',
-    carrito:    '/api/public/cotizaciones',
-    pedidos:    '/api/public/pedidos',
-    inventario: '/api/inventario'
+    productos:        '/api/lista-precios',
+    buscar:           '/api/lista-precios/buscar',
+    categorias:       'mock',
+    login:            '/api/auth/login',
+    carrito:          '/api/public/cotizaciones',
+    pedidos:          '/api/public/pedidos',
+    inventario:       '/api/inventario',
+    landingProductos: '/api/public/landing/productos',
+    landingBanners:   '/api/public/landing/banners',
   },
 
   WHATSAPP: '', // PENDIENTE: JC completa el número real aquí antes de publicar

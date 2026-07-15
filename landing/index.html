@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/catalogo.css">
+  <link rel="stylesheet" href="css/landing.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
@@ -30,12 +31,27 @@
       <img src="assets/img/logo/rmg-logo-v2.svg" alt="RMG Parts" class="logo-img">
     </a>
     <nav class="main-nav">
-      <a href="#/" class="nav-link-catalogo" id="navCatalogo">Catálogo Industrial</a>
-      <a href="#/tienda" class="nav-link-tienda" id="navTienda">Tienda</a>
-      <a href="#" onclick="event.preventDefault();document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'})">Buscar</a>
-      <a href="#destacados" onclick="clearSearch()">Destacados</a>
-      <a href="#segmentos">Segmentos</a>
-      <a href="https://www.rmgautos.cl" target="_blank" rel="noopener">Usados</a>
+      <!-- Familia dropdowns — contenido poblado por landing.js -->
+      <div class="nav-dropdown">
+        <button class="nav-family-btn">🛞 Neumáticos
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-mega-menu" id="dd-NEUMATICOS"></div>
+      </div>
+      <div class="nav-dropdown">
+        <button class="nav-family-btn">🔋 Baterías
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-mega-menu" id="dd-BATERIAS"></div>
+      </div>
+      <div class="nav-dropdown">
+        <button class="nav-family-btn">🛢️ Lubricantes
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-mega-menu" id="dd-LUBRICANTES"></div>
+      </div>
+      <a href="#/catalogo" class="nav-catalog-link" id="navCatalogo">Catálogo B2B</a>
+      <a href="#/tienda" id="navTienda" style="display:none" class="nav-catalog-link">Tienda</a>
       <div class="nav-social">
         <a href="https://www.facebook.com/profile.php?id=61591934842871" target="_blank" rel="noopener" aria-label="Facebook RMG Parts">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z"/></svg>
@@ -46,7 +62,7 @@
       </div>
     </nav>
     <div class="nav-actions">
-      <button class="icon-btn" id="searchToggleBtn" title="Buscar" onclick="document.querySelector('.finder-section').scrollIntoView({behavior:'smooth'});setTimeout(()=>document.getElementById('buscadorInput').focus(),400)">🔍</button>
+      <button class="icon-btn" id="searchToggleBtn" title="Buscar" onclick="document.getElementById('landing-familias')?.scrollIntoView({behavior:'smooth'})">🔍</button>
       <button class="icon-btn" onclick="openCart()" title="Carrito">
         🛒
         <span class="cart-count" id="cartCount">0</span>
@@ -62,37 +78,8 @@
 <!-- ===== TIENDA VIEW WRAPPER ===== -->
 <div id="view-tienda">
 
-<!-- ===== CATEGORY STRIP ===== -->
-<div class="cat-strip">
-  <div class="cat-strip-inner">
-    <div class="cat-strip-item" data-q="bateria">
-      <span class="cat-strip-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg></span>Baterías
-    </div>
-    <div class="cat-strip-item" data-q="neumatico">
-      <span class="cat-strip-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span>Neumáticos
-    </div>
-    <div class="cat-strip-item" data-q="lubricante">
-      <span class="cat-strip-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 8h14M5 13h14"/></svg></span>Lubricantes
-    </div>
-    <div class="cat-strip-item" data-q="grasa">
-      <span class="cat-strip-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>Grasas
-    </div>
-    <div class="cat-strip-item" data-q="refrigerante">
-      <span class="cat-strip-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg></span>Refrigerantes
-    </div>
-    <div class="cat-strip-item" data-q="freno">
-      <span class="cat-strip-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg></span>Líq. Frenos
-    </div>
-    <div class="cat-strip-item" data-q="quimico">
-      <span class="cat-strip-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v7l4 10H5L9 10V3z"/><line x1="9" y1="8" x2="15" y2="8"/></svg></span>Químicos
-    </div>
-    <div class="cat-strip-item" data-q="aditivo">
-      <span class="cat-strip-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L6 12a6 6 0 1 0 12 0L12 2z"/></svg></span>Aditivos
-    </div>
-  </div>
-</div>
-
 <!-- ===== HERO CAROUSEL ===== -->
+<div id="landing-hero">
 <div class="carousel" id="heroCarousel">
   <div class="carousel-track" id="carouselTrack">
 
@@ -145,204 +132,52 @@
     <button class="carousel-dot" data-idx="3"></button>
   </div>
 </div>
+</div><!-- /#landing-hero -->
 
-<!-- ===== BUSCADOR ===== -->
-<section class="finder-section">
+<!-- ===== 3 CAJAS DE CATEGORÍA ===== -->
+<section class="catboxes-section">
   <div class="container">
-    <div class="finder">
-      <div class="finder-body">
-        <div id="finder-0">
-          <div class="finder-search">
-            <input type="text" id="buscadorInput" placeholder="Código SKU, descripción, marca — ej. 5W30, Kumho, batería 90Ah...">
-            <button class="btn" id="buscadorBtn">Buscar</button>
-          </div>
-          <div class="chip-row" id="searchChips">
-            <span class="chip" data-q="lubricante">Lubricantes</span>
-            <span class="chip" data-q="neumatico">Neumáticos</span>
-            <span class="chip" data-q="bateria">Baterías</span>
-            <span class="chip" data-q="grasa">Grasas</span>
-            <span class="chip" data-q="refrigerante">Refrigerantes</span>
-            <span class="chip" data-q="freno">Líquido de frenos</span>
-            <span class="chip" data-q="quimico">Químicos</span>
-            <span class="chip" data-q="aditivo">Aditivos</span>
-          </div>
+    <div class="cat-boxes" id="cat-boxes">
+      <!-- Renderizado por landing.js -->
+      <div class="catbox" onclick="document.getElementById('sec-NEUMATICOS')?.scrollIntoView({behavior:'smooth'})">
+        <div class="catbox-img-wrap" style="background:#0071BD33">
+          <img src="assets/img/hero/hero-neumaticos.png" alt="Neumáticos" loading="lazy">
+          <div class="catbox-overlay"></div>
+        </div>
+        <div class="catbox-info">
+          <span class="catbox-icon">🛞</span>
+          <div><div class="catbox-label">Neumáticos</div></div>
+          <svg class="catbox-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </div>
+      </div>
+      <div class="catbox" onclick="document.getElementById('sec-BATERIAS')?.scrollIntoView({behavior:'smooth'})">
+        <div class="catbox-img-wrap" style="background:#29AAE133">
+          <img src="assets/img/hero/hero-baterias.png" alt="Baterías" loading="lazy">
+          <div class="catbox-overlay"></div>
+        </div>
+        <div class="catbox-info">
+          <span class="catbox-icon">🔋</span>
+          <div><div class="catbox-label">Baterías</div></div>
+          <svg class="catbox-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </div>
+      </div>
+      <div class="catbox" onclick="document.getElementById('sec-LUBRICANTES')?.scrollIntoView({behavior:'smooth'})">
+        <div class="catbox-img-wrap" style="background:#43566433">
+          <img src="assets/img/hero/hero-lubricantes.png" alt="Lubricantes" loading="lazy">
+          <div class="catbox-overlay"></div>
+        </div>
+        <div class="catbox-info">
+          <span class="catbox-icon">🛢️</span>
+          <div><div class="catbox-label">Lubricantes</div></div>
+          <svg class="catbox-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ===== PRODUCTOS DESTACADOS ===== -->
-<section id="destacados" class="light-bg" style="border-top:1.5px solid var(--card-border);border-bottom:1.5px solid var(--card-border);">
-  <div class="container">
-    <div class="section-head">
-      <div>
-        <h2 id="prodSectionTitle">Productos destacados</h2>
-        <p id="prodSectionSub">Los más pedidos por talleres y flotas.</p>
-      </div>
-      <button class="see-all" id="clearSearchBtn" style="display:none;background:none;border:none;cursor:pointer;" onclick="clearSearch()">← Volver a destacados</button>
-    </div>
-    <div id="refineRow" style="display:none;margin-bottom:14px;">
-      <input class="refine-input" type="text" id="refineInput" placeholder="Refinar en estos resultados…">
-    </div>
-
-    <!-- Featured grids (shown by default, hidden on search) -->
-    <div id="featuredGrid">
-
-      <!-- Baterías -->
-      <div class="feat-section">
-        <div class="feat-section-head">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg>
-          <span class="feat-section-title">Baterías</span>
-        </div>
-        <div class="feat-grid">
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">YOKO G&amp;B</div>
-              <div class="feat-card-name">BATERIA YOKO KR 12N24-4 26AMP</div>
-              <div class="feat-card-sku mono">351404</div>
-              <div class="feat-card-pres">Unidad</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$39.281</span>
-                <button class="feat-card-add" onclick="addToCart('351404')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">YOKO G&amp;B</div>
-              <div class="feat-card-name">BATERIA YOKO KR 35AMP NS40ZL</div>
-              <div class="feat-card-sku mono">352410</div>
-              <div class="feat-card-pres">Unidad</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$40.704</span>
-                <button class="feat-card-add" onclick="addToCart('352410')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">Platin</div>
-              <div class="feat-card-name">55566 55Ah-390CCA</div>
-              <div class="feat-card-sku mono">PT55566</div>
-              <div class="feat-card-pres">Unidad</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$40.950</span>
-                <button class="feat-card-add" onclick="addToCart('PT55566')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Neumáticos -->
-      <div class="feat-section">
-        <div class="feat-section-head">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
-          <span class="feat-section-title">Neumáticos</span>
-        </div>
-        <div class="feat-grid">
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">DOUBLE STAR</div>
-              <div class="feat-card-name">155/65 R13 DH05</div>
-              <div class="feat-card-sku mono">210122</div>
-              <div class="feat-card-pres">Unidad</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$22.099</span>
-                <button class="feat-card-add" onclick="addToCart('210122')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">DOUBLE STAR</div>
-              <div class="feat-card-name">175/70 R13 DH05 82T</div>
-              <div class="feat-card-sku mono">210105</div>
-              <div class="feat-card-pres">Unidad</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$28.781</span>
-                <button class="feat-card-add" onclick="addToCart('210105')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">DOUBLE STAR</div>
-              <div class="feat-card-name">155/65 R14 DH08 75T</div>
-              <div class="feat-card-sku mono">210125</div>
-              <div class="feat-card-pres">Unidad</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$29.090</span>
-                <button class="feat-card-add" onclick="addToCart('210125')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Lubricantes -->
-      <div class="feat-section">
-        <div class="feat-section-head">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 8h14M5 13h14"/></svg>
-          <span class="feat-section-title">Lubricantes</span>
-        </div>
-        <div class="feat-grid">
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 8h14M5 13h14"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">AUSTER</div>
-              <div class="feat-card-name">AUSTER 4T 10W40 1L</div>
-              <div class="feat-card-sku mono">7000035</div>
-              <div class="feat-card-pres">1L</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$3.384</span>
-                <button class="feat-card-add" onclick="addToCart('7000035')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 8h14M5 13h14"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">Vistony</div>
-              <div class="feat-card-name">SINTEK OIL RAYVON 4T 10W40 JASO MA2 1L</div>
-              <div class="feat-card-sku mono">1000622</div>
-              <div class="feat-card-pres">1L caja x12</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$4.602</span>
-                <button class="feat-card-add" onclick="addToCart('1000622')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-          <div class="feat-card">
-            <div class="feat-card-img"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 8h14M5 13h14"/></svg></div>
-            <div class="feat-card-body">
-              <div class="feat-card-marca">Vistony</div>
-              <div class="feat-card-name">ATTOM RAYVON 4T 15W50 SN JASO MA2 1LT</div>
-              <div class="feat-card-sku mono">1000368</div>
-              <div class="feat-card-pres">1LT</div>
-              <div class="feat-card-foot">
-                <span class="feat-card-price">$4.999</span>
-                <button class="feat-card-add" onclick="addToCart('1000368')" title="Agregar al carrito">+</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /#featuredGrid -->
-
-    <!-- Search results (hidden until user searches) -->
-    <div id="prodGrid" style="display:none;"></div>
-
-  </div>
-</section>
+<!-- ===== SECCIONES DE FAMILIA (dinámico) ===== -->
+<div id="landing-familias"></div>
 
 <!-- ===== FORMATOS GRANDES ===== -->
 <section id="formatos-grandes" class="alt-bg">
@@ -406,7 +241,7 @@
       <div class="brand-logo">Platin</div>
       <div class="brand-logo">Vistony</div>
       <div class="brand-logo">Auster</div>
-      <div class="brand-logo">Sintek</div>
+      <div class="brand-logo">Yoko G&amp;B</div>
       <div class="brand-logo">Double Star</div>
       <div class="brand-logo">Kenda</div>
     </div>
@@ -465,8 +300,20 @@
       <div class="footer-col">
         <h5>Contacto</h5>
         <a id="footerWa" href="#">WhatsApp comercial</a>
-        <a href="#">contacto@rmgparts.cl</a>
+        <a href="mailto:contacto@rmgparts.cl">contacto@rmgparts.cl</a>
         <a href="#">Santiago, RM</a>
+        <div class="footer-social">
+          <a href="https://www.facebook.com/profile.php?id=61591934842871" target="_blank" rel="noopener" aria-label="Facebook">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z"/></svg>
+          </a>
+          <a href="https://www.instagram.com/rmgparts/" target="_blank" rel="noopener" aria-label="Instagram">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2.717 0 3.056.01 4.122.06 1.065.05 1.79.217 2.428.465.66.256 1.216.6 1.772 1.153a4.9 4.9 0 011.153 1.772c.247.637.415 1.363.465 2.428.05 1.066.06 1.405.06 4.122s-.01 3.056-.06 4.122c-.05 1.065-.218 1.79-.465 2.428a4.9 4.9 0 01-1.153 1.772 4.9 4.9 0 01-1.772 1.153c-.637.247-1.363.415-2.428.465-1.066.05-1.405.06-4.122.06s-3.056-.01-4.122-.06c-1.065-.05-1.79-.218-2.428-.465a4.9 4.9 0 01-1.772-1.153 4.9 4.9 0 01-1.153-1.772c-.247-.637-.415-1.363-.465-2.428C2.01 15.056 2 14.717 2 12s.01-3.056.06-4.122c.05-1.065.218-1.79.465-2.428a4.9 4.9 0 011.153-1.772A4.9 4.9 0 015.45 2.525c.637-.247 1.363-.415 2.428-.465C8.944 2.01 9.283 2 12 2zm0 1.8c-2.67 0-2.986.01-4.04.059-.976.045-1.505.207-1.858.344-.467.182-.8.4-1.15.75-.35.35-.567.683-.75 1.15-.137.353-.3.882-.344 1.858C3.81 9.014 3.8 9.33 3.8 12s.01 2.986.059 4.04c.045.976.207 1.505.344 1.858.182.467.4.8.75 1.15.35.35.683.567 1.15.75.353.137.882.3 1.858.344 1.054.048 1.37.058 4.04.058s2.986-.01 4.04-.058c.976-.045 1.505-.207 1.858-.344.467-.182.8-.4 1.15-.75.35-.35.567-.683.75-1.15.137-.353.3-.882.344-1.858.048-1.054.058-1.37.058-4.04s-.01-2.986-.058-4.04c-.045-.976-.207-1.505-.344-1.858a3.1 3.1 0 00-.75-1.15 3.1 3.1 0 00-1.15-.75c-.353-.137-.882-.3-1.858-.344C14.986 3.81 14.67 3.8 12 3.8zm0 3.05a5.15 5.15 0 110 10.3 5.15 5.15 0 010-10.3zm0 1.8a3.35 3.35 0 100 6.7 3.35 3.35 0 000-6.7zm5.338-1.997a1.203 1.203 0 11-2.406 0 1.203 1.203 0 012.406 0z"/></svg>
+          </a>
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:#3a4557;">
+          <a href="#" style="color:#3a4557;">Política de Privacidad</a> ·
+          <a href="#" style="color:#3a4557;">Términos de Uso</a>
+        </div>
       </div>
     </div>
     <div class="footer-bottom">
@@ -526,6 +373,7 @@
 <script src="js/services/pdf.service.js"></script>
 
 <!-- APP -->
+<script src="js/landing.js"></script>
 <script src="js/app.js"></script>
 <script src="js/catalogo.js"></script>
 

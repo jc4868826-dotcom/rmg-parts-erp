@@ -145,8 +145,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (name === 'catalogo') Catalogo.init();
   }
 
-  Router.on('/', () => _showView('catalogo'));
+  Router.on('/', () => _showView('tienda'));
   Router.on('/tienda', () => _showView('tienda'));
+  Router.on('/catalogo', () => _showView('catalogo'));
   Router.init();
 
 });

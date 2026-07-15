@@ -1,0 +1,231 @@
+/* ===== RMG Landing — nuevas secciones (mega-menu, catboxes, product rows) ===== */
+
+/* ── Mega-menu nav ───────────────────────────────────────────── */
+.nav-dropdown {
+  position: relative;
+}
+.nav-family-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.55);
+  font: 600 12.5px/1 'Inter', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.nav-family-btn:hover,
+.nav-dropdown:hover .nav-family-btn {
+  color: #fff;
+  background: rgba(255,255,255,0.08);
+}
+.nav-family-btn svg { transition: transform .2s; }
+.nav-dropdown:hover .nav-family-btn svg { transform: rotate(180deg); }
+
+.nav-mega-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  background: #fff;
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  padding: 8px 0;
+  z-index: 200;
+}
+.nav-dropdown:hover .nav-mega-menu { display: block; }
+.mega-link {
+  display: block;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #3d5068;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  white-space: nowrap;
+}
+.mega-link:hover { background: #f0f8ff; color: #0071BD; }
+.mega-empty { display: block; padding: 9px 18px; font-size: 12px; color: #aaa; }
+
+/* ── Hero dinámico ───────────────────────────────────────────── */
+.lh-track { position: relative; width: 100%; overflow: hidden; aspect-ratio: 1746/900; background: #0c1523; }
+.lh-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .7s ease; }
+.lh-slide.active { opacity: 1; }
+.lh-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lh-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  background: rgba(0,0,0,0.45); color: #fff; border: none;
+  width: 44px; height: 44px; border-radius: 50%; font-size: 28px; line-height: 1;
+  cursor: pointer; z-index: 10; transition: background .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.lh-arrow:hover { background: rgba(0,113,189,0.8); }
+.lh-prev { left: 16px; }
+.lh-next { right: 16px; }
+.lh-dots {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; z-index: 10;
+}
+.lh-dot {
+  width: 8px; height: 8px; border-radius: 50%; border: none;
+  background: rgba(255,255,255,0.45); cursor: pointer; transition: all .2s; padding: 0;
+}
+.lh-dot.active { background: #fff; width: 24px; border-radius: 100px; }
+
+/* ── 3 cajas de categoría ────────────────────────────────────── */
+.catboxes-section {
+  background: #fff;
+  padding: 48px 0;
+  border-bottom: 1.5px solid #dde4ef;
+}
+.cat-boxes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+@media (max-width: 768px) {
+  .cat-boxes { grid-template-columns: 1fr; gap: 14px; }
+}
+.catbox {
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  transition: transform .18s, box-shadow .18s;
+  background: #fff;
+  border: 1px solid #e0e7f0;
+}
+.catbox:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,113,189,0.18); }
+.catbox-img-wrap {
+  position: relative;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+}
+.catbox-img-wrap img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform .35s;
+}
+.catbox:hover .catbox-img-wrap img { transform: scale(1.04); }
+.catbox-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.35) 100%);
+}
+.catbox-info {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px;
+  background: #fff;
+}
+.catbox-icon { font-size: 22px; flex-shrink: 0; }
+.catbox-label { font-weight: 700; font-size: 15px; color: #0c1523; font-family: 'Space Grotesk', sans-serif; }
+.catbox-count { font-size: 11px; color: #7b8fa6; margin-top: 2px; }
+.catbox-arrow { margin-left: auto; width: 18px; height: 18px; color: #0071BD; flex-shrink: 0; }
+
+/* ── Secciones por familia ───────────────────────────────────── */
+.familia-sec {
+  padding: 56px 0 32px;
+  border-top: 1.5px solid #e0e7f0;
+}
+.familia-head {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 28px;
+}
+.familia-icon { font-size: 28px; }
+.familia-title { font-size: 24px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #0c1523; }
+.subfam-group { margin-bottom: 32px; }
+.subfam-label {
+  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: #0071BD; margin-bottom: 14px; padding-left: 4px;
+  scroll-margin-top: 90px;
+}
+
+/* ── Fila de tarjetas (scroll horizontal) ────────────────────── */
+.prod-row-scroll {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.prod-row-scroll::-webkit-scrollbar { height: 4px; }
+.prod-row-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+
+/* ── Tarjeta de producto ─────────────────────────────────────── */
+.pcard {
+  flex-shrink: 0;
+  width: 220px;
+  border-radius: 12px;
+  border: 1.5px solid #dde4ef;
+  background: #fff;
+  overflow: hidden;
+  scroll-snap-align: start;
+  transition: border-color .15s, box-shadow .15s;
+  display: flex;
+  flex-direction: column;
+}
+.pcard:hover { border-color: #29AAE1; box-shadow: 0 4px 20px rgba(41,170,225,0.18); }
+.pcard-img {
+  aspect-ratio: 4/3;
+  overflow: hidden;
+  background: #f4f7fb;
+  display: flex; align-items: center; justify-content: center;
+}
+.pcard-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pcard-img--placeholder { background: linear-gradient(135deg, #e8f4fd, #f0f8ff); }
+.pcard-icon { font-size: 40px; opacity: 0.6; }
+.pcard-body { padding: 14px; display: flex; flex-direction: column; flex: 1; gap: 6px; }
+.pcard-badge {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+  color: #0071BD; background: #e8f4fd; border-radius: 4px;
+  padding: 2px 7px; display: inline-block;
+}
+.pcard-name { font-size: 13px; font-weight: 600; color: #0c1523; line-height: 1.35; flex: 1; }
+.pcard-pres { font-size: 11px; color: #7b8fa6; }
+.pcard-price { font-size: 16px; font-weight: 800; color: #0071BD; font-family: 'Space Grotesk', sans-serif; }
+.pcard-wa {
+  display: flex; align-items: center; gap: 6px;
+  background: #25D366; color: #fff; text-decoration: none;
+  border-radius: 8px; padding: 9px 12px; font-size: 12px; font-weight: 700;
+  margin-top: 4px; transition: background .15s; justify-content: center;
+  font-family: 'Inter', sans-serif;
+}
+.pcard-wa:hover { background: #1DA851; }
+
+/* ── Marca strip actualizada ─────────────────────────────────── */
+.brands-section { background: #fff; padding: 40px 0; border-top: 1.5px solid #e0e7f0; }
+.brands-label { text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #7b8fa6; margin-bottom: 24px; }
+.brands-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center; }
+.brand-logo {
+  padding: 10px 22px; border-radius: 8px;
+  border: 1.5px solid #dde4ef; background: #f9fafc;
+  font-size: 13px; font-weight: 700; color: #435664;
+  letter-spacing: 0.02em; white-space: nowrap;
+  transition: border-color .15s, color .15s;
+}
+.brand-logo:hover { border-color: #29AAE1; color: #0071BD; }
+
+/* ── Footer social ───────────────────────────────────────────── */
+.footer-social { display: flex; gap: 14px; margin-top: 12px; }
+.footer-social a {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 8px;
+  background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.65);
+  transition: background .15s, color .15s;
+}
+.footer-social a:hover { background: rgba(41,170,225,0.25); color: #29AAE1; }
+
+/* ── Responsive nav ──────────────────────────────────────────── */
+@media (max-width: 900px) {
+  nav.main-nav { gap: 1px; }
+  .nav-family-btn { font-size: 11px; padding: 5px 8px; }
+}
+@media (max-width: 680px) {
+  .nav-catalog-link { display: none; }
+}
