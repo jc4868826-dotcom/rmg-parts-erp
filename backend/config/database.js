@@ -4,7 +4,7 @@ const fs = require('fs')
 const { v4: uuidv4 } = require('uuid')
 const bcrypt = require('bcryptjs')
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../database/rmg_parts.db')
+const DB_PATH = process.env.DB_PATH || '/var/data/rmg_parts.db'
 
 const dbDir = path.dirname(DB_PATH)
 if (!fs.existsSync(dbDir)) {
@@ -1315,6 +1315,17 @@ async function initDB() {
   const SQL = await initSqlJs({
     locateFile: file => path.join(path.dirname(require.resolve('sql.js')), file),
   })
+
+  // One-time: si el disco persistente no tiene la DB pero la ruta efímera sí, copiar
+  const OLD_DB_PATH = path.join(__dirname, '../../database/rmg_parts.db')
+  if (!fs.existsSync(DB_PATH) && fs.existsSync(OLD_DB_PATH)) {
+    try {
+      fs.copyFileSync(OLD_DB_PATH, DB_PATH)
+      console.log(`✅ DB migrada a disco persistente: ${DB_PATH}`)
+    } catch (e) {
+      console.warn(`⚠️  No se pudo migrar DB antigua: ${e.message}`)
+    }
+  }
 
   let sqlJsDb
   if (fs.existsSync(DB_PATH)) {
