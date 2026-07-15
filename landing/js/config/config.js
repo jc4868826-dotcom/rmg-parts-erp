@@ -14,7 +14,7 @@ const CONFIG = {
     inventario: '/api/inventario'
   },
 
-  WHATSAPP: '', // TODO: numero real
+  WHATSAPP: '', // PENDIENTE: JC completa el número real aquí antes de publicar
 
   IVA: 0.19
 

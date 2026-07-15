@@ -3,37 +3,35 @@
 const Catalogo = (() => {
   let _data        = [];
   let _filtered    = [];
-  let _filtros     = { categoria: '', rubro: '', marca: '', aplicacion: '' };
-  let _rubros_activo = null;
+  let _filtros     = { familia: '', subfamilia: '', marca: '' };
   let _modalSku    = null;
   let _sending     = false;
   let _initialized = false;
 
   // accordion state
-  let _openCat   = null;          // nivel 1: categoria abierta
-  let _openAplic = null;          // nivel 2: "cat:aplic" abierta
+  let _openFam = null;   // nivel 1: Familia abierta
+  let _openSub = null;   // nivel 2: "Familia:Subfamilia" abierta
 
   // search
-  let _searchTokens = [];
+  let _searchTokens  = [];
   let _debounceTimer = null;
 
   // ─── Constantes ──────────────────────────────────────────────────────────────
-  const RUBROS = ['Talleres','Concesionarios','Flotas','Agricola','Mineria','Construccion','Industria','RentACar'];
-  const RUBRO_ICON = {
-    Talleres:'🔧', Concesionarios:'🏢', Flotas:'🚛', Agricola:'🌾',
-    Mineria:'⛏️', Construccion:'🏗️', Industria:'⚙️', RentACar:'🚗',
+  const FAM_ORDER = [
+    'LUBRICANTES', 'BATERÍAS', 'NEUMÁTICOS',
+    'QUÍMICOS Y CUIDADO VEHICULAR', 'REFRIGERANTES Y ADITIVOS DIESEL',
+    'GRASAS', 'ADITIVOS', 'LÍQUIDO DE FRENOS',
+  ];
+  const FAM_ICON = {
+    'LUBRICANTES':                     '🛢️',
+    'BATERÍAS':                        '🔋',
+    'NEUMÁTICOS':                      '🛞',
+    'QUÍMICOS Y CUIDADO VEHICULAR':    '🧴',
+    'REFRIGERANTES Y ADITIVOS DIESEL': '❄️',
+    'GRASAS':                          '⚙️',
+    'ADITIVOS':                        '🧪',
+    'LÍQUIDO DE FRENOS':               '🚦',
   };
-  const APLICACION_LABEL = {
-    liviano:           'Vehículo liviano',
-    camion_flota:      'Camión / Flota',
-    maquinaria_agricola: 'Maquinaria agrícola',
-    industrial:        'Industrial',
-  };
-  const CAT_ICON = {
-    neumatico:'🛞', lubricante:'🛢️', bateria:'🔋', grasa:'⚙️',
-    refrigerante:'❄️', filtro:'🔍', otro:'📦',
-  };
-  const CAT_ORDER = ['neumatico','bateria','lubricante','grasa','refrigerante','filtro','otro'];
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
   async function init() {
@@ -42,9 +40,9 @@ const Catalogo = (() => {
     if (_initialized && _data.length > 0) { _render(container); return; }
     container.innerHTML = _loadingHTML();
     try {
-      const res = await fetch(CONFIG.BASE_URL + '/api/public/catalogo');
+      const res = await fetch('data/catalogo.json');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      _data = await res.json();
+      _data     = await res.json();
       _filtered = [..._data];
       _initialized = true;
       _render(container);
@@ -61,9 +59,11 @@ const Catalogo = (() => {
 
   // ─── Render principal ────────────────────────────────────────────────────────
   function _render(container) {
-    const categorias   = [...new Set(_data.map(p => p.categoria).filter(Boolean))].sort();
-    const marcas       = [...new Set(_data.map(p => p.marca).filter(Boolean))].sort();
-    const aplicaciones = [...new Set(_data.map(p => p.aplicacion).filter(Boolean))].sort();
+    const allFams = FAM_ORDER.filter(f => _data.some(p => p['Familia'] === f))
+      .concat(_data.map(p => p['Familia']).filter(f => f && !FAM_ORDER.includes(f))
+        .filter((v, i, a) => a.indexOf(v) === i).sort());
+    const subfamilias = [...new Set(_data.map(p => p['Subfamilia']).filter(Boolean))].sort();
+    const marcas      = [...new Set(_data.map(p => p['Marca(s)']).filter(Boolean))].sort();
 
     container.innerHTML = `
       <!-- ── HERO INDUSTRIAL ─────────────────────────────────────── -->
@@ -82,55 +82,36 @@ const Catalogo = (() => {
         </div>
       </div>
 
-      <!-- ── CHIPS DE RUBRO ──────────────────────────────────────── -->
-      <section class="ci-rubros-section">
-        <div class="container">
-          <div class="ci-rubro-chips" id="ci-rubro-chips">
-            ${RUBROS.map(r => `
-              <button class="ci-chip" data-rubro="${r}" onclick="Catalogo.filterRubro('${r}')">
-                ${RUBRO_ICON[r]} ${r}
-              </button>`).join('')}
-          </div>
-        </div>
-      </section>
-
       <!-- ── BARRA DE FILTROS ────────────────────────────────────── -->
       <section class="ci-filters-bar">
         <div class="container">
           <div class="ci-filters-row">
             <div class="ci-filter-group">
-              <label>Categoría</label>
-              <select id="ci-f-cat" onchange="Catalogo.applyFilter('categoria',this.value)">
+              <label>Familia</label>
+              <select id="ci-f-fam" onchange="Catalogo.applyFilter('familia',this.value)">
                 <option value="">Todas</option>
-                ${categorias.map(c => `<option value="${c}">${_capitalize(c)}</option>`).join('')}
+                ${allFams.map(f => `<option value="${_esc(f)}">${_esc(f)}</option>`).join('')}
               </select>
             </div>
             <div class="ci-filter-group">
-              <label>Rubro</label>
-              <select id="ci-f-rubro" onchange="Catalogo.applyFilter('rubro',this.value)">
-                <option value="">Todos</option>
-                ${RUBROS.map(r => `<option value="${r}">${r}</option>`).join('')}
+              <label>Subfamilia</label>
+              <select id="ci-f-sub" onchange="Catalogo.applyFilter('subfamilia',this.value)">
+                <option value="">Todas</option>
+                ${subfamilias.map(s => `<option value="${_esc(s)}">${_esc(s)}</option>`).join('')}
               </select>
             </div>
             <div class="ci-filter-group">
               <label>Marca</label>
               <select id="ci-f-marca" onchange="Catalogo.applyFilter('marca',this.value)">
                 <option value="">Todas</option>
-                ${marcas.map(m => `<option value="${m}">${m}</option>`).join('')}
-              </select>
-            </div>
-            <div class="ci-filter-group">
-              <label>Aplicación</label>
-              <select id="ci-f-aplic" onchange="Catalogo.applyFilter('aplicacion',this.value)">
-                <option value="">Todas</option>
-                ${aplicaciones.map(a => `<option value="${a}">${APLICACION_LABEL[a] || a}</option>`).join('')}
+                ${marcas.map(m => `<option value="${_esc(m)}">${_esc(m)}</option>`).join('')}
               </select>
             </div>
             <div class="ci-filter-group ci-filter-search">
               <label>Buscar</label>
               <div class="ci-search-wrap">
                 <input type="text" id="ci-f-q"
-                       placeholder="SKU, descripción, marca…"
+                       placeholder="Línea, marca, tipo…"
                        autocomplete="off"
                        oninput="Catalogo.handleSearchInput(this.value)"
                        onblur="Catalogo.hideSuggestions()"
@@ -184,7 +165,6 @@ const Catalogo = (() => {
     }
     if (empty) empty.style.display = 'none';
 
-    // En modo búsqueda → resultados planos, rankeados
     if (_searchTokens.length > 0) {
       const ranked = _rankItems(unique);
       grid.innerHTML = `
@@ -198,43 +178,38 @@ const Catalogo = (() => {
       return;
     }
 
-    // Modo acordeón 3 niveles
     grid.innerHTML = _accordionHTML(unique);
   }
 
   // ─── Acordeón ─────────────────────────────────────────────────────────────
   function _accordionHTML(items) {
-    // Agrupar por categoria → aplicacion
-    const bycat = {};
+    const byfam = {};
     items.forEach(p => {
-      const cat   = p.categoria || 'otro';
-      const aplic = p.aplicacion || 'otro';
-      if (!bycat[cat]) bycat[cat] = {};
-      if (!bycat[cat][aplic]) bycat[cat][aplic] = [];
-      bycat[cat][aplic].push(p);
+      const fam = p['Familia']    || 'OTROS';
+      const sub = p['Subfamilia'] || 'General';
+      if (!byfam[fam])      byfam[fam]      = {};
+      if (!byfam[fam][sub]) byfam[fam][sub] = [];
+      byfam[fam][sub].push(p);
     });
 
-    const cats = CAT_ORDER.filter(c => bycat[c]).concat(
-      Object.keys(bycat).filter(c => !CAT_ORDER.includes(c)).sort()
+    const fams = FAM_ORDER.filter(f => byfam[f]).concat(
+      Object.keys(byfam).filter(f => !FAM_ORDER.includes(f)).sort()
     );
 
-    return `<div class="ci-accordion">${cats.map(cat => _catHTML(cat, bycat[cat])).join('')}</div>`;
+    return `<div class="ci-accordion">${fams.map(fam => _famHTML(fam, byfam[fam])).join('')}</div>`;
   }
 
-  function _catHTML(cat, byaplic) {
-    const total  = Object.values(byaplic).reduce((s, arr) => s + arr.length, 0);
-    const isOpen = _openCat === cat;
-    const aplics = Object.keys(byaplic).sort((a, b) => {
-      const ord = ['liviano','camion_flota','maquinaria_agricola','industrial','otro'];
-      return (ord.indexOf(a) + 1 || 99) - (ord.indexOf(b) + 1 || 99);
-    });
+  function _famHTML(fam, bysub) {
+    const total  = Object.values(bysub).reduce((s, arr) => s + arr.length, 0);
+    const isOpen = _openFam === fam;
+    const subs   = Object.keys(bysub).sort();
 
     return `
-      <div class="ci-acc-cat" data-cat="${cat}">
+      <div class="ci-acc-cat" data-fam="${_esc(fam)}">
         <button class="ci-acc-cat-btn ${isOpen ? 'open' : ''}"
-                onclick="Catalogo.toggleCat('${cat}')">
-          <span class="ci-acc-cat-icon">${CAT_ICON[cat] || '📦'}</span>
-          <span class="ci-acc-cat-name">${_capitalize(cat)}</span>
+                onclick="Catalogo.toggleFam(${JSON.stringify(fam)})">
+          <span class="ci-acc-cat-icon">${FAM_ICON[fam] || '📦'}</span>
+          <span class="ci-acc-cat-name">${_esc(fam)}</span>
           <span class="ci-acc-cat-count">${total} SKU${total !== 1 ? 's' : ''}</span>
           <svg class="ci-acc-chevron ${isOpen ? 'open' : ''}" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -242,22 +217,21 @@ const Catalogo = (() => {
           </svg>
         </button>
         <div class="ci-acc-cat-body" ${isOpen ? '' : 'style="display:none"'}>
-          ${aplics.map(aplic => _aplicHTML(cat, aplic, byaplic[aplic])).join('')}
+          ${subs.map(sub => _subHTML(fam, sub, bysub[sub])).join('')}
         </div>
       </div>`;
   }
 
-  function _aplicHTML(cat, aplic, items) {
-    const key    = cat + ':' + aplic;
-    const isOpen = _openAplic === key;
-    const label  = APLICACION_LABEL[aplic] || _capitalize(aplic.replace(/_/g, ' '));
+  function _subHTML(fam, sub, items) {
+    const key    = fam + ':' + sub;
+    const isOpen = _openSub === key;
 
     return `
-      <div class="ci-acc-aplic" data-key="${key}">
+      <div class="ci-acc-aplic" data-key="${_esc(key)}">
         <button class="ci-acc-aplic-btn ${isOpen ? 'open' : ''}"
-                onclick="Catalogo.toggleAplic('${cat}','${aplic}')">
+                onclick="Catalogo.toggleSub(${JSON.stringify(fam)},${JSON.stringify(sub)})">
           <span class="ci-acc-aplic-dot"></span>
-          <span class="ci-acc-aplic-name">${label}</span>
+          <span class="ci-acc-aplic-name">${_esc(sub)}</span>
           <span class="ci-acc-aplic-count">${items.length} producto${items.length !== 1 ? 's' : ''}</span>
           <svg class="ci-acc-chevron sm ${isOpen ? 'open' : ''}" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -272,59 +246,54 @@ const Catalogo = (() => {
       </div>`;
   }
 
-  function toggleCat(cat) {
-    const prev   = _openCat;
-    _openCat     = prev === cat ? null : cat;
-    _openAplic   = null;                         // reset nivel 2
+  function toggleFam(fam) {
+    const prev = _openFam;
+    _openFam   = prev === fam ? null : fam;
+    _openSub   = null;
 
-    // DOM: cerrar anterior
-    if (prev && prev !== cat) {
-      const prevEl = document.querySelector(`.ci-acc-cat[data-cat="${prev}"]`);
+    if (prev && prev !== fam) {
+      const prevEl = document.querySelector(`.ci-acc-cat[data-fam="${CSS.escape(prev)}"]`);
       if (prevEl) {
         prevEl.querySelector('.ci-acc-cat-btn').classList.remove('open');
         prevEl.querySelector('.ci-acc-cat-body').style.display = 'none';
         prevEl.querySelector('.ci-acc-chevron').classList.remove('open');
       }
     }
-    // DOM: toggle actual
-    const el = document.querySelector(`.ci-acc-cat[data-cat="${cat}"]`);
+    const el = document.querySelector(`.ci-acc-cat[data-fam="${CSS.escape(fam)}"]`);
     if (el) {
       const btn  = el.querySelector('.ci-acc-cat-btn');
       const body = el.querySelector('.ci-acc-cat-body');
       const chev = el.querySelector('.ci-acc-chevron');
-      if (_openCat === cat) {
+      if (_openFam === fam) {
         btn.classList.add('open'); body.style.display = ''; chev.classList.add('open');
       } else {
         btn.classList.remove('open'); body.style.display = 'none'; chev.classList.remove('open');
       }
     }
-    // Cerrar todos los nivel-2
     document.querySelectorAll('.ci-acc-aplic-btn').forEach(b => b.classList.remove('open'));
     document.querySelectorAll('.ci-acc-chevron.sm').forEach(c => c.classList.remove('open'));
     document.querySelectorAll('.ci-acc-aplic-body').forEach(b => { b.style.display = 'none'; });
   }
 
-  function toggleAplic(cat, aplic) {
-    const key  = cat + ':' + aplic;
-    const prev = _openAplic;
-    _openAplic = prev === key ? null : key;
+  function toggleSub(fam, sub) {
+    const key  = fam + ':' + sub;
+    const prev = _openSub;
+    _openSub   = prev === key ? null : key;
 
-    // Cerrar anterior del mismo nivel
     if (prev && prev !== key) {
-      const prevEl = document.querySelector(`.ci-acc-aplic[data-key="${prev}"]`);
+      const prevEl = document.querySelector(`.ci-acc-aplic[data-key="${CSS.escape(prev)}"]`);
       if (prevEl) {
         prevEl.querySelector('.ci-acc-aplic-btn').classList.remove('open');
         prevEl.querySelector('.ci-acc-aplic-body').style.display = 'none';
         prevEl.querySelector('.ci-acc-chevron').classList.remove('open');
       }
     }
-    // Toggle actual
-    const el = document.querySelector(`.ci-acc-aplic[data-key="${key}"]`);
+    const el = document.querySelector(`.ci-acc-aplic[data-key="${CSS.escape(key)}"]`);
     if (el) {
       const btn  = el.querySelector('.ci-acc-aplic-btn');
       const body = el.querySelector('.ci-acc-aplic-body');
       const chev = el.querySelector('.ci-acc-chevron');
-      if (_openAplic === key) {
+      if (_openSub === key) {
         btn.classList.add('open'); body.style.display = ''; chev.classList.add('open');
       } else {
         btn.classList.remove('open'); body.style.display = 'none'; chev.classList.remove('open');
@@ -342,7 +311,9 @@ const Catalogo = (() => {
   }
 
   function _score(p, tokens) {
-    const hay = _norm([p.codigo_sku, p.descripcion, p.marca, p.producto_generico, p.rubro, p.aplicacion].join(' '));
+    const hay = _norm([
+      p.codigo_sku, p['Línea'], p['Marca(s)'], p['Familia'], p['Subfamilia'], p['Tipo'],
+    ].join(' '));
     let s = 0;
     for (const t of tokens) if (hay.includes(t)) s++;
     return s;
@@ -360,30 +331,36 @@ const Catalogo = (() => {
   function handleSearchInput(raw) {
     clearTimeout(_debounceTimer);
     _debounceTimer = setTimeout(() => {
-      const tokens = _tokenize(raw);
-      _searchTokens = tokens;
+      _searchTokens = _tokenize(raw);
       _applyAll();
-      _showSuggestions(raw, tokens);
+      _showSuggestions(raw);
     }, 250);
   }
 
-  function _showSuggestions(raw, tokens) {
+  function _showSuggestions(raw) {
     const box = document.getElementById('ci-suggestions');
     if (!box) return;
-    if (!raw || !raw.trim() || tokens.length === 0) { box.style.display = 'none'; return; }
+    if (!raw || !raw.trim() || _searchTokens.length === 0) { box.style.display = 'none'; return; }
 
-    const unique  = _dedup(_filtered.length > 0 ? _filtered : _data);
-    const ranked  = _rankItems(unique).slice(0, 6);
+    const unique = _dedup(_filtered.length > 0 ? _filtered : _data);
+    const ranked = _rankItems(unique).slice(0, 6);
     if (ranked.length === 0) { box.style.display = 'none'; return; }
 
-    box.innerHTML = ranked.map(p => `
-      <div class="ci-sugg-item" onmousedown="Catalogo.pickSuggestion('${_esc(p.codigo_sku)}','${_esc(p.descripcion.replace(/'/g,"\\'"))}')">
-        <span class="ci-sugg-icon">${CAT_ICON[p.categoria] || '📦'}</span>
-        <span class="ci-sugg-text">
-          <span class="ci-sugg-desc">${_esc(p.descripcion)}</span>
-          <span class="ci-sugg-meta">${_esc(p.marca)} · SKU ${_esc(p.codigo_sku)}</span>
-        </span>
-      </div>`).join('');
+    box.innerHTML = ranked.map(p => {
+      const linea = _esc(p['Línea'] || '');
+      const tipo  = _esc(p['Tipo']  || '');
+      const marca = _esc(p['Marca(s)'] || '');
+      const sku   = _esc(p.codigo_sku  || '');
+      const desc  = (p['Línea'] + ' ' + p['Tipo']).trim().replace(/'/g, "\\'");
+      return `
+        <div class="ci-sugg-item" onmousedown="Catalogo.pickSuggestion('${sku}','${desc}')">
+          <span class="ci-sugg-icon">${FAM_ICON[p['Familia']] || '📦'}</span>
+          <span class="ci-sugg-text">
+            <span class="ci-sugg-desc">${linea}${tipo ? ' — ' + tipo : ''}</span>
+            <span class="ci-sugg-meta">${marca} · SKU ${sku}</span>
+          </span>
+        </div>`;
+    }).join('');
     box.style.display = '';
   }
 
@@ -401,60 +378,35 @@ const Catalogo = (() => {
     if (box) box.style.display = 'none';
     _searchTokens = _tokenize(desc);
     _applyAll();
-    // abrir directamente la ficha técnica del producto
     openModal(sku);
   }
 
   // ─── Filtros ──────────────────────────────────────────────────────────────
-  function filterRubro(rubro) {
-    _rubros_activo     = _rubros_activo === rubro ? null : rubro;
-    _filtros.rubro     = _rubros_activo || '';
-    document.querySelectorAll('#ci-rubro-chips .ci-chip').forEach(c =>
-      c.classList.toggle('active', c.dataset.rubro === _rubros_activo));
-    const sel = document.getElementById('ci-f-rubro');
-    if (sel) sel.value = _rubros_activo || '';
-    _openCat   = null;
-    _openAplic = null;
-    _applyAll();
-  }
-
   function applyFilter(key, val) {
     _filtros[key] = val;
-    if (key === 'rubro') {
-      _rubros_activo = val || null;
-      document.querySelectorAll('#ci-rubro-chips .ci-chip').forEach(c =>
-        c.classList.toggle('active', c.dataset.rubro === _rubros_activo));
-    }
-    _openCat   = null;
-    _openAplic = null;
+    _openFam = null;
+    _openSub = null;
     _applyAll();
   }
 
   function _applyAll() {
     const tokens = _searchTokens;
     _filtered = _data.filter(p => {
-      if (_filtros.categoria  && p.categoria  !== _filtros.categoria)  return false;
-      if (_filtros.marca      && p.marca      !== _filtros.marca)       return false;
-      if (_filtros.aplicacion && p.aplicacion !== _filtros.aplicacion)  return false;
-      if (_filtros.rubro) {
-        const rubros = (p.rubro || '').split(',').map(r => r.trim());
-        if (!rubros.includes(_filtros.rubro)) return false;
-      }
-      if (tokens.length > 0) {
-        if (_score(p, tokens) === 0) return false;
-      }
+      if (_filtros.familia    && p['Familia']    !== _filtros.familia)    return false;
+      if (_filtros.subfamilia && p['Subfamilia'] !== _filtros.subfamilia) return false;
+      if (_filtros.marca      && p['Marca(s)']   !== _filtros.marca)      return false;
+      if (tokens.length > 0  && _score(p, tokens) === 0)                 return false;
       return true;
     });
     _renderGrid();
   }
 
   function clearFilters() {
-    _filtros       = { categoria: '', rubro: '', marca: '', aplicacion: '' };
-    _searchTokens  = [];
-    _rubros_activo = null;
-    _openCat       = null;
-    _openAplic     = null;
-    ['ci-f-cat','ci-f-rubro','ci-f-marca','ci-f-aplic'].forEach(id => {
+    _filtros      = { familia: '', subfamilia: '', marca: '' };
+    _searchTokens = [];
+    _openFam      = null;
+    _openSub      = null;
+    ['ci-f-fam', 'ci-f-sub', 'ci-f-marca'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -462,7 +414,6 @@ const Catalogo = (() => {
     if (q) q.value = '';
     const box = document.getElementById('ci-suggestions');
     if (box) box.style.display = 'none';
-    document.querySelectorAll('#ci-rubro-chips .ci-chip').forEach(c => c.classList.remove('active'));
     _filtered = [..._data];
     _renderGrid();
   }
@@ -471,29 +422,27 @@ const Catalogo = (() => {
   function _dedup(rows) {
     const seen = new Set();
     return rows.filter(r => {
-      const key = r.codigo_sku + '|' + r.descripcion;
-      if (seen.has(key)) return false;
-      seen.add(key);
+      if (seen.has(r.codigo_sku)) return false;
+      seen.add(r.codigo_sku);
       return true;
     });
   }
 
   function _cardHTML(p) {
-    const rubros = (p.rubro || 'Talleres,Concesionarios').split(',').map(r => r.trim());
-    const aplic  = APLICACION_LABEL[p.aplicacion] || p.aplicacion || '';
-    const sku    = _esc(p.codigo_sku || '');
+    const sku   = _esc(p.codigo_sku   || '');
+    const linea = _esc(p['Línea']     || '');
+    const marca = _esc(p['Marca(s)']  || '');
+    const tipo  = _esc(p['Tipo']      || '');
+    const pres  = _esc(p['Presentaciones'] || '');
     return `
       <div class="ci-card" onclick="Catalogo.openModal('${sku}')">
         <div class="ci-card-head">
           <span class="ci-sku mono">${sku}</span>
-          <span class="ci-card-marca">${_esc(p.marca || '')}</span>
+          <span class="ci-card-marca">${marca}</span>
         </div>
-        <div class="ci-card-name">${_esc(p.descripcion || '')}</div>
-        ${p.presentacion ? `<div class="ci-card-pres">${_esc(p.presentacion)}</div>` : ''}
-        <div class="ci-card-foot">
-          <div class="ci-rubros">${rubros.map(r => `<span class="ci-rubro-tag">${r}</span>`).join('')}</div>
-          ${aplic ? `<span class="ci-aplic">${aplic}</span>` : ''}
-        </div>
+        <div class="ci-card-name">${linea}</div>
+        ${tipo ? `<div class="ci-card-pres">${tipo}</div>` : ''}
+        ${pres ? `<div class="ci-card-pres">${pres}</div>` : ''}
         <div class="ci-card-cta">Ver ficha técnica →</div>
       </div>`;
   }
@@ -506,46 +455,37 @@ const Catalogo = (() => {
     const content = document.getElementById('ci-modal-content');
     if (!overlay || !content || !p) return;
 
-    const rubros  = (p.rubro || '').split(',').map(r => r.trim()).filter(Boolean);
-    const aplic   = APLICACION_LABEL[p.aplicacion] || p.aplicacion || '';
-    const WA      = (typeof CONFIG !== 'undefined') ? CONFIG.WHATSAPP : '';
-    const waLink  = WA
-      ? `https://wa.me/${WA}?text=${encodeURIComponent('Hola, quiero información sobre ' + p.descripcion + ' (SKU: ' + p.codigo_sku + ')')}`
-      : null;
+    const WA     = (typeof CONFIG !== 'undefined') ? CONFIG.WHATSAPP : '';
+    const waMsg  = ('Hola, quiero información sobre ' + (p['Línea'] || '') + ' ' + (p['Tipo'] || '')).trim();
+    const waLink = WA ? `https://wa.me/${WA}?text=${encodeURIComponent(waMsg)}` : null;
 
     content.innerHTML = `
       <div class="ci-ficha">
         <div class="ci-ficha-head">
           <div>
-            <div class="ci-ficha-marca">${_esc(p.marca || '')}</div>
-            <h2 class="ci-ficha-name">${_esc(p.descripcion || '')}</h2>
+            <div class="ci-ficha-marca">${_esc(p['Marca(s)'] || '')}</div>
+            <h2 class="ci-ficha-name">${_esc(p['Línea'] || '')}</h2>
             <div class="ci-ficha-sku">SKU: ${_esc(p.codigo_sku || '')}</div>
           </div>
-          <span class="ci-cat-badge big">${CAT_ICON[p.categoria] || '📦'} ${_capitalize(p.categoria || '')}</span>
+          <span class="ci-cat-badge big">${FAM_ICON[p['Familia']] || '📦'} ${_esc(p['Familia'] || '')}</span>
         </div>
 
         <div class="ci-ficha-specs">
-          ${p.presentacion     ? `<div class="ci-spec"><span>Presentación</span><span>${_esc(p.presentacion)}</span></div>` : ''}
-          ${p.tipo_envase      ? `<div class="ci-spec"><span>Envase</span><span>${_esc(p.tipo_envase)}</span></div>` : ''}
-          ${p.producto_generico? `<div class="ci-spec"><span>Tipo</span><span>${_esc(p.producto_generico)}</span></div>` : ''}
-          ${aplic              ? `<div class="ci-spec"><span>Aplicación</span><span>${_esc(aplic)}</span></div>` : ''}
-          ${p.proveedor        ? `<div class="ci-spec"><span>Proveedor</span><span>${_esc(p.proveedor)}</span></div>` : ''}
+          ${p['Subfamilia']                          ? `<div class="ci-spec"><span>Subfamilia</span><span>${_esc(p['Subfamilia'])}</span></div>` : ''}
+          ${p['Sub-subfamilia']                      ? `<div class="ci-spec"><span>Categoría</span><span>${_esc(p['Sub-subfamilia'])}</span></div>` : ''}
+          ${p['Tipo']                                ? `<div class="ci-spec"><span>Tipo</span><span>${_esc(p['Tipo'])}</span></div>` : ''}
+          ${p['Presentaciones']                      ? `<div class="ci-spec"><span>Presentaciones</span><span>${_esc(p['Presentaciones'])}</span></div>` : ''}
+          ${p['Proveedor(es)']                       ? `<div class="ci-spec"><span>Proveedor</span><span>${_esc(p['Proveedor(es)'])}</span></div>` : ''}
+          ${p['Composición (Ingeniería)']            ? `<div class="ci-spec"><span>Composición</span><span>${_esc(p['Composición (Ingeniería)'])}</span></div>` : ''}
+          ${p['Resistencia Técnica / Aplicación']    ? `<div class="ci-spec"><span>Aplicación técnica</span><span>${_esc(p['Resistencia Técnica / Aplicación'])}</span></div>` : ''}
         </div>
-
-        ${rubros.length ? `
-          <div class="ci-ficha-rubros">
-            <div class="ci-ficha-label">Rubros recomendados</div>
-            <div class="ci-rubros-big">
-              ${rubros.map(r => `<span class="ci-rubro-tag big">${RUBRO_ICON[r] || ''} ${r}</span>`).join('')}
-            </div>
-          </div>` : ''}
 
         <div class="ci-ficha-form">
           <h3>Solicitar cotización</h3>
           <p class="ci-form-sub">Completa el formulario y un ejecutivo te contactará hoy.</p>
           <form id="ci-prospecto-form" onsubmit="Catalogo.submitForm(event)">
             <input type="hidden" name="producto_interes"
-                   value="${_esc(p.descripcion || '')} (${_esc(p.codigo_sku || '')})">
+                   value="${_esc(((p['Línea'] || '') + ' ' + (p['Tipo'] || '')).trim() + ' (' + (p.codigo_sku || '') + ')')}">
             <div class="ci-form-row">
               <div class="ci-form-group">
                 <label>Nombre *</label>
@@ -561,7 +501,14 @@ const Catalogo = (() => {
                 <label>Rubro</label>
                 <select name="rubro">
                   <option value="">Seleccionar…</option>
-                  ${RUBROS.map(r => `<option value="${r}">${r}</option>`).join('')}
+                  <option>Talleres</option>
+                  <option>Concesionarios</option>
+                  <option>Flotas</option>
+                  <option>Agricola</option>
+                  <option>Mineria</option>
+                  <option>Construccion</option>
+                  <option>Industria</option>
+                  <option>RentACar</option>
                 </select>
               </div>
               <div class="ci-form-group">
@@ -636,18 +583,17 @@ const Catalogo = (() => {
   }
 
   // ─── Utils ────────────────────────────────────────────────────────────────
-  function _capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
   function _esc(s) {
     return String(s || '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   return {
     init, reinit,
-    toggleCat, toggleAplic,
+    toggleFam, toggleSub,
     openModal, closeModal, submitForm,
-    filterRubro, applyFilter,
+    applyFilter,
     handleSearchInput, hideSuggestions, pickSuggestion,
     clearFilters,
   };
