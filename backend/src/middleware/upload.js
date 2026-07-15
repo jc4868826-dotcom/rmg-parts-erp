@@ -24,11 +24,13 @@ function makeUpload(subfolder) {
   })
 
   const fileFilter = (_req, file, cb) => {
-    const allowed = ['.jpg', '.jpeg', '.png', '.webp']
+    const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
     if (allowed.includes(path.extname(file.originalname).toLowerCase())) {
       cb(null, true)
     } else {
-      cb(new Error('Solo se permiten imágenes JPG, PNG o WebP'), false)
+      const err = new Error('Formato no soportado. Usa JPG, PNG, WebP o GIF')
+      err.statusCode = 400
+      cb(err, false)
     }
   }
 

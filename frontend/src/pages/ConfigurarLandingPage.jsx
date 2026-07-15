@@ -87,19 +87,19 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
   const createMut = useMutation({
     mutationFn: (fd) => api.post('/admin/landing/subfamilias', fd).then(r => r.data),
     onSuccess: () => { invalidate(); resetForm(); toast.success('Subfamilia creada') },
-    onError: () => toast.error('Error al crear subfamilia'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al crear subfamilia'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, fd }) => api.put(`/admin/landing/subfamilias/${id}`, fd).then(r => r.data),
     onSuccess: () => { invalidate(); resetForm(); toast.success('Subfamilia actualizada') },
-    onError: () => toast.error('Error al actualizar subfamilia'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar subfamilia'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id) => api.delete(`/admin/landing/subfamilias/${id}`).then(r => r.data),
     onSuccess: () => { invalidate(); toast.success('Subfamilia eliminada') },
-    onError: () => toast.error('Error al eliminar subfamilia'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar subfamilia'),
   })
 
   const resetForm = () => { setForm(FORM_INIT); setEditId(null); setShowForm(false); if (fotoRef.current) fotoRef.current.value = '' }
@@ -280,19 +280,19 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
   const createMut = useMutation({
     mutationFn: (fd) => api.post('/admin/landing/productos', fd).then(r => r.data),
     onSuccess: () => { invalidate(); resetForm(); toast.success('Producto creado') },
-    onError: () => toast.error('Error al crear producto'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al crear producto'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, fd }) => api.put(`/admin/landing/productos/${id}`, fd).then(r => r.data),
     onSuccess: () => { invalidate(); resetForm(); toast.success('Producto actualizado') },
-    onError: () => toast.error('Error al actualizar producto'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar producto'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id) => api.delete(`/admin/landing/productos/${id}`).then(r => r.data),
     onSuccess: () => { invalidate(); toast.success('Producto eliminado') },
-    onError: () => toast.error('Error al eliminar producto'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar producto'),
   })
 
   const resetForm = () => { setForm(FORM_INIT); setEditId(null); setShowForm(false); if (fotoRef.current) fotoRef.current.value = '' }
@@ -471,26 +471,47 @@ const FAM_META = {
   BATERIAS:    { label: 'Baterías',    icon: '🔋' },
   LUBRICANTES: { label: 'Lubricantes', icon: '🛢️' },
 }
+const FAM_KEYS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
+const EMPTY_PER_FAM = () => Object.fromEntries(FAM_KEYS.map(k => [k, null]))
+
 function TabFamilias({ familias = [], isLoading }) {
   const qc = useQueryClient()
-  const fotoRefs = { NEUMATICOS: useRef(null), BATERIAS: useRef(null), LUBRICANTES: useRef(null) }
+  const refNeu = useRef(null)
+  const refBat = useRef(null)
+  const refLub = useRef(null)
+  const fotoRefs = { NEUMATICOS: refNeu, BATERIAS: refBat, LUBRICANTES: refLub }
 
-  const updateMut = useMutation({
-    mutationFn: ({ familia, fd }) => api.put(`/admin/landing/familias/${familia}`, fd).then(r => r.data),
-    onSuccess: (_, { familia }) => {
-      qc.invalidateQueries(['landing-familias'])
-      toast.success(`Foto de ${FAM_META[familia]?.label || familia} actualizada`)
-    },
-    onError: () => toast.error('Error al actualizar foto'),
-  })
+  // Estado per-familia
+  const [selected,  setSelected]  = useState(EMPTY_PER_FAM)   // File | null por familia
+  const [uploading, setUploading] = useState(EMPTY_PER_FAM)   // bool por familia
+  const [done,      setDone]      = useState(EMPTY_PER_FAM)   // bool éxito per-familia
 
-  const handleUpload = (familia) => {
-    const file = fotoRefs[familia]?.current?.files[0]
-    if (!file) { toast.error('Selecciona una imagen primero'); return }
-    const fd = new FormData()
-    fd.append('foto', file)
-    updateMut.mutate({ familia, fd })
-    if (fotoRefs[familia]?.current) fotoRefs[familia].current.value = ''
+  const handleFileChange = (famKey, e) => {
+    const file = e.target.files[0] || null
+    setSelected(prev  => ({ ...prev, [famKey]: file }))
+    setDone(prev => ({ ...prev, [famKey]: false }))
+  }
+
+  const handleUpload = async (famKey) => {
+    const file = selected[famKey]
+    if (!file) return
+    setUploading(prev => ({ ...prev, [famKey]: true }))
+    setDone(prev => ({ ...prev, [famKey]: false }))
+    try {
+      const fd = new FormData()
+      fd.append('foto', file)
+      await api.put(`/admin/landing/familias/${famKey}`, fd)
+      await qc.invalidateQueries(['landing-familias'])
+      setSelected(prev  => ({ ...prev, [famKey]: null }))
+      setDone(prev => ({ ...prev, [famKey]: true }))
+      if (fotoRefs[famKey]?.current) fotoRefs[famKey].current.value = ''
+      toast.success(`Foto de ${FAM_META[famKey]?.label} actualizada`)
+      setTimeout(() => setDone(prev => ({ ...prev, [famKey]: false })), 3500)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al actualizar foto')
+    } finally {
+      setUploading(prev => ({ ...prev, [famKey]: false }))
+    }
   }
 
   if (isLoading) return <div className="py-12 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando…</div>
@@ -498,34 +519,64 @@ function TabFamilias({ familias = [], isLoading }) {
   return (
     <div className="space-y-4">
       <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
-        Foto de portada para cada categoría principal. Aparece en las cajas grandes de la home.
+        Foto de portada de cada categoría. Aparece en las cajas grandes de la home de la landing.
       </p>
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-        {['NEUMATICOS', 'BATERIAS', 'LUBRICANTES'].map(famKey => {
-          const row  = familias.find(f => f.familia === famKey)
-          const meta = FAM_META[famKey]
-          const src  = row?.foto_path ? `${API_BASE}/uploads/landing/${row.foto_path}` : null
+        {FAM_KEYS.map(famKey => {
+          const row      = familias.find(f => f.familia === famKey)
+          const meta     = FAM_META[famKey]
+          const src      = row?.foto_path ? `${API_BASE}/uploads/landing/${row.foto_path}` : null
+          const isUp     = !!uploading[famKey]
+          const hasFile  = !!selected[famKey]
+          const didDone  = !!done[famKey]
+
           return (
             <div key={famKey} className="rounded-xl overflow-hidden border"
-              style={{ background: 'var(--rmg-card)', borderColor: 'rgba(56,182,255,0.12)' }}>
+              style={{ background: 'var(--rmg-card)', borderColor: didDone ? 'rgba(45,201,138,0.4)' : 'rgba(56,182,255,0.12)', transition: 'border-color .3s' }}>
+
               {/* Imagen actual */}
-              <div className="flex items-center justify-center" style={{ height: 140, background: 'rgba(255,255,255,0.04)' }}>
+              <div className="relative flex items-center justify-center" style={{ height: 140, background: 'rgba(255,255,255,0.04)' }}>
                 {src
                   ? <img src={src} alt={meta?.label} className="w-full h-full object-cover" />
                   : <span style={{ fontSize: 48, opacity: 0.3 }}>{meta?.icon}</span>
                 }
+                {didDone && (
+                  <div className="absolute inset-0 flex items-center justify-center"
+                    style={{ background: 'rgba(45,201,138,0.15)' }}>
+                    <span className="text-2xl font-black" style={{ color: 'var(--rmg-teal)' }}>✓ Actualizada</span>
+                  </div>
+                )}
               </div>
+
               <div className="p-4 space-y-3">
                 <div className="font-bold text-sm">{meta?.icon} {meta?.label}</div>
-                <input ref={fotoRefs[famKey]} type="file" accept="image/jpeg,image/png,image/webp"
-                  className="w-full text-xs" style={{ color: 'var(--rmg-muted)' }} />
+
+                <input
+                  ref={fotoRefs[famKey]}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="w-full text-xs"
+                  style={{ color: 'var(--rmg-muted)' }}
+                  onChange={e => handleFileChange(famKey, e)}
+                />
+
+                {hasFile && !isUp && (
+                  <div className="text-xs truncate" style={{ color: 'var(--rmg-teal)' }}>
+                    📎 {selected[famKey]?.name}
+                  </div>
+                )}
+
                 <button
-                  className="w-full py-2 rounded-lg text-sm font-semibold transition-colors"
-                  style={{ background: 'var(--rmg-blue)', color: '#fff' }}
+                  className="w-full py-2 rounded-lg text-sm font-semibold transition-all"
+                  style={{
+                    background: (!hasFile || isUp) ? 'rgba(255,255,255,0.08)' : 'var(--rmg-blue)',
+                    color: (!hasFile || isUp) ? 'var(--rmg-muted)' : '#fff',
+                    cursor: (!hasFile || isUp) ? 'not-allowed' : 'pointer',
+                  }}
                   onClick={() => handleUpload(famKey)}
-                  disabled={updateMut.isPending}
+                  disabled={!hasFile || isUp}
                 >
-                  {updateMut.isPending ? 'Subiendo…' : 'Cambiar foto'}
+                  {isUp ? 'Guardando…' : hasFile ? 'Guardar foto' : 'Selecciona una imagen primero'}
                 </button>
               </div>
             </div>
@@ -561,19 +612,19 @@ function TabBanners({ banners = [], isLoading }) {
   const createMut = useMutation({
     mutationFn: (fd) => api.post('/admin/landing/banners', fd).then(r => r.data),
     onSuccess: () => { invalidate(); resetForm(); toast.success('Banner creado') },
-    onError: () => toast.error('Error al crear banner'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al crear banner'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, fd }) => api.put(`/admin/landing/banners/${id}`, fd).then(r => r.data),
     onSuccess: () => { invalidate(); resetForm(); toast.success('Banner actualizado') },
-    onError: () => toast.error('Error al actualizar banner'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar banner'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id) => api.delete(`/admin/landing/banners/${id}`).then(r => r.data),
     onSuccess: () => { invalidate(); toast.success('Banner eliminado') },
-    onError: () => toast.error('Error al eliminar banner'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar banner'),
   })
 
   const resetForm = () => { setForm(FORM_INIT); setEditId(null); setShowForm(false); if (fotoRef.current) fotoRef.current.value = '' }
