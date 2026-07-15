@@ -90,6 +90,20 @@ router.get('/catalogo-ingenieria', (req, res) => {
   }
 })
 
+// GET /api/public/landing/subfamilias — solo activas, ordenadas por familia, orden
+router.get('/landing/subfamilias', (_req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT * FROM landing_subfamilias
+      WHERE activo = 1
+      ORDER BY familia ASC, orden ASC, id ASC
+    `).all()
+    res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/public/landing/productos — solo activos, ordenados por familia luego orden
 router.get('/landing/productos', (_req, res) => {
   try {

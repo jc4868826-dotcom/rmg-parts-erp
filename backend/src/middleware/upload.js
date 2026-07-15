@@ -35,7 +35,8 @@ function makeUpload(subfolder) {
   return multer({ storage, fileFilter, limits: { fileSize: 5 * 1024 * 1024 } })
 }
 
-const uploadProducto = makeUpload('productos')
-const uploadBanner   = makeUpload('banners')
+const uploadProducto    = makeUpload('productos')
+const uploadBanner      = makeUpload('banners')
+const uploadSubfamilia  = makeUpload('subfamilias')
 
-module.exports = { uploadProducto, uploadBanner, UPLOADS_DIR }
+module.exports = { uploadProducto, uploadBanner, uploadSubfamilia, UPLOADS_DIR }

@@ -1245,6 +1245,30 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_codigo_v1')
     console.log('✅ Migración landing_codigo_v1 — codigo y marca añadidos a landing_productos')
   }
+
+  // Migration 15: landing_subfamilias_v1
+  const m15 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_subfamilias_v1')
+  if (!m15) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS landing_subfamilias (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        familia     TEXT NOT NULL,
+        nombre      TEXT NOT NULL,
+        foto_path   TEXT,
+        descripcion TEXT,
+        orden       INTEGER DEFAULT 0,
+        activo      INTEGER DEFAULT 1,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+      );
+    `)
+    const cols15 = db.prepare('PRAGMA table_info(landing_productos)').all().map(c => c.name)
+    if (!cols15.includes('subfamilia_id')) {
+      db.exec('ALTER TABLE landing_productos ADD COLUMN subfamilia_id INTEGER')
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_subfamilias_v1')
+    console.log('✅ Migración landing_subfamilias_v1 — tabla landing_subfamilias + subfamilia_id en landing_productos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

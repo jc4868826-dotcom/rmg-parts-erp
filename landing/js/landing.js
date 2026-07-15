@@ -1,86 +1,97 @@
-// landing.js — Renderiza la landing principal con productos y banners del ERP propio
+// landing.js — Tienda RMG Parts: carrusel, búsqueda estática, 3 niveles familia→subfamilia→producto
 (function () {
   'use strict';
 
-  // ─── Config ──────────────────────────────────────────────────────────────────
   const ERP   = (typeof CONFIG !== 'undefined') ? CONFIG.BASE_URL : 'https://rmg-parts-erp.onrender.com';
   const WA_NR = (typeof CONFIG !== 'undefined') ? CONFIG.WHATSAPP : '';
 
   const FAMILIAS = [
-    { key: 'NEUMATICOS',  label: 'Neumáticos',  icon: '🛞', color: '#0071BD', hero: 'assets/img/hero/hero-neumaticos.png'  },
-    { key: 'BATERIAS',    label: 'Baterías',    icon: '🔋', color: '#29AAE1', hero: 'assets/img/hero/hero-baterias.png'    },
-    { key: 'LUBRICANTES', label: 'Lubricantes', icon: '🛢️', color: '#435664', hero: 'assets/img/hero/hero-lubricantes.png' },
+    { key: 'NEUMATICOS',  label: 'Neumáticos',  icon: '🛞', color: '#0071BD' },
+    { key: 'BATERIAS',    label: 'Baterías',    icon: '🔋', color: '#29AAE1' },
+    { key: 'LUBRICANTES', label: 'Lubricantes', icon: '🛢️', color: '#435664' },
   ];
 
-  let _productos  = [];
-  let _banners    = [];
-  let _heroIdx    = 0;
-  let _heroTimer  = null;
+  let _productos   = [];
+  let _banners     = [];
+  let _subfamilias = [];
+  let _catalogo    = [];  // data/catalogo.json para búsqueda estática
 
-  // ─── Init ─────────────────────────────────────────────────────────────────────
+  let _heroIdx   = 0;
+  let _heroTimer = null;
+
+  // Estado drill-down
+  let _activeFam = null;  // key: 'NEUMATICOS'|'BATERIAS'|'LUBRICANTES'
+  let _activeSub = null;  // id numérico de landing_subfamilias
+
+  // ─── Init ──────────────────────────────────────────────────────────────────
   async function init() {
-    try { _productos = await fetch(ERP + '/api/public/landing/productos').then(r => r.json()); } catch (_) {}
-    try { _banners   = await fetch(ERP + '/api/public/landing/banners'  ).then(r => r.json()); } catch (_) {}
+    const [prods, bans, subs, cat] = await Promise.allSettled([
+      fetch(ERP + '/api/public/landing/productos').then(r => r.ok ? r.json() : []),
+      fetch(ERP + '/api/public/landing/banners').then(r => r.ok ? r.json() : []),
+      fetch(ERP + '/api/public/landing/subfamilias').then(r => r.ok ? r.json() : []),
+      fetch('data/catalogo.json').then(r => r.ok ? r.json() : []),
+    ]);
+    _productos   = prods.status === 'fulfilled'  ? (Array.isArray(prods.value)  ? prods.value  : []) : [];
+    _banners     = bans.status === 'fulfilled'   ? (Array.isArray(bans.value)   ? bans.value   : []) : [];
+    _subfamilias = subs.status === 'fulfilled'   ? (Array.isArray(subs.value)   ? subs.value   : []) : [];
+    _catalogo    = cat.status === 'fulfilled'    ? (Array.isArray(cat.value)    ? cat.value    : []) : [];
 
     _buildNavDropdowns();
     _renderHero();
     _renderCatBoxes();
-    _renderFamilias();
+    _renderDrillDown();
+    _initSearch();
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────────
+  // ─── Helpers ───────────────────────────────────────────────────────────────
   function _slug(s) { return String(s||'').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,''); }
   function _esc(s)  { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function _fmt(n)  { return n != null ? '$' + Math.round(n).toLocaleString('es-CL') : 'Consultar'; }
+  function _norm(s) { return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 
   function _waLink(texto) {
     const msg = encodeURIComponent(texto);
     return WA_NR ? `https://wa.me/${WA_NR}?text=${msg}` : `https://wa.me/?text=${msg}`;
   }
 
-  // ─── Nav mega-menu ────────────────────────────────────────────────────────────
+  function _imgSrc(foto_path) {
+    return foto_path ? `${ERP}/uploads/landing/${_esc(foto_path)}` : null;
+  }
+
+  // ─── Nav mega-menu ─────────────────────────────────────────────────────────
   function _buildNavDropdowns() {
     FAMILIAS.forEach(fam => {
       const el = document.getElementById('dd-' + fam.key);
       if (!el) return;
-      const subs = [...new Set(_productos.filter(p => p.familia === fam.key && p.subfamilia).map(p => p.subfamilia))];
+      const subs = _subfamilias.filter(s => s.familia === fam.key);
       if (!subs.length) {
-        el.innerHTML = `<span class="mega-empty">Sin subfamilias cargadas</span>`;
+        el.innerHTML = `<a class="mega-link" onclick="Landing.selectFamilia('${fam.key}')">${_esc(fam.label)}</a>`;
         return;
       }
-      el.innerHTML = subs.map(sub =>
-        `<a class="mega-link" onclick="Landing.scrollToSub('${fam.key}','${sub.replace(/'/g,"\\'")}')">${_esc(sub)}</a>`
+      el.innerHTML = subs.map(s =>
+        `<a class="mega-link" onclick="Landing.selectSub(${s.id},'${fam.key}')">${_esc(s.nombre)}</a>`
       ).join('');
     });
   }
 
-  function scrollToSub(famKey, sub) {
-    // Close all dropdowns
-    document.querySelectorAll('.nav-mega-menu').forEach(m => m.classList.remove('open'));
-    const anchorId = 'sub-' + _slug(famKey) + '-' + _slug(sub);
-    const el = document.getElementById(anchorId) || document.getElementById('sec-' + famKey);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  // ─── Hero carrusel ─────────────────────────────────────────────────────────────
+  // ─── Hero carrusel ─────────────────────────────────────────────────────────
   function _renderHero() {
     const wrap = document.getElementById('landing-hero');
     if (!wrap) return;
-
-    // No banners → keep existing static carousel (leave DOM untouched)
-    if (!_banners.length) return;
+    if (!_banners.length) return;  // conserva el carousel estático si no hay banners
 
     wrap.innerHTML = `
       <div class="lh-track" id="lhTrack">
         ${_banners.map((b, i) => `
           <div class="lh-slide${i === 0 ? ' active' : ''}">
-            <img src="${ERP}/uploads/landing/${_esc(b.foto_path)}" alt="Banner ${b.id}" loading="${i === 0 ? 'eager' : 'lazy'}"
+            <img src="${ERP}/uploads/landing/${_esc(b.foto_path)}" alt="Banner ${b.id}"
+                 loading="${i === 0 ? 'eager' : 'lazy'}"
                  onerror="this.parentElement.style.background='#0c1523'">
           </div>
         `).join('')}
       </div>
-      <button class="lh-arrow lh-prev" onclick="Landing.heroGo(_heroIdx-1)" aria-label="Anterior">&#8249;</button>
-      <button class="lh-arrow lh-next" onclick="Landing.heroGo(_heroIdx+1)" aria-label="Siguiente">&#8250;</button>
+      <button class="lh-arrow lh-prev" onclick="Landing.heroGo(Landing._heroIdx-1)" aria-label="Anterior">&#8249;</button>
+      <button class="lh-arrow lh-next" onclick="Landing.heroGo(Landing._heroIdx+1)" aria-label="Siguiente">&#8250;</button>
       <div class="lh-dots">
         ${_banners.map((_,i) => `<button class="lh-dot${i===0?' active':''}" onclick="Landing.heroGo(${i})" aria-label="Slide ${i+1}"></button>`).join('')}
       </div>
@@ -105,24 +116,28 @@
     dots.forEach((d, j) => d.classList.toggle('active', j === _heroIdx));
   }
 
-  // ─── 3 cajas de categoría ─────────────────────────────────────────────────────
+  // ─── 3 cajas de categoría ──────────────────────────────────────────────────
   function _renderCatBoxes() {
     const el = document.getElementById('cat-boxes');
     if (!el) return;
     el.innerHTML = FAMILIAS.map(fam => {
-      const first  = _productos.find(p => p.familia === fam.key && p.foto_path);
-      const imgSrc = first ? `${ERP}/uploads/landing/${first.foto_path}` : fam.hero;
-      const count  = _productos.filter(p => p.familia === fam.key).length;
-      const countTxt = count > 0 ? `<span class="catbox-count">${count} productos</span>` : '';
+      const subCount = _subfamilias.filter(s => s.familia === fam.key).length;
+      const prodCount = _productos.filter(p => p.familia === fam.key).length;
+      const countTxt = subCount > 0
+        ? `<span class="catbox-count">${subCount} subfamilias</span>`
+        : prodCount > 0 ? `<span class="catbox-count">${prodCount} productos</span>` : '';
+      const firstSub = _subfamilias.find(s => s.familia === fam.key && s.foto_path);
+      const firstProd = _productos.find(p => p.familia === fam.key && p.foto_path);
+      const imgSrc = firstSub ? _imgSrc(firstSub.foto_path) : (firstProd ? _imgSrc(firstProd.foto_path) : null);
+
       return `
-        <div class="catbox" onclick="document.getElementById('sec-${fam.key}').scrollIntoView({behavior:'smooth'})">
+        <div class="catbox" onclick="Landing.selectFamilia('${fam.key}')">
           <div class="catbox-img-wrap" style="background:${fam.color}33">
-            <img src="${imgSrc}" alt="${_esc(fam.label)}" loading="lazy"
-                 onerror="this.style.display='none'">
+            ${imgSrc ? `<img src="${imgSrc}" alt="${_esc(fam.label)}" loading="lazy" onerror="this.style.display='none'">` : ''}
             <div class="catbox-overlay"></div>
+            <div class="catbox-icon-big">${fam.icon}</div>
           </div>
           <div class="catbox-info">
-            <span class="catbox-icon">${fam.icon}</span>
             <div>
               <div class="catbox-label">${_esc(fam.label)}</div>
               ${countTxt}
@@ -134,48 +149,112 @@
     }).join('');
   }
 
-  // ─── Secciones por familia ────────────────────────────────────────────────────
-  function _renderFamilias() {
-    const el = document.getElementById('landing-familias');
+  // ─── Drill-down (familia → subfamilias → productos) ────────────────────────
+  function selectFamilia(famKey) {
+    _activeFam = famKey;
+    _activeSub = null;
+    _renderDrillDown();
+    const el = document.getElementById('drilldown-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function selectSub(subId, famKey) {
+    if (famKey) _activeFam = famKey;
+    _activeSub = subId;
+    _renderDrillDown();
+    const el = document.getElementById('drilldown-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function backToFamilias() {
+    _activeFam = null;
+    _activeSub = null;
+    _renderDrillDown();
+  }
+
+  function backToSubs() {
+    _activeSub = null;
+    _renderDrillDown();
+    const el = document.getElementById('drilldown-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function _wrap(inner) {
+    return `<section class="drilldown-section"><div class="container">${inner}</div></section>`;
+  }
+
+  function _renderDrillDown() {
+    const el = document.getElementById('drilldown-section');
     if (!el) return;
-    if (!_productos.length) { el.innerHTML = ''; return; }
 
-    el.innerHTML = FAMILIAS.map(fam => {
-      const prods = _productos.filter(p => p.familia === fam.key);
-      if (!prods.length) return '';
+    if (!_activeFam) { el.innerHTML = ''; return; }
 
-      // Group by subfamilia
-      const bySub = {};
-      prods.forEach(p => {
-        const k = p.subfamilia || '';
-        if (!bySub[k]) bySub[k] = [];
-        bySub[k].push(p);
-      });
+    const fam = FAMILIAS.find(f => f.key === _activeFam);
+    const famLabel = fam ? fam.label : _activeFam;
 
-      return `
-        <section id="sec-${fam.key}" class="familia-sec">
-          <div class="container">
-            <div class="familia-head">
-              <span class="familia-icon">${fam.icon}</span>
-              <h2 class="familia-title">${_esc(fam.label)}</h2>
-            </div>
-            ${Object.entries(bySub).map(([sub, ps]) => `
-              <div class="subfam-group">
-                ${sub ? `<div class="subfam-label" id="sub-${_slug(fam.key)}-${_slug(sub)}">${_esc(sub)}</div>` : `<div id="sub-${_slug(fam.key)}-"></div>`}
-                <div class="prod-row-scroll">
-                  ${ps.map(p => _cardHTML(p)).join('')}
+    if (!_activeSub) {
+      const subs = _subfamilias.filter(s => s.familia === _activeFam);
+
+      if (!subs.length) {
+        const prods = _productos.filter(p => p.familia === _activeFam);
+        el.innerHTML = _wrap(`
+          <div class="drilldown-header">
+            <button class="drill-back" onclick="Landing.backToFamilias()">← Volver</button>
+            <h2 class="drill-title">${_esc(famLabel)}</h2>
+          </div>
+          ${prods.length ? `<div class="prod-grid">${prods.map(_cardHTML).join('')}</div>` : '<p class="drill-empty">Sin productos disponibles</p>'}
+        `);
+        return;
+      }
+
+      el.innerHTML = _wrap(`
+        <div class="drilldown-header">
+          <button class="drill-back" onclick="Landing.backToFamilias()">← Volver</button>
+          <h2 class="drill-title">${_esc(famLabel)}</h2>
+        </div>
+        <div class="subfam-grid">
+          ${subs.map(s => {
+            const imgSrc = _imgSrc(s.foto_path);
+            return `
+              <div class="subfam-card" onclick="Landing.selectSub(${s.id})">
+                <div class="subfam-card-img" style="background:${fam ? fam.color + '22' : '#0071BD22'}">
+                  ${imgSrc
+                    ? `<img src="${imgSrc}" alt="${_esc(s.nombre)}" loading="lazy" onerror="this.style.display='none'">`
+                    : `<span class="subfam-icon">${fam ? fam.icon : '📦'}</span>`
+                  }
+                </div>
+                <div class="subfam-card-body">
+                  <div class="subfam-card-name">${_esc(s.nombre)}</div>
+                  ${s.descripcion ? `<div class="subfam-card-desc">${_esc(s.descripcion)}</div>` : ''}
                 </div>
               </div>
-            `).join('')}
-          </div>
-        </section>
-      `;
-    }).join('');
+            `;
+          }).join('')}
+        </div>
+      `);
+      return;
+    }
+
+    const sub = _subfamilias.find(s => s.id === _activeSub);
+    const subLabel = sub ? sub.nombre : '';
+    const prods = _productos.filter(p => p.subfamilia_id === _activeSub);
+
+    el.innerHTML = _wrap(`
+      <div class="drilldown-header">
+        <button class="drill-back" onclick="Landing.backToSubs()">← ${_esc(famLabel)}</button>
+        <h2 class="drill-title">${_esc(subLabel)}</h2>
+      </div>
+      ${prods.length
+        ? `<div class="prod-grid">${prods.map(_cardHTML).join('')}</div>`
+        : '<p class="drill-empty">Sin productos en esta subfamilia</p>'
+      }
+    `);
   }
 
   function _cardHTML(p) {
-    const imgSrc = p.foto_path ? `${ERP}/uploads/landing/${_esc(p.foto_path)}` : null;
-    const icon   = p.familia === 'NEUMATICOS' ? '🛞' : p.familia === 'BATERIAS' ? '🔋' : '🛢️';
+    const imgSrc = _imgSrc(p.foto_path);
+    const fam    = FAMILIAS.find(f => f.key === p.familia);
+    const icon   = fam ? fam.icon : '📦';
     const badge  = p.codigo
       ? `<div class="pcard-badge">${_esc(p.codigo)}${p.marca ? ' · ' + _esc(p.marca) : ''}</div>`
       : (p.marca ? `<div class="pcard-badge">${_esc(p.marca)}</div>` : '');
@@ -185,7 +264,8 @@
       <div class="pcard">
         <div class="pcard-img${!imgSrc ? ' pcard-img--placeholder' : ''}">
           ${imgSrc
-            ? `<img src="${imgSrc}" alt="${_esc(p.descripcion)}" loading="lazy" onerror="this.parentElement.classList.add('pcard-img--placeholder');this.remove()">`
+            ? `<img src="${imgSrc}" alt="${_esc(p.descripcion)}" loading="lazy"
+                   onerror="this.parentElement.classList.add('pcard-img--placeholder');this.remove()">`
             : `<span class="pcard-icon">${icon}</span>`
           }
         </div>
@@ -203,9 +283,95 @@
     `;
   }
 
-  // ─── Expose ───────────────────────────────────────────────────────────────────
-  window.Landing = { init, heroGo, scrollToSub };
-  // _heroIdx is module-level; expose getter for onclick attrs
+  // ─── Búsqueda estática (PASO 4) ────────────────────────────────────────────
+  function _initSearch() {
+    const wrap = document.getElementById('search-static');
+    if (!wrap) return;
+
+    // Opciones únicas para filtros
+    const familias  = [...new Set(_catalogo.map(r => r.Familia).filter(Boolean))].sort();
+    const marcas    = [...new Set(_catalogo.map(r => r['Marca(s)']).filter(Boolean))].sort();
+
+    wrap.innerHTML = `
+      <div class="search-bar-inner container">
+        <span class="search-label">¿Buscas algo en específico?</span>
+        <div class="search-controls">
+          <input id="sch-q" class="sch-input" type="text" placeholder="Buscar por línea, marca, tipo…" autocomplete="off"
+                 oninput="Landing._schInput()" onfocus="Landing._schInput()">
+          <select id="sch-fam" class="sch-select" onchange="Landing._schInput()">
+            <option value="">Todas las familias</option>
+            ${familias.map(f => `<option value="${_esc(f)}">${_esc(f)}</option>`).join('')}
+          </select>
+          <select id="sch-marca" class="sch-select" onchange="Landing._schInput()">
+            <option value="">Todas las marcas</option>
+            ${marcas.map(m => `<option value="${_esc(m)}">${_esc(m)}</option>`).join('')}
+          </select>
+          <button class="sch-clear" onclick="Landing._schClear()">✕</button>
+        </div>
+        <div id="sch-results" class="sch-results" style="display:none"></div>
+      </div>
+    `;
+
+    document.addEventListener('click', e => {
+      if (!wrap.contains(e.target)) _hideResults();
+    });
+  }
+
+  function _schInput() {
+    const q     = (document.getElementById('sch-q')?.value || '').trim();
+    const fam   = document.getElementById('sch-fam')?.value  || '';
+    const marca = document.getElementById('sch-marca')?.value || '';
+    const resEl = document.getElementById('sch-results');
+    if (!resEl) return;
+
+    if (!q && !fam && !marca) { resEl.style.display = 'none'; return; }
+
+    const qn = _norm(q);
+    const results = _catalogo.filter(r => {
+      if (fam   && r.Familia      !== fam)   return false;
+      if (marca && r['Marca(s)']  !== marca) return false;
+      if (!qn) return true;
+      const hay = _norm([r['Línea'], r['Marca(s)'], r.Tipo, r.Subfamilia, r['Sub-subfamilia']].join(' '));
+      return hay.includes(qn);
+    }).slice(0, 40);
+
+    if (!results.length) {
+      resEl.innerHTML = '<div class="sch-empty">Sin resultados</div>';
+    } else {
+      resEl.innerHTML = results.map(r => `
+        <div class="sch-item">
+          <div class="sch-item-name">${_esc(r['Línea'] || r.Tipo || '—')}</div>
+          <div class="sch-item-meta">
+            ${r.Familia ? `<span class="sch-tag">${_esc(r.Familia)}</span>` : ''}
+            ${r['Marca(s)'] ? `<span class="sch-tag">${_esc(r['Marca(s)'])}</span>` : ''}
+            ${r.Subfamilia ? `<span class="sch-tag sch-tag--sub">${_esc(r.Subfamilia)}</span>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+    resEl.style.display = 'block';
+  }
+
+  function _schClear() {
+    const q = document.getElementById('sch-q');
+    const f = document.getElementById('sch-fam');
+    const m = document.getElementById('sch-marca');
+    if (q) q.value = '';
+    if (f) f.value = '';
+    if (m) m.value = '';
+    _hideResults();
+  }
+
+  function _hideResults() {
+    const el = document.getElementById('sch-results');
+    if (el) el.style.display = 'none';
+  }
+
+  // ─── Expose ────────────────────────────────────────────────────────────────
+  window.Landing = {
+    init, heroGo, selectFamilia, selectSub, backToFamilias, backToSubs,
+    _schInput, _schClear,
+  };
   Object.defineProperty(window.Landing, '_heroIdx', { get: () => _heroIdx });
 
   if (document.readyState === 'loading') {
