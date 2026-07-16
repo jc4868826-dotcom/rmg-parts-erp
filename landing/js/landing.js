@@ -99,6 +99,15 @@
       </div>
     `;
 
+    // Forzar estado visible del primer slide sin transición en el primer paint
+    const firstSlide = wrap.querySelector('.lh-slide.active');
+    if (firstSlide) {
+      firstSlide.style.transition = 'none';
+      firstSlide.style.opacity = '1';
+      firstSlide.style.display = 'block';
+      requestAnimationFrame(() => { firstSlide.style.transition = ''; });
+    }
+
     wrap.addEventListener('mouseenter', () => clearInterval(_heroTimer));
     wrap.addEventListener('mouseleave', _startAutoplay);
     _startAutoplay();

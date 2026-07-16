@@ -50,9 +50,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     else footerWa.style.display = 'none';
   }
 
-  // ── Carousel ──────────────────────────────────────────────────
-  _initCarousel();
-
   // ── Category strip ────────────────────────────────────────────
   document.querySelectorAll('.cat-strip-item[data-q]').forEach(item => {
     item.addEventListener('click', () => {
@@ -247,28 +244,6 @@ function _openWa() {
 function _focusBusqueda() {
   document.querySelector('.finder-section')?.scrollIntoView({ behavior: 'smooth' });
   setTimeout(() => document.getElementById('buscadorInput')?.focus(), 400);
-}
-
-// ══ CAROUSEL ═════════════════════════════════════════════════
-
-function _initCarousel() {
-  const track = document.getElementById('carouselTrack');
-  if (!track) return;
-  const dots = document.querySelectorAll('.carousel-dot');
-  let current = 0;
-  let timer = null;
-
-  function go(n) {
-    current = (n + dots.length) % dots.length;
-    track.style.transform = `translateX(-${current * 100}%)`;
-    dots.forEach((d, i) => d.classList.toggle('active', i === current));
-  }
-
-  dots.forEach((dot, i) => {
-    dot.addEventListener('click', () => { clearInterval(timer); go(i); timer = setInterval(() => go(current + 1), 4500); });
-  });
-
-  timer = setInterval(() => go(current + 1), 4500);
 }
 
 // ══ PRIVADOS ═════════════════════════════════════════════════
