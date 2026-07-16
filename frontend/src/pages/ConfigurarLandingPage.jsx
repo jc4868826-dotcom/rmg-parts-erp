@@ -13,38 +13,6 @@ const API_BASE = import.meta.env.VITE_API_URL || 'https://rmg-parts-erp.onrender
 const FOTO_URL = (tabla, id) =>
   id != null ? `${API_BASE}/api/public/landing/foto/${tabla}/${id}` : null
 
-async function compressImage(file, maxWidth = 1600, quality = 0.82) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onerror = () => reject(new Error('Error al leer la imagen'))
-    reader.onload = (e) => {
-      const img = new Image()
-      img.onerror = () => reject(new Error('Error al cargar la imagen'))
-      img.onload = () => {
-        let { width, height } = img
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width)
-          width = maxWidth
-        }
-        const canvas = document.createElement('canvas')
-        canvas.width = width
-        canvas.height = height
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height)
-        canvas.toBlob((blob) => {
-          if (!blob) { reject(new Error('Error al comprimir la imagen')); return }
-          if (blob.size > 15 * 1024 * 1024) {
-            reject(new Error('La imagen es muy grande incluso después de comprimir (máx 15MB). Prueba con otra foto.'))
-            return
-          }
-          resolve(blob)
-        }, 'image/jpeg', quality)
-      }
-      img.src = e.target.result
-    }
-    reader.readAsDataURL(file)
-  })
-}
-
 // ─── Componentes auxiliares ───────────────────────────────
 const Field = ({ label, children }) => (
   <div>
@@ -132,7 +100,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
     setShowForm(true)
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!form.nombre.trim()) { toast.error('El nombre es obligatorio'); return }
     const fd = new FormData()
     fd.append('familia', form.familia)
@@ -140,20 +108,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
     fd.append('descripcion', form.descripcion)
     fd.append('orden', form.orden)
     fd.append('activo', form.activo ? '1' : '0')
-    const rawFile = fotoRef.current?.files[0]
-    if (rawFile) {
-      let toastId
-      try {
-        if (rawFile.size > 500 * 1024) toastId = toast.loading('Comprimiendo imagen...')
-        const blob = await compressImage(rawFile)
-        if (toastId) toast.dismiss(toastId)
-        fd.append('foto', blob, 'foto.jpg')
-      } catch (err) {
-        if (toastId) toast.dismiss(toastId)
-        toast.error(err.message || 'Error al comprimir la imagen')
-        return
-      }
-    }
+    if (fotoRef.current?.files[0]) fd.append('foto', fotoRef.current.files[0])
     if (editId) updateMut.mutate({ id: editId, fd })
     else createMut.mutate(fd)
   }
@@ -209,7 +164,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
                 <Field label="Orden">
                   <input type="number" className="rmg-input" value={form.orden} onChange={setF('orden')} />
                 </Field>
-                <Field label="Foto (JPG/PNG/WebP, máx 5MB)">
+                <Field label="Foto (JPG/PNG/WebP, máx 50MB)">
                   <input type="file" className="rmg-input" accept="image/*" ref={fotoRef} />
                 </Field>
               </div>
@@ -339,7 +294,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
     setShowForm(true)
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!form.descripcion.trim()) { toast.error('La descripción es obligatoria'); return }
     const fd = new FormData()
     fd.append('familia', form.familia)
@@ -354,20 +309,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
     fd.append('detalles_tecnicos', form.detalles_tecnicos)
     fd.append('orden', form.orden)
     fd.append('activo', form.activo ? '1' : '0')
-    const rawFile = fotoRef.current?.files[0]
-    if (rawFile) {
-      let toastId
-      try {
-        if (rawFile.size > 500 * 1024) toastId = toast.loading('Comprimiendo imagen...')
-        const blob = await compressImage(rawFile)
-        if (toastId) toast.dismiss(toastId)
-        fd.append('foto', blob, 'foto.jpg')
-      } catch (err) {
-        if (toastId) toast.dismiss(toastId)
-        toast.error(err.message || 'Error al comprimir la imagen')
-        return
-      }
-    }
+    if (fotoRef.current?.files[0]) fd.append('foto', fotoRef.current.files[0])
     if (editId) updateMut.mutate({ id: editId, fd })
     else createMut.mutate(fd)
   }
@@ -445,7 +387,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
               <Field label="Detalles técnicos">
                 <textarea className="rmg-input" rows={2} value={form.detalles_tecnicos} onChange={setF('detalles_tecnicos')} />
               </Field>
-              <Field label="Foto (JPG/PNG/WebP, máx 5MB)">
+              <Field label="Foto (JPG/PNG/WebP, máx 50MB)">
                 <input type="file" className="rmg-input" accept="image/*" ref={fotoRef} />
               </Field>
             </div>
@@ -535,22 +477,17 @@ function TabFamilias({ familias = [], isLoading }) {
     const file = fotoRefs[famKey].current?.files[0]
     if (!file) { toast.error('Selecciona una imagen primero'); return }
     setState(p => ({ ...p, [famKey]: 'loading' }))
-    let toastId
     try {
-      if (file.size > 500 * 1024) toastId = toast.loading('Comprimiendo imagen...')
-      const blob = await compressImage(file)
-      if (toastId) toast.dismiss(toastId)
       const fd = new FormData()
-      fd.append('foto', blob, 'foto.jpg')
+      fd.append('foto', file)
       await api.put(`/admin/landing/familias/${famKey}`, fd)
       qc.invalidateQueries(['landing-familias'])
       setState(p => ({ ...p, [famKey]: 'ok' }))
       toast.success(`Foto de ${FAM_META[famKey].label} guardada`)
       setTimeout(() => setState(p => ({ ...p, [famKey]: null })), 3000)
     } catch (err) {
-      if (toastId) toast.dismiss(toastId)
       setState(p => ({ ...p, [famKey]: 'error' }))
-      toast.error(err.message || err.response?.data?.error || 'Error al guardar foto')
+      toast.error(err.response?.data?.error || 'Error al guardar foto')
     }
     if (fotoRefs[famKey].current) fotoRefs[famKey].current.value = ''
   }
@@ -609,25 +546,15 @@ function TabBanners({ banners = [], isLoading }) {
     onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar banner'),
   })
 
-  const handleAdd = async () => {
+  const handleAdd = () => {
     const file = newRef.current?.files[0]
     if (!file) { toast.error('Selecciona una imagen'); return }
     setAdding(true)
-    let toastId
-    try {
-      if (file.size > 500 * 1024) toastId = toast.loading('Comprimiendo imagen...')
-      const blob = await compressImage(file)
-      if (toastId) toast.dismiss(toastId)
-      const fd = new FormData()
-      fd.append('foto', blob, 'foto.jpg')
-      fd.append('orden', banners.length)
-      fd.append('activo', '1')
-      createMut.mutate(fd)
-    } catch (err) {
-      if (toastId) toast.dismiss(toastId)
-      setAdding(false)
-      toast.error(err.message || 'Error al comprimir la imagen')
-    }
+    const fd = new FormData()
+    fd.append('foto', file)
+    fd.append('orden', banners.length)
+    fd.append('activo', '1')
+    createMut.mutate(fd)
   }
 
   return (
