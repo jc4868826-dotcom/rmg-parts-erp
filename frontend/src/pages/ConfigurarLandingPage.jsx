@@ -169,12 +169,8 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
                 <Field label="Orden">
                   <input type="number" className="rmg-input" value={form.orden} onChange={setF('orden')} />
                 </Field>
-                <Field label="Archivo de foto (ej: camiones.png)">
-                  <input className="rmg-input font-mono text-xs" placeholder="nombre-del-archivo.png"
-                    value={form.foto_archivo || ''} onChange={setF('foto_archivo')} />
-                  <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>
-                    Solo referencia — las fotos se gestionan en el repositorio.
-                  </p>
+                <Field label="Foto (JPG/PNG/WebP, máx 5MB)">
+                  <input type="file" className="rmg-input" accept="image/*" ref={fotoRef} />
                 </Field>
               </div>
             </div>
@@ -472,88 +468,154 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
 
 // ─── Tab Familias ─────────────────────────────────────────
 const FAM_META = {
-  NEUMATICOS:  { label: 'Neumáticos',  icon: '🛞', archivo: 'titular familias/neumatico icono.png' },
-  BATERIAS:    { label: 'Baterías',    icon: '🔋', archivo: 'titular familias/baterias icono.png' },
-  LUBRICANTES: { label: 'Lubricantes', icon: '🛢️', archivo: 'titular familias/lubricantes icono.png' },
+  NEUMATICOS:  { label: 'Neumáticos',  icon: '🛞' },
+  BATERIAS:    { label: 'Baterías',    icon: '🔋' },
+  LUBRICANTES: { label: 'Lubricantes', icon: '🛢️' },
 }
 const FAM_KEYS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
 
-function TabFamilias({ isLoading }) {
+function TabFamilias({ familias = [], isLoading }) {
+  const qc = useQueryClient()
+  const refNeu = useRef(null)
+  const refBat = useRef(null)
+  const refLub = useRef(null)
+  const fotoRefs = { NEUMATICOS: refNeu, BATERIAS: refBat, LUBRICANTES: refLub }
+
+  const [state, setState] = useState({}) // { NEUMATICOS: 'loading'|'ok'|'error' }
+
+  const uploadFoto = async (famKey) => {
+    const file = fotoRefs[famKey].current?.files[0]
+    if (!file) { toast.error('Selecciona una imagen primero'); return }
+    setState(p => ({ ...p, [famKey]: 'loading' }))
+    try {
+      const fd = new FormData()
+      fd.append('foto', file)
+      await api.put(`/admin/landing/familias/${famKey}`, fd)
+      qc.invalidateQueries(['landing-familias'])
+      setState(p => ({ ...p, [famKey]: 'ok' }))
+      toast.success(`Foto de ${FAM_META[famKey].label} guardada`)
+      setTimeout(() => setState(p => ({ ...p, [famKey]: null })), 3000)
+    } catch (err) {
+      setState(p => ({ ...p, [famKey]: 'error' }))
+      toast.error(err.response?.data?.error || 'Error al guardar foto')
+    }
+    if (fotoRefs[famKey].current) fotoRefs[famKey].current.value = ''
+  }
+
   if (isLoading) return <div className="py-12 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando…</div>
+
   return (
-    <div className="space-y-4">
-      <div className="rmg-card px-5 py-4 flex items-start gap-3"
-        style={{ borderLeft: '3px solid var(--rmg-blt)' }}>
-        <Image size={18} style={{ color: 'var(--rmg-blt)', flexShrink: 0, marginTop: 2 }} />
-        <div>
-          <p className="text-sm font-semibold" style={{ color: 'var(--rmg-off)' }}>
-            Fotos gestionadas en el repositorio del proyecto
-          </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>
-            Ruta: <code>landing/assets/img/Fotos RMG PARTS/titular familias/</code>
-          </p>
-        </div>
-      </div>
-      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
-        {FAM_KEYS.map(famKey => {
-          const meta = FAM_META[famKey]
-          return (
-            <div key={famKey} className="rmg-card rounded-xl overflow-hidden">
-              <div className="flex items-center justify-center" style={{ height: 100, background: 'rgba(255,255,255,0.04)' }}>
-                <span style={{ fontSize: 48 }}>{meta.icon}</span>
-              </div>
-              <div className="px-4 py-3 space-y-1">
-                <div className="font-bold text-sm">{meta.icon} {meta.label}</div>
-                <div className="text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>{meta.archivo}</div>
-              </div>
+    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+      {FAM_KEYS.map(famKey => {
+        const meta    = FAM_META[famKey]
+        const fam     = familias.find(f => f.familia === famKey)
+        const hasFoto = !!fam?.foto_mimetype
+        const s       = state[famKey]
+        return (
+          <div key={famKey} className="rmg-card rounded-xl overflow-hidden">
+            <div className="flex items-center justify-center"
+              style={{ height: 140, background: 'rgba(255,255,255,0.04)', overflow: 'hidden', position: 'relative' }}>
+              {hasFoto
+                ? <img src={FOTO_URL('familias', famKey)} alt={meta.label}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { e.currentTarget.style.display = 'none' }} />
+                : <span style={{ fontSize: 52 }}>{meta.icon}</span>
+              }
             </div>
-          )
-        })}
-      </div>
+            <div className="px-4 py-3 space-y-2">
+              <div className="font-bold">{meta.icon} {meta.label}</div>
+              <input type="file" accept="image/*" ref={fotoRefs[famKey]} className="rmg-input text-xs" />
+              <button onClick={() => uploadFoto(famKey)} disabled={s === 'loading'}
+                className="btn-primary w-full flex items-center justify-center gap-2 text-sm disabled:opacity-50">
+                <Check size={13} />
+                {s === 'loading' ? 'Guardando...' : s === 'ok' ? 'Foto guardada ✓' : 'Guardar foto'}
+              </button>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
 // ─── Tab Banners ──────────────────────────────────────────
-const BANNERS_REPO = [
-  'banner/home.png',
-  'banner/neumaticos.png',
-  'banner/baterias.png',
-  'banner/lubricantes.png',
-  'banner/despacho.png',
-]
+function TabBanners({ banners = [], isLoading }) {
+  const qc       = useQueryClient()
+  const newRef   = useRef(null)
+  const [adding, setAdding] = useState(false)
 
-function TabBanners() {
+  const createMut = useMutation({
+    mutationFn: (fd) => api.post('/admin/landing/banners', fd).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries(['landing-banners']); if (newRef.current) newRef.current.value = ''; setAdding(false); toast.success('Banner añadido') },
+    onError: (err) => { setAdding(false); toast.error(err.response?.data?.error || 'Error al crear banner') },
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id) => api.delete(`/admin/landing/banners/${id}`).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries(['landing-banners']); toast.success('Banner eliminado') },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar banner'),
+  })
+
+  const handleAdd = () => {
+    const file = newRef.current?.files[0]
+    if (!file) { toast.error('Selecciona una imagen'); return }
+    setAdding(true)
+    const fd = new FormData()
+    fd.append('foto', file)
+    fd.append('orden', banners.length)
+    fd.append('activo', '1')
+    createMut.mutate(fd)
+  }
+
   return (
     <div className="space-y-4">
-      <div className="rmg-card px-5 py-4 flex items-start gap-3"
-        style={{ borderLeft: '3px solid var(--rmg-blt)' }}>
-        <Image size={18} style={{ color: 'var(--rmg-blt)', flexShrink: 0, marginTop: 2 }} />
-        <div>
-          <p className="text-sm font-semibold" style={{ color: 'var(--rmg-off)' }}>
-            Banners gestionados en la carpeta banner/ del proyecto
-          </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>
-            Ruta: <code>landing/assets/img/Fotos RMG PARTS/banner/</code>
-          </p>
+      {/* Upload nuevo banner */}
+      <div className="rmg-card px-5 py-4 space-y-3">
+        <div className="text-sm font-semibold" style={{ color: 'var(--rmg-off)' }}>Añadir nuevo banner</div>
+        <div className="flex gap-3 items-center">
+          <input type="file" accept="image/*" ref={newRef} className="rmg-input text-xs flex-1" />
+          <button onClick={handleAdd} disabled={adding}
+            className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50 whitespace-nowrap">
+            <Plus size={13} />{adding ? 'Subiendo...' : 'Subir banner'}
+          </button>
         </div>
       </div>
+
+      {/* Lista de banners */}
       <div className="rmg-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-              <TH>#</TH><TH>Archivo</TH>
-            </tr>
-          </thead>
-          <tbody>
-            {BANNERS_REPO.map((f, i) => (
-              <TR key={f}>
-                <TD><span style={{ color: 'var(--rmg-muted)' }}>{i + 1}</span></TD>
-                <TD><span className="font-mono text-xs" style={{ color: 'var(--rmg-off)' }}>{f}</span></TD>
-              </TR>
+        <div className="px-5 py-3 border-b flex items-center gap-2"
+          style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+          <span className="font-bold text-sm">Banners activos</span>
+          <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+            style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blt)' }}>
+            {banners.length}
+          </span>
+        </div>
+        {isLoading ? (
+          <div className="p-8 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando...</div>
+        ) : banners.length === 0 ? (
+          <div className="p-8 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>
+            Sin banners en la DB — la landing usa las fotos estáticas del repo como fallback
+          </div>
+        ) : (
+          <div className="grid gap-3 p-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+            {banners.map((b, i) => (
+              <div key={b.id} className="rounded-xl overflow-hidden border"
+                style={{ borderColor: 'rgba(56,182,255,0.1)' }}>
+                <div style={{ height: 120, background: 'rgba(255,255,255,0.04)', position: 'relative', overflow: 'hidden' }}>
+                  <img src={FOTO_URL('banners', b.id)} alt={`Banner ${i + 1}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { e.currentTarget.style.display = 'none' }} />
+                </div>
+                <div className="px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>#{b.id} · orden {b.orden}</span>
+                  <ActionBtn onClick={() => { if (!confirm('¿Eliminar banner?')) return; deleteMut.mutate(b.id) }}
+                    icon={Trash2} color="var(--rmg-red, #ef4444)" title="Eliminar" />
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -570,6 +632,12 @@ export default function ConfigurarLandingPage() {
     { k: 'banners',     l: 'Banners',     Icon: LayoutTemplate },
   ]
 
+  const { data: familias = [], isLoading: loadingFam } = useQuery({
+    queryKey: ['landing-familias'],
+    queryFn: () => api.get('/admin/landing/familias').then(r => r.data),
+    staleTime: 30_000,
+  })
+
   const { data: subfamilias = [], isLoading: loadingSF } = useQuery({
     queryKey: ['landing-subfamilias'],
     queryFn: () => api.get('/admin/landing/subfamilias').then(r => r.data),
@@ -579,6 +647,12 @@ export default function ConfigurarLandingPage() {
   const { data: productos = [], isLoading: loadingProd } = useQuery({
     queryKey: ['landing-productos'],
     queryFn: () => api.get('/admin/landing/productos').then(r => r.data),
+    staleTime: 30_000,
+  })
+
+  const { data: banners = [], isLoading: loadingBanners } = useQuery({
+    queryKey: ['landing-banners'],
+    queryFn: () => api.get('/admin/landing/banners').then(r => r.data),
     staleTime: 30_000,
   })
 
@@ -610,10 +684,10 @@ export default function ConfigurarLandingPage() {
       </div>
 
       {/* Contenido */}
-      {tab === 'familias'    && <TabFamilias />}
+      {tab === 'familias'    && <TabFamilias familias={familias} isLoading={loadingFam} />}
       {tab === 'subfamilias' && <TabSubfamilias subfamilias={subfamilias} isLoading={loadingSF} />}
       {tab === 'productos'   && <TabProductos productos={productos} subfamilias={subfamilias} isLoading={loadingProd} />}
-      {tab === 'banners'     && <TabBanners />}
+      {tab === 'banners'     && <TabBanners banners={banners} isLoading={loadingBanners} />}
     </div>
   )
 }

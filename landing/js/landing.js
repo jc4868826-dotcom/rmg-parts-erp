@@ -42,6 +42,7 @@
 
   let _productos   = [];
   let _subfamilias = [];
+  let _banners     = [];  // banners desde DB (si existen); fallback a BANNERS estático
   let _catalogo    = [];  // data/catalogo.json para búsqueda estática
 
   let _heroIdx   = 0;
@@ -53,13 +54,15 @@
 
   // ─── Init ──────────────────────────────────────────────────────────────────
   async function init() {
-    const [prods, subs, cat] = await Promise.allSettled([
+    const [prods, subs, bans, cat] = await Promise.allSettled([
       fetch(ERP + '/api/public/landing/productos').then(r => r.ok ? r.json() : []),
       fetch(ERP + '/api/public/landing/subfamilias').then(r => r.ok ? r.json() : []),
+      fetch(ERP + '/api/public/landing/banners').then(r => r.ok ? r.json() : []),
       fetch('data/catalogo.json').then(r => r.ok ? r.json() : []),
     ]);
     _productos   = prods.status === 'fulfilled'  ? (Array.isArray(prods.value)  ? prods.value  : []) : [];
     _subfamilias = subs.status === 'fulfilled'   ? (Array.isArray(subs.value)   ? subs.value   : []) : [];
+    _banners     = bans.status === 'fulfilled'   ? (Array.isArray(bans.value)   ? bans.value   : []) : [];
     _catalogo    = cat.status === 'fulfilled'    ? (Array.isArray(cat.value)    ? cat.value    : []) : [];
 
     _buildNavDropdowns();
@@ -101,20 +104,30 @@
     const wrap = document.getElementById('landing-hero');
     if (!wrap) return;
 
+    // Usa banners DB si existen, sino cae a los estáticos del repo
+    const slides = _banners.length > 0
+      ? _banners.map((b, i) => ({
+          src:      ERP + '/api/public/landing/foto/banners/' + b.id,
+          fallback: BANNERS[i] || null,
+        }))
+      : BANNERS.map(src => ({ src, fallback: null }));
+
     wrap.innerHTML = `
       <div class="lh-track" id="lhTrack">
-        ${BANNERS.map((src, i) => `
+        ${slides.map((s, i) => `
           <div class="lh-slide${i === 0 ? ' active' : ''}">
-            <img src="${src}" alt="Banner ${i + 1}"
+            <img src="${s.src}" alt="Banner ${i + 1}"
                  loading="${i === 0 ? 'eager' : 'lazy'}"
-                 onerror="this.parentElement.style.background='#0c1523'">
+                 onerror="${s.fallback
+                   ? `this.src='${s.fallback}';this.onerror=null`
+                   : `this.parentElement.style.background='#0c1523'`}">
           </div>
         `).join('')}
       </div>
       <button class="lh-arrow lh-prev" onclick="Landing.heroGo(Landing._heroIdx-1)" aria-label="Anterior">&#8249;</button>
       <button class="lh-arrow lh-next" onclick="Landing.heroGo(Landing._heroIdx+1)" aria-label="Siguiente">&#8250;</button>
       <div class="lh-dots">
-        ${BANNERS.map((_, i) => `<button class="lh-dot${i === 0 ? ' active' : ''}" onclick="Landing.heroGo(${i})" aria-label="Slide ${i + 1}"></button>`).join('')}
+        ${slides.map((_, i) => `<button class="lh-dot${i === 0 ? ' active' : ''}" onclick="Landing.heroGo(${i})" aria-label="Slide ${i + 1}"></button>`).join('')}
       </div>
     `;
 
@@ -147,12 +160,16 @@
       const countTxt = subCount > 0
         ? `<span class="catbox-count">${subCount} subfamilias</span>`
         : prodCount > 0 ? `<span class="catbox-count">${prodCount} productos</span>` : '';
-      const imgSrc = FAMILIA_IMG[fam.key] || null;
+      const erpSrc    = ERP + '/api/public/landing/foto/familias/' + fam.key;
+      const staticSrc = FAMILIA_IMG[fam.key] || null;
+      const onerr     = staticSrc
+        ? `this.src='${staticSrc}';this.onerror=null`
+        : `this.style.display='none'`;
 
       return `
         <div class="catbox" onclick="Landing.selectFamilia('${fam.key}')">
           <div class="catbox-img-wrap" style="background:${fam.color}33">
-            ${imgSrc ? `<img src="${imgSrc}" alt="${_esc(fam.label)}" loading="lazy" onerror="this.style.display='none'">` : ''}
+            <img src="${erpSrc}" alt="${_esc(fam.label)}" loading="lazy" onerror="${onerr}">
             <div class="catbox-overlay"></div>
             <div class="catbox-icon-big">${fam.icon}</div>
           </div>
@@ -233,14 +250,15 @@
         </div>
         <div class="subfam-grid">
           ${subs.map(s => {
-            const imgSrc = _subfamImg(s.nombre);
+            const erpSrc    = ERP + '/api/public/landing/foto/subfamilias/' + s.id;
+            const staticSrc = _subfamImg(s.nombre);
+            const onerr     = staticSrc
+              ? `this.src='${staticSrc}';this.onerror=null`
+              : `this.parentElement.innerHTML='<span class=\\"subfam-icon\\">${fam ? fam.icon : '📦'}</span>'`;
             return `
               <div class="subfam-card" onclick="Landing.selectSub(${s.id})">
                 <div class="subfam-card-img" style="background:${fam ? fam.color + '22' : '#0071BD22'}">
-                  ${imgSrc
-                    ? `<img src="${imgSrc}" alt="${_esc(s.nombre)}" loading="lazy" onerror="this.style.display='none'">`
-                    : `<span class="subfam-icon">${fam ? fam.icon : '📦'}</span>`
-                  }
+                  <img src="${erpSrc}" alt="${_esc(s.nombre)}" loading="lazy" onerror="${onerr}">
                 </div>
                 <div class="subfam-card-body">
                   <div class="subfam-card-name">${_esc(s.nombre)}</div>
@@ -271,7 +289,7 @@
   }
 
   function _cardHTML(p) {
-    const imgSrc = null; // fotos de producto pendientes
+    const imgSrc = ERP + '/api/public/landing/foto/productos/' + p.id;
     const fam    = FAMILIAS.find(f => f.key === p.familia);
     const icon   = fam ? fam.icon : '📦';
     const badge  = p.codigo

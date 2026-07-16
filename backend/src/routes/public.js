@@ -90,6 +90,33 @@ router.get('/catalogo-ingenieria', (req, res) => {
   }
 })
 
+// GET /api/public/landing/foto/:tabla/:id — sirve imagen binaria desde DB
+// :id para familias es el nombre (NEUMATICOS, etc.), para el resto es numérico
+router.get('/landing/foto/:tabla/:id', (req, res) => {
+  const { tabla, id } = req.params
+  const TABLAS = {
+    familias:   { table: 'landing_familias',    col: 'familia' },
+    subfamilias: { table: 'landing_subfamilias', col: 'id' },
+    productos:  { table: 'landing_productos',   col: 'id' },
+    banners:    { table: 'landing_banners',      col: 'id' },
+  }
+  const def = TABLAS[tabla]
+  if (!def) return res.status(400).json({ error: 'Tabla inválida' })
+  try {
+    const val = def.col === 'id' ? parseInt(id) : id
+    const row = db.prepare(
+      `SELECT foto_base64, foto_mimetype FROM ${def.table} WHERE ${def.col} = ?`
+    ).get(val)
+    if (!row || !row.foto_base64) return res.status(404).json({ error: 'Foto no encontrada' })
+    const buf = Buffer.from(row.foto_base64, 'base64')
+    res.set('Content-Type', row.foto_mimetype || 'image/jpeg')
+    res.set('Cache-Control', 'public, max-age=86400')
+    res.send(buf)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/public/landing/familias
 router.get('/landing/familias', (_req, res) => {
   try {
