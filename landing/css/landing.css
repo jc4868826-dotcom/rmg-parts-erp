@@ -242,3 +242,17 @@
   .nav-family-btn { font-size: 11px; padding: 5px 8px; }
 }
 @media (max-width: 680px) { .nav-catalog-link { display: none; } }
+
+/* ── Fixes mínimos: imágenes uniformes ──────────────────────── */
+.catbox-img-wrap img, .subfam-card-img img, .pcard-img img, .lh-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.catbox-img-wrap, .subfam-card-img, .pcard-img {
+  background: #0a1628;
+}
+.catbox-img-wrap {
+  height: 280px;
+  overflow: hidden;
+}
