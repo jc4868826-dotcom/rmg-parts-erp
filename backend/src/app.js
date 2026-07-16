@@ -56,13 +56,20 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// ─── Archivos de landing (disco persistente) ────────────────
-const LANDING_UPLOADS_DIR = process.env.LANDING_UPLOADS_DIR || '/var/data/landing-uploads';
-const fs_static = require('fs');
-if (!fs_static.existsSync(LANDING_UPLOADS_DIR)) {
-  fs_static.mkdirSync(LANDING_UPLOADS_DIR, { recursive: true });
-}
-app.use('/uploads/landing', express.static(LANDING_UPLOADS_DIR));
+// Fotos de landing en base64 dentro de la DB — no hay disco de uploads.
+// Limpieza one-time del directorio legacy si aún existe en /var/data.
+;(function cleanLegacyUploads() {
+  const fs  = require('fs')
+  const dir = process.env.LANDING_UPLOADS_DIR || '/var/data/landing-uploads'
+  if (fs.existsSync(dir)) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true })
+      console.log('✅ Directorio legacy landing-uploads eliminado')
+    } catch (e) {
+      console.warn('⚠️  No se pudo eliminar landing-uploads:', e.message)
+    }
+  }
+})()
 
 // ─── Rutas públicas (sin auth, CORS abierto para landing) ──
 app.use('/api/public', cors({ origin: '*' }), require('./routes/public'));

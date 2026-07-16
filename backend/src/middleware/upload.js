@@ -1,45 +1,27 @@
 /**
- * RMG Landing — Multer upload middleware
- * Disk storage a /var/data/landing-uploads/{productos,banners}/
- * Tipos: jpg/jpeg/png/webp · Límite: 5 MB
+ * RMG Landing — Multer upload middleware (memoria)
+ * Las fotos se convierten a base64 en el handler y se guardan en la DB.
+ * No se escribe nada a disco.
  */
 
 const multer = require('multer')
 const path   = require('path')
-const fs     = require('fs')
 
-const UPLOADS_DIR = process.env.LANDING_UPLOADS_DIR || '/var/data/landing-uploads'
-
-function makeUpload(subfolder) {
-  const dest = path.join(UPLOADS_DIR, subfolder)
-  if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true })
-
-  const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, dest),
-    filename:    (_req, file, cb) => {
-      const ext  = path.extname(file.originalname).toLowerCase()
-      const name = Date.now() + '-' + Math.random().toString(36).slice(2, 8) + ext
-      cb(null, name)
-    },
-  })
-
-  const fileFilter = (_req, file, cb) => {
-    const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
-    if (allowed.includes(path.extname(file.originalname).toLowerCase())) {
-      cb(null, true)
-    } else {
-      const err = new Error('Formato no soportado. Usa JPG, PNG, WebP o GIF')
-      err.statusCode = 400
-      cb(err, false)
-    }
+const fileFilter = (_req, file, cb) => {
+  const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+  if (allowed.includes(path.extname(file.originalname).toLowerCase())) {
+    cb(null, true)
+  } else {
+    const err = new Error('Formato no soportado. Usa JPG, PNG, WebP o GIF')
+    err.statusCode = 400
+    cb(err, false)
   }
-
-  return multer({ storage, fileFilter, limits: { fileSize: 5 * 1024 * 1024 } })
 }
 
-const uploadProducto    = makeUpload('productos')
-const uploadBanner      = makeUpload('banners')
-const uploadSubfamilia  = makeUpload('subfamilias')
-const uploadFamilia     = makeUpload('familias')
+const uploadLanding = multer({
+  storage: multer.memoryStorage(),
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
+})
 
-module.exports = { uploadProducto, uploadBanner, uploadSubfamilia, uploadFamilia, UPLOADS_DIR }
+module.exports = { uploadLanding }

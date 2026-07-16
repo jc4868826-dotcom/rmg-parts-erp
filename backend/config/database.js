@@ -1287,6 +1287,19 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_familias_v1')
     console.log('✅ Migración landing_familias_v1 — tabla landing_familias con 3 filas iniciales')
   }
+
+  // Migration 17: landing_base64_v1 — foto_base64 y foto_mimetype en las 4 tablas
+  const m17 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_base64_v1')
+  if (!m17) {
+    const LT = ['landing_familias', 'landing_subfamilias', 'landing_productos', 'landing_banners']
+    for (const t of LT) {
+      const cols = db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name)
+      if (!cols.includes('foto_base64'))   db.exec(`ALTER TABLE ${t} ADD COLUMN foto_base64 TEXT`)
+      if (!cols.includes('foto_mimetype')) db.exec(`ALTER TABLE ${t} ADD COLUMN foto_mimetype TEXT`)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_base64_v1')
+    console.log('✅ Migración landing_base64_v1 — foto_base64 y foto_mimetype añadidos a tablas landing')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

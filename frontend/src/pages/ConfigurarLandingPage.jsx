@@ -9,8 +9,9 @@ const FAMILIAS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://rmg-parts-erp.onrender.com'
 
-const THUMB_URL = (foto_path) =>
-  foto_path ? `${API_BASE}/uploads/landing/${foto_path}` : null
+// foto_path ya no se usa — las fotos sirven desde la DB vía este endpoint
+const FOTO_URL = (tabla, id) =>
+  id != null ? `${API_BASE}/api/public/landing/foto/${tabla}/${id}` : null
 
 // ─── Componentes auxiliares ───────────────────────────────
 const Field = ({ label, children }) => (
@@ -208,7 +209,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
                   <TD><span className="text-xs font-semibold px-2 py-0.5 rounded"
                     style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)' }}>{sf.familia}</span></TD>
                   <TD><span style={{ color: 'var(--rmg-off)' }}>{sf.nombre}</span></TD>
-                  <TD><Thumbnail src={THUMB_URL(sf.foto_path)} size={40} /></TD>
+                  <TD><Thumbnail src={sf.foto_mimetype ? FOTO_URL('subfamilias', sf.id) : null} size={40} /></TD>
                   <TD style={{ color: 'var(--rmg-muted)' }}>{sf.orden}</TD>
                   <TD><ActiveBadge activo={sf.activo} /></TD>
                   <TD>
@@ -525,7 +526,7 @@ function TabFamilias({ familias = [], isLoading }) {
         {FAM_KEYS.map(famKey => {
           const row      = familias.find(f => f.familia === famKey)
           const meta     = FAM_META[famKey]
-          const src      = row?.foto_path ? `${API_BASE}/uploads/landing/${row.foto_path}` : null
+          const src      = row?.foto_mimetype ? FOTO_URL('familias', famKey) : null
           const isUp     = !!uploading[famKey]
           const hasFile  = !!selected[famKey]
           const didDone  = !!done[famKey]
@@ -714,7 +715,7 @@ function TabBanners({ banners = [], isLoading }) {
               ) : banners.map(b => (
                 <TR key={b.id}>
                   <TD><span style={{ color: 'var(--rmg-muted)' }}>#{b.id}</span></TD>
-                  <TD><Thumbnail src={THUMB_URL(b.foto_path)} size={60} /></TD>
+                  <TD><Thumbnail src={b.foto_mimetype ? FOTO_URL('banners', b.id) : null} size={60} /></TD>
                   <TD style={{ color: 'var(--rmg-muted)' }}>{b.orden}</TD>
                   <TD><ActiveBadge activo={b.activo} /></TD>
                   <TD>

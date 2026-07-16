@@ -57,8 +57,8 @@
     return WA_NR ? `https://wa.me/${WA_NR}?text=${msg}` : `https://wa.me/?text=${msg}`;
   }
 
-  function _imgSrc(foto_path) {
-    return foto_path ? `${ERP}/uploads/landing/${_esc(foto_path)}` : null;
+  function _imgSrc(tabla, id) {
+    return id ? `${ERP}/api/public/landing/foto/${tabla}/${id}` : null;
   }
 
   // ─── Nav mega-menu ─────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@
       <div class="lh-track" id="lhTrack">
         ${_banners.map((b, i) => `
           <div class="lh-slide${i === 0 ? ' active' : ''}">
-            <img src="${ERP}/uploads/landing/${_esc(b.foto_path)}" alt="Banner ${b.id}"
+            <img src="${ERP}/api/public/landing/foto/banners/${b.id}" alt="Banner ${b.id}"
                  loading="${i === 0 ? 'eager' : 'lazy'}"
                  onerror="this.parentElement.style.background='#0c1523'">
           </div>
@@ -129,13 +129,13 @@
       const countTxt = subCount > 0
         ? `<span class="catbox-count">${subCount} subfamilias</span>`
         : prodCount > 0 ? `<span class="catbox-count">${prodCount} productos</span>` : '';
-      // Prioridad: foto de landing_familias → primera subfamilia con foto → primera primera con foto → nulo (mostrará ícono)
-      const famRow   = _familias.find(f => f.familia === fam.key);
-      const firstSub = _subfamilias.find(s => s.familia === fam.key && s.foto_path);
-      const firstProd = _productos.find(p => p.familia === fam.key && p.foto_path);
-      const imgSrc = (famRow && famRow.foto_path)
-        ? _imgSrc(famRow.foto_path)
-        : (firstSub ? _imgSrc(firstSub.foto_path) : (firstProd ? _imgSrc(firstProd.foto_path) : null));
+      // Prioridad: foto de landing_familias → primera subfamilia con foto → primer producto con foto → nulo
+      const famRow    = _familias.find(f => f.familia === fam.key);
+      const firstSub  = _subfamilias.find(s => s.familia === fam.key && s.foto_mimetype);
+      const firstProd = _productos.find(p => p.familia === fam.key && p.foto_mimetype);
+      const imgSrc = (famRow && famRow.foto_mimetype)
+        ? _imgSrc('familias', famRow.familia)
+        : (firstSub ? _imgSrc('subfamilias', firstSub.id) : (firstProd ? _imgSrc('productos', firstProd.id) : null));
 
       return `
         <div class="catbox" onclick="Landing.selectFamilia('${fam.key}')">
@@ -221,7 +221,7 @@
         </div>
         <div class="subfam-grid">
           ${subs.map(s => {
-            const imgSrc = _imgSrc(s.foto_path);
+            const imgSrc = s.foto_mimetype ? _imgSrc('subfamilias', s.id) : null;
             return `
               <div class="subfam-card" onclick="Landing.selectSub(${s.id})">
                 <div class="subfam-card-img" style="background:${fam ? fam.color + '22' : '#0071BD22'}">
@@ -259,7 +259,7 @@
   }
 
   function _cardHTML(p) {
-    const imgSrc = _imgSrc(p.foto_path);
+    const imgSrc = p.foto_mimetype ? _imgSrc('productos', p.id) : null;
     const fam    = FAMILIAS.find(f => f.key === p.familia);
     const icon   = fam ? fam.icon : '📦';
     const badge  = p.codigo

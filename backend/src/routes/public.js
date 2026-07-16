@@ -90,11 +90,39 @@ router.get('/catalogo-ingenieria', (req, res) => {
   }
 })
 
+// Excluye foto_base64 de respuestas JSON (puede pesar MBs por fila)
+function strip(row)  { if (!row) return row; const { foto_base64, ...r } = row; return r }
+function stripAll(rows) { return rows.map(strip) }
+
+// GET /api/public/landing/foto/:tabla/:id — devuelve la imagen como binario
+const FOTO_META = {
+  familias:    { t: 'landing_familias',    pk: 'familia', isText: true  },
+  subfamilias: { t: 'landing_subfamilias', pk: 'id',      isText: false },
+  productos:   { t: 'landing_productos',   pk: 'id',      isText: false },
+  banners:     { t: 'landing_banners',     pk: 'id',      isText: false },
+}
+router.get('/landing/foto/:tabla/:id', (req, res) => {
+  const meta = FOTO_META[req.params.tabla]
+  if (!meta) return res.status(400).send('')
+  try {
+    const pk  = meta.isText ? req.params.id : parseInt(req.params.id)
+    const row = db.prepare(
+      `SELECT foto_base64, foto_mimetype FROM ${meta.t} WHERE ${meta.pk} = ?`
+    ).get(pk)
+    if (!row || !row.foto_base64) return res.status(404).send('')
+    res.set('Content-Type', row.foto_mimetype || 'image/jpeg')
+    res.set('Cache-Control', 'public, max-age=86400')
+    res.send(Buffer.from(row.foto_base64, 'base64'))
+  } catch (err) {
+    res.status(500).send('')
+  }
+})
+
 // GET /api/public/landing/familias — las 3 familias con sus fotos
 router.get('/landing/familias', (_req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM landing_familias ORDER BY familia ASC').all()
-    res.json(rows)
+    res.json(stripAll(rows))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -108,7 +136,7 @@ router.get('/landing/subfamilias', (_req, res) => {
       WHERE activo = 1
       ORDER BY familia ASC, orden ASC, id ASC
     `).all()
-    res.json(rows)
+    res.json(stripAll(rows))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -122,7 +150,7 @@ router.get('/landing/productos', (_req, res) => {
       WHERE activo = 1
       ORDER BY familia ASC, orden ASC, id ASC
     `).all()
-    res.json(rows)
+    res.json(stripAll(rows))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -136,7 +164,7 @@ router.get('/landing/banners', (_req, res) => {
       WHERE activo = 1
       ORDER BY orden ASC, id ASC
     `).all()
-    res.json(rows)
+    res.json(stripAll(rows))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
