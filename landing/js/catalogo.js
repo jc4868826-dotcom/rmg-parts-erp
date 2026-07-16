@@ -68,9 +68,6 @@ const Catalogo = (() => {
     container.innerHTML = `
       <!-- ── HERO INDUSTRIAL ─────────────────────────────────────── -->
       <div class="ci-hero-wrap">
-        <img src="assets/img/hero/hero-industrial.png"
-             alt="Catálogo Industrial RMG Parts — neumáticos, lubricantes, baterías"
-             class="ci-hero-img" loading="eager">
         <div class="ci-hero-overlay">
           <div class="container">
             <div class="ci-hero-body">

@@ -710,13 +710,7 @@
   overflow: hidden;
   min-height: 280px;
   max-height: 480px;
-}
-
-.ci-hero-img {
-  width: 100%;
-  max-height: 480px;
-  object-fit: cover;
-  display: block;
+  background: #0b7fe0;
 }
 
 .ci-hero-overlay {

@@ -34,7 +34,7 @@
 #landing-hero { position: relative; overflow: hidden; background: #0c1523; }
 .lh-track { display: flex; transition: transform 0.45s ease; will-change: transform; }
 .lh-slide { min-width: 100%; flex-shrink: 0; }
-.lh-slide img { width: 100%; height: 460px; object-fit: cover; object-position: center; display: block; }
+.lh-slide img { width: 100%; height: 500px; object-fit: cover; object-position: center; display: block; }
 .lh-arrow {
   position: absolute; top: 50%; transform: translateY(-50%);
   background: rgba(0,0,0,0.45); color: #fff; border: none;
@@ -115,7 +115,7 @@
 }
 .catbox:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,113,189,0.18); }
 .catbox-img-wrap {
-  position: relative; width: 100%; height: 200px; overflow: hidden;
+  position: relative; width: 100%; height: 280px; overflow: hidden;
 }
 .catbox-img-wrap img { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
 .catbox-overlay {
@@ -163,7 +163,7 @@
 }
 .subfam-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,113,189,0.15); border-color: #29AAE1; }
 .subfam-card-img {
-  width: 100%; height: 160px; overflow: hidden;
+  width: 100%; height: 280px; overflow: hidden;
 }
 .subfam-card-img img { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
 .subfam-icon { font-size: 36px; opacity: 0.5; }
@@ -185,10 +185,9 @@
 }
 .pcard:hover { border-color: #29AAE1; box-shadow: 0 4px 20px rgba(41,170,225,0.18); }
 .pcard-img {
-  width: 100%; height: 160px; overflow: hidden; background: #f4f7fb;
+  width: 100%; height: 280px; overflow: hidden; background: #f4f7fb;
 }
 .pcard-img img { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
-.pcard-img--placeholder { background: linear-gradient(135deg, #e8f4fd, #f0f8ff); }
 .pcard-icon { font-size: 40px; opacity: 0.6; }
 .pcard-body { padding: 14px; display: flex; flex-direction: column; flex: 1; gap: 6px; }
 .pcard-badge {
@@ -232,9 +231,9 @@
 /* ── Responsive imágenes ─────────────────────────────────────── */
 @media (max-width: 768px) {
   .lh-slide img { height: 220px; }
-  .catbox-img-wrap { height: 160px; }
-  .subfam-card-img { height: 130px; }
-  .pcard-img { height: 130px; }
+  .catbox-img-wrap { height: 200px; }
+  .subfam-card-img { height: 200px; }
+  .pcard-img { height: 200px; }
 }
 
 /* ── Responsive nav ──────────────────────────────────────────── */

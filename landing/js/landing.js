@@ -263,7 +263,7 @@
 
     return `
       <div class="pcard">
-        <div class="pcard-img pcard-img--placeholder">
+        <div class="pcard-img">
           <img src="${imgSrc}" alt="${_esc(p.descripcion)}" loading="lazy"
                onerror="this.style.display='none'">
         </div>
