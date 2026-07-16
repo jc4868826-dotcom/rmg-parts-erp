@@ -110,7 +110,7 @@ router.get('/landing/foto/:tabla/:id', (req, res) => {
     if (!row || !row.foto_base64) return res.status(404).json({ error: 'Foto no encontrada' })
     const buf = Buffer.from(row.foto_base64, 'base64')
     res.set('Content-Type', row.foto_mimetype || 'image/jpeg')
-    res.set('Cache-Control', 'public, max-age=86400')
+    res.set('Cache-Control', 'no-cache')
     res.send(buf)
   } catch (err) {
     res.status(500).json({ error: err.message })
