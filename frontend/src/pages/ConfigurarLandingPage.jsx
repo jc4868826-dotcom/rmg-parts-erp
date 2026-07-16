@@ -69,6 +69,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(FORM_INIT)
+  const [imgVer, setImgVer] = useState(Date.now())
 
   const setF = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
@@ -82,7 +83,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
 
   const updateMut = useMutation({
     mutationFn: ({ id, fd }) => api.put(`/admin/landing/subfamilias/${id}`, fd).then(r => r.data),
-    onSuccess: () => { invalidate(); resetForm(); toast.success('Subfamilia actualizada') },
+    onSuccess: () => { invalidate(); setImgVer(Date.now()); resetForm(); toast.success('Subfamilia actualizada') },
     onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar subfamilia'),
   })
 
@@ -204,7 +205,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
                   <TD><span className="text-xs font-semibold px-2 py-0.5 rounded"
                     style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)' }}>{sf.familia}</span></TD>
                   <TD><span style={{ color: 'var(--rmg-off)' }}>{sf.nombre}</span></TD>
-                  <TD><Thumbnail src={sf.foto_mimetype ? FOTO_URL('subfamilias', sf.id) : null} size={40} /></TD>
+                  <TD><Thumbnail src={sf.foto_mimetype ? `${FOTO_URL('subfamilias', sf.id)}?t=${imgVer}` : null} size={40} /></TD>
                   <TD style={{ color: 'var(--rmg-muted)' }}>{sf.orden}</TD>
                   <TD><ActiveBadge activo={sf.activo} /></TD>
                   <TD>
@@ -471,7 +472,8 @@ function TabFamilias({ familias = [], isLoading }) {
   const refLub = useRef(null)
   const fotoRefs = { NEUMATICOS: refNeu, BATERIAS: refBat, LUBRICANTES: refLub }
 
-  const [state, setState] = useState({}) // { NEUMATICOS: 'loading'|'ok'|'error' }
+  const [state, setState] = useState({})
+  const [imgVer, setImgVer] = useState(Date.now())
 
   const uploadFoto = async (famKey) => {
     const file = fotoRefs[famKey].current?.files[0]
@@ -482,6 +484,7 @@ function TabFamilias({ familias = [], isLoading }) {
       fd.append('foto', file)
       await api.put(`/admin/landing/familias/${famKey}`, fd)
       qc.invalidateQueries(['landing-familias'])
+      setImgVer(Date.now())
       setState(p => ({ ...p, [famKey]: 'ok' }))
       toast.success(`Foto de ${FAM_META[famKey].label} guardada`)
       setTimeout(() => setState(p => ({ ...p, [famKey]: null })), 3000)
@@ -506,7 +509,7 @@ function TabFamilias({ familias = [], isLoading }) {
             <div className="flex items-center justify-center"
               style={{ height: 140, background: 'rgba(255,255,255,0.04)', overflow: 'hidden', position: 'relative' }}>
               {hasFoto
-                ? <img src={FOTO_URL('familias', famKey)} alt={meta.label}
+                ? <img src={`${FOTO_URL('familias', famKey)}?t=${imgVer}`} alt={meta.label}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     onError={e => { e.currentTarget.style.display = 'none' }} />
                 : <span style={{ fontSize: 52 }}>{meta.icon}</span>

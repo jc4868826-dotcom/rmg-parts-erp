@@ -82,13 +82,14 @@
     }
 
     wrap.style.display = '';
+    _heroIdx = 0;
     wrap.innerHTML = `
       <div class="lh-track" id="lhTrack">
         ${_banners.map((b, i) => `
-          <div class="lh-slide${i === 0 ? ' active' : ''}">
+          <div class="lh-slide">
             <img src="${ERP}/api/public/landing/foto/banners/${b.id}" alt="Banner ${i + 1}"
                  loading="${i === 0 ? 'eager' : 'lazy'}"
-                 onerror="this.style.display='none'">
+                 onerror="this.parentElement.style.display='none'">
           </div>
         `).join('')}
       </div>
@@ -106,15 +107,16 @@
 
   function _startAutoplay() {
     clearInterval(_heroTimer);
-    _heroTimer = setInterval(() => heroGo(_heroIdx + 1), 5000);
+    _heroTimer = setInterval(() => heroGo(_heroIdx + 1), 4000);
   }
 
   function heroGo(i) {
-    const slides = document.querySelectorAll('#landing-hero .lh-slide');
-    const dots   = document.querySelectorAll('#landing-hero .lh-dot');
-    if (!slides.length) return;
-    _heroIdx = ((i % slides.length) + slides.length) % slides.length;
-    slides.forEach((s, j) => s.classList.toggle('active', j === _heroIdx));
+    const track = document.getElementById('lhTrack');
+    const dots  = document.querySelectorAll('#landing-hero .lh-dot');
+    const n     = _banners.length;
+    if (!track || !n) return;
+    _heroIdx = ((i % n) + n) % n;
+    track.style.transform = `translateX(-${_heroIdx * 100}%)`;
     dots.forEach((d, j) => d.classList.toggle('active', j === _heroIdx));
   }
 
