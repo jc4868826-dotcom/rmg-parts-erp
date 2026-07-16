@@ -88,7 +88,7 @@
           <div class="lh-slide${i === 0 ? ' active' : ''}">
             <img src="${ERP}/api/public/landing/foto/banners/${b.id}" alt="Banner ${i + 1}"
                  loading="${i === 0 ? 'eager' : 'lazy'}"
-                 onerror="this.parentElement.style.display='none'">
+                 onerror="this.style.display='none'">
           </div>
         `).join('')}
       </div>

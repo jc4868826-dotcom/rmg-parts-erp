@@ -15,7 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ─── Middleware de seguridad ────────────────────────────────
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'https://rmg-parts-frontend.onrender.com',
