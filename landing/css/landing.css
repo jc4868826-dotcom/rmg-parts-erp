@@ -247,7 +247,7 @@
 .catbox-img-wrap img, .subfam-card-img img, .pcard-img img, .lh-slide img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 .catbox-img-wrap, .subfam-card-img, .pcard-img {
   background: #0a1628;
