@@ -1,24 +1,15 @@
 /**
  * RMG Landing — Rutas admin (protegidas con JWT + rol admin)
- * Las fotos se guardan como base64 en la DB (foto_base64 + foto_mimetype).
- * No se escribe ningún archivo a disco.
+ * Fotos 100% estáticas servidas desde el repo (landing/assets/img/).
+ * No se gestiona ninguna foto desde el admin.
  */
 
 const express = require('express')
 const router  = express.Router()
 const { db }  = require('../../config/database')
 const { authenticate, requireRole } = require('../middleware/auth')
-const { uploadLanding } = require('../middleware/upload')
 
 const guard = [authenticate, requireRole('admin')]
-
-// Excluye foto_base64 de las respuestas JSON (puede pesar MBs)
-function strip(row) {
-  if (!row) return row
-  const { foto_base64, ...rest } = row
-  return rest
-}
-function stripAll(rows) { return rows.map(strip) }
 
 // ─── FAMILIAS ─────────────────────────────────────────────────────────────────
 
@@ -27,33 +18,10 @@ const VALID_FAMILIAS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
 // GET /api/admin/landing/familias
 router.get('/familias', guard, (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM landing_familias ORDER BY familia ASC').all()
-    res.json(stripAll(rows))
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// PUT /api/admin/landing/familias/:familia
-router.put('/familias/:familia', [...guard, uploadLanding.single('foto')], (req, res) => {
-  try {
-    const { familia } = req.params
-    if (!VALID_FAMILIAS.includes(familia)) return res.status(400).json({ error: 'Familia inválida' })
-
-    const existing = db.prepare('SELECT familia FROM landing_familias WHERE familia = ?').get(familia)
-    if (!existing) return res.status(404).json({ error: 'Familia no encontrada' })
-    if (!req.file)  return res.status(400).json({ error: 'Se requiere archivo de imagen (campo: foto)' })
-
-    const foto_base64  = req.file.buffer.toString('base64')
-    const foto_mimetype = req.file.mimetype
-
-    db.prepare(`
-      UPDATE landing_familias
-      SET foto_base64 = ?, foto_mimetype = ?, updated_at = datetime('now')
-      WHERE familia = ?
-    `).run(foto_base64, foto_mimetype, familia)
-
-    res.json(strip(db.prepare('SELECT * FROM landing_familias WHERE familia = ?').get(familia)))
+    const rows = db.prepare(
+      'SELECT familia, foto_path, updated_at FROM landing_familias ORDER BY familia ASC'
+    ).all()
+    res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -65,68 +33,63 @@ router.put('/familias/:familia', [...guard, uploadLanding.single('foto')], (req,
 router.get('/subfamilias', guard, (req, res) => {
   try {
     const rows = db.prepare(
-      'SELECT * FROM landing_subfamilias ORDER BY familia ASC, orden ASC, id ASC'
+      'SELECT id, familia, nombre, descripcion, orden, activo, created_at, updated_at FROM landing_subfamilias ORDER BY familia ASC, orden ASC, id ASC'
     ).all()
-    res.json(stripAll(rows))
+    res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
 // POST /api/admin/landing/subfamilias
-router.post('/subfamilias', [...guard, uploadLanding.single('foto')], (req, res) => {
+router.post('/subfamilias', guard, (req, res) => {
   try {
     const { familia, nombre, descripcion, orden = 0, activo = 1 } = req.body
     if (!familia) return res.status(400).json({ error: 'familia es requerida' })
     if (!nombre)  return res.status(400).json({ error: 'nombre es requerido' })
 
-    const foto_base64   = req.file ? req.file.buffer.toString('base64') : null
-    const foto_mimetype = req.file ? req.file.mimetype : null
-
     db.prepare(`
-      INSERT INTO landing_subfamilias (familia, nombre, foto_base64, foto_mimetype, descripcion, orden, activo)
-      VALUES (?,?,?,?,?,?,?)
-    `).run(familia, nombre, foto_base64, foto_mimetype, descripcion || null, parseInt(orden), parseInt(activo))
+      INSERT INTO landing_subfamilias (familia, nombre, descripcion, orden, activo)
+      VALUES (?,?,?,?,?)
+    `).run(familia, nombre, descripcion || null, parseInt(orden), parseInt(activo))
 
-    const newRow = db.prepare('SELECT * FROM landing_subfamilias ORDER BY rowid DESC LIMIT 1').get()
-    res.status(201).json(strip(newRow))
+    const newRow = db.prepare(
+      'SELECT id, familia, nombre, descripcion, orden, activo, created_at, updated_at FROM landing_subfamilias ORDER BY rowid DESC LIMIT 1'
+    ).get()
+    res.status(201).json(newRow)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
 // PUT /api/admin/landing/subfamilias/:id
-router.put('/subfamilias/:id', [...guard, uploadLanding.single('foto')], (req, res) => {
+router.put('/subfamilias/:id', guard, (req, res) => {
   try {
     const { id } = req.params
-    const existing = db.prepare('SELECT * FROM landing_subfamilias WHERE id = ?').get(parseInt(id))
+    const existing = db.prepare('SELECT id FROM landing_subfamilias WHERE id = ?').get(parseInt(id))
     if (!existing) return res.status(404).json({ error: 'Subfamilia no encontrada' })
 
     const { familia, nombre, descripcion, orden, activo } = req.body
-
-    const foto_base64   = req.file ? req.file.buffer.toString('base64') : existing.foto_base64
-    const foto_mimetype = req.file ? req.file.mimetype : existing.foto_mimetype
 
     db.prepare(`
       UPDATE landing_subfamilias SET
         familia      = COALESCE(?, familia),
         nombre       = COALESCE(?, nombre),
         descripcion  = COALESCE(?, descripcion),
-        foto_base64  = ?,
-        foto_mimetype = ?,
         orden        = CASE WHEN ? IS NOT NULL THEN CAST(? AS INTEGER) ELSE orden END,
         activo       = CASE WHEN ? IS NOT NULL THEN CAST(? AS INTEGER) ELSE activo END,
         updated_at   = datetime('now')
       WHERE id = ?
     `).run(
       familia || null, nombre || null, descripcion || null,
-      foto_base64, foto_mimetype,
       orden  != null ? orden  : null, orden  != null ? parseInt(orden)  : null,
       activo != null ? activo : null, activo != null ? parseInt(activo) : null,
       parseInt(id)
     )
 
-    res.json(strip(db.prepare('SELECT * FROM landing_subfamilias WHERE id = ?').get(parseInt(id))))
+    res.json(db.prepare(
+      'SELECT id, familia, nombre, descripcion, orden, activo, created_at, updated_at FROM landing_subfamilias WHERE id = ?'
+    ).get(parseInt(id)))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -146,32 +109,31 @@ router.delete('/subfamilias/:id', guard, (req, res) => {
 
 // ─── PRODUCTOS ────────────────────────────────────────────────────────────────
 
+const PRODUCTO_COLS = 'id, familia, subfamilia, subfamilia_id, codigo, marca, descripcion, um, presentacion, precio, detalles_tecnicos, activo, orden, created_at, updated_at'
+
 // GET /api/admin/landing/productos
 router.get('/productos', guard, (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM landing_productos ORDER BY orden ASC, id ASC').all()
-    res.json(stripAll(rows))
+    const rows = db.prepare(`SELECT ${PRODUCTO_COLS} FROM landing_productos ORDER BY orden ASC, id ASC`).all()
+    res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
 // POST /api/admin/landing/productos
-router.post('/productos', [...guard, uploadLanding.single('foto')], (req, res) => {
+router.post('/productos', guard, (req, res) => {
   try {
     const { familia, subfamilia, subfamilia_id, codigo, marca,
             descripcion, um, presentacion,
             precio, detalles_tecnicos, activo = 1, orden = 0 } = req.body
     if (!descripcion) return res.status(400).json({ error: 'descripcion es requerida' })
 
-    const foto_base64   = req.file ? req.file.buffer.toString('base64') : null
-    const foto_mimetype = req.file ? req.file.mimetype : null
-
     db.prepare(`
       INSERT INTO landing_productos
         (familia, subfamilia, subfamilia_id, codigo, marca, descripcion, um, presentacion,
-         precio, detalles_tecnicos, foto_base64, foto_mimetype, activo, orden)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         precio, detalles_tecnicos, activo, orden)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       familia || null,
       subfamilia || null,
@@ -183,30 +145,26 @@ router.post('/productos', [...guard, uploadLanding.single('foto')], (req, res) =
       presentacion || null,
       precio != null && precio !== '' ? parseFloat(precio) : null,
       detalles_tecnicos || null,
-      foto_base64, foto_mimetype,
       parseInt(activo), parseInt(orden)
     )
 
-    const newRow = db.prepare('SELECT * FROM landing_productos ORDER BY rowid DESC LIMIT 1').get()
-    res.status(201).json(strip(newRow))
+    const newRow = db.prepare(`SELECT ${PRODUCTO_COLS} FROM landing_productos ORDER BY rowid DESC LIMIT 1`).get()
+    res.status(201).json(newRow)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
 // PUT /api/admin/landing/productos/:id
-router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res) => {
+router.put('/productos/:id', guard, (req, res) => {
   try {
     const { id } = req.params
-    const existing = db.prepare('SELECT * FROM landing_productos WHERE id = ?').get(parseInt(id))
+    const existing = db.prepare('SELECT id FROM landing_productos WHERE id = ?').get(parseInt(id))
     if (!existing) return res.status(404).json({ error: 'Producto no encontrado' })
 
     const { familia, subfamilia, subfamilia_id, codigo, marca,
             descripcion, um, presentacion,
             precio, detalles_tecnicos, activo, orden } = req.body
-
-    const foto_base64   = req.file ? req.file.buffer.toString('base64') : existing.foto_base64
-    const foto_mimetype = req.file ? req.file.mimetype : existing.foto_mimetype
 
     db.prepare(`
       UPDATE landing_productos SET
@@ -220,8 +178,6 @@ router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res
         presentacion      = COALESCE(?, presentacion),
         precio            = CASE WHEN ? IS NOT NULL THEN CAST(? AS REAL) ELSE precio END,
         detalles_tecnicos = COALESCE(?, detalles_tecnicos),
-        foto_base64       = ?,
-        foto_mimetype     = ?,
         activo            = CASE WHEN ? IS NOT NULL THEN CAST(? AS INTEGER) ELSE activo END,
         orden             = CASE WHEN ? IS NOT NULL THEN CAST(? AS INTEGER) ELSE orden END,
         updated_at        = datetime('now')
@@ -237,13 +193,12 @@ router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res
       presentacion || null,
       precio != null && precio !== '' ? precio : null, precio != null && precio !== '' ? parseFloat(precio) : null,
       detalles_tecnicos || null,
-      foto_base64, foto_mimetype,
       activo != null ? activo : null, activo != null ? parseInt(activo) : null,
       orden  != null ? orden  : null, orden  != null ? parseInt(orden)  : null,
       parseInt(id)
     )
 
-    res.json(strip(db.prepare('SELECT * FROM landing_productos WHERE id = ?').get(parseInt(id))))
+    res.json(db.prepare(`SELECT ${PRODUCTO_COLS} FROM landing_productos WHERE id = ?`).get(parseInt(id)))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -266,61 +221,10 @@ router.delete('/productos/:id', guard, (req, res) => {
 // GET /api/admin/landing/banners
 router.get('/banners', guard, (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM landing_banners ORDER BY orden ASC, id ASC').all()
-    res.json(stripAll(rows))
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// POST /api/admin/landing/banners
-router.post('/banners', [...guard, uploadLanding.single('foto')], (req, res) => {
-  try {
-    const { orden = 0, activo = 1 } = req.body
-    if (!req.file) return res.status(400).json({ error: 'Se requiere un archivo de imagen (campo: foto)' })
-
-    const foto_base64   = req.file.buffer.toString('base64')
-    const foto_mimetype = req.file.mimetype
-
-    db.prepare(`
-      INSERT INTO landing_banners (foto_base64, foto_mimetype, orden, activo)
-      VALUES (?,?,?,?)
-    `).run(foto_base64, foto_mimetype, parseInt(orden), parseInt(activo))
-
-    const newRow = db.prepare('SELECT * FROM landing_banners ORDER BY rowid DESC LIMIT 1').get()
-    res.status(201).json(strip(newRow))
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// PUT /api/admin/landing/banners/:id
-router.put('/banners/:id', [...guard, uploadLanding.single('foto')], (req, res) => {
-  try {
-    const { id } = req.params
-    const existing = db.prepare('SELECT * FROM landing_banners WHERE id = ?').get(parseInt(id))
-    if (!existing) return res.status(404).json({ error: 'Banner no encontrado' })
-
-    const { orden, activo } = req.body
-
-    const foto_base64   = req.file ? req.file.buffer.toString('base64') : existing.foto_base64
-    const foto_mimetype = req.file ? req.file.mimetype : existing.foto_mimetype
-
-    db.prepare(`
-      UPDATE landing_banners SET
-        foto_base64   = ?,
-        foto_mimetype = ?,
-        orden         = CASE WHEN ? IS NOT NULL THEN CAST(? AS INTEGER) ELSE orden END,
-        activo        = CASE WHEN ? IS NOT NULL THEN CAST(? AS INTEGER) ELSE activo END
-      WHERE id = ?
-    `).run(
-      foto_base64, foto_mimetype,
-      orden  != null ? orden  : null, orden  != null ? parseInt(orden)  : null,
-      activo != null ? activo : null, activo != null ? parseInt(activo) : null,
-      parseInt(id)
-    )
-
-    res.json(strip(db.prepare('SELECT * FROM landing_banners WHERE id = ?').get(parseInt(id))))
+    const rows = db.prepare(
+      'SELECT id, orden, activo, created_at FROM landing_banners ORDER BY orden ASC, id ASC'
+    ).all()
+    res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

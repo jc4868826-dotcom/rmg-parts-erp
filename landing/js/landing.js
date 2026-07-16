@@ -11,10 +11,37 @@
     { key: 'LUBRICANTES', label: 'Lubricantes', icon: '🛢️', color: '#435664' },
   ];
 
+  // Fotos estáticas — servidas directamente desde el repo, sin pasar por el backend
+  const BANNERS = [
+    'assets/img/Fotos RMG PARTS/banner/home.png',
+    'assets/img/Fotos RMG PARTS/banner/neumaticos.png',
+    'assets/img/Fotos RMG PARTS/banner/baterias.png',
+    'assets/img/Fotos RMG PARTS/banner/lubricantes.png',
+    'assets/img/Fotos RMG PARTS/banner/despacho.png',
+  ];
+
+  const FAMILIA_IMG = {
+    'NEUMATICOS':  'assets/img/Fotos RMG PARTS/titular familias/neumatico icono.png',
+    'BATERIAS':    'assets/img/Fotos RMG PARTS/titular familias/baterias icono.png',
+    'LUBRICANTES': 'assets/img/Fotos RMG PARTS/titular familias/lubricantes icono.png',
+  };
+
+  const SUBFAM_IMG = {
+    'Camiones':    'assets/img/Fotos RMG PARTS/sub familias/neumaticos/camiones.png',
+    'Camionetas':  'assets/img/Fotos RMG PARTS/sub familias/neumaticos/neumaticos camionetas.png',
+    'Tractores':   'assets/img/Fotos RMG PARTS/sub familias/neumaticos/tractores.png',
+  };
+
+  function _subfamImg(nombre) {
+    const n = (nombre || '').toLowerCase();
+    for (const [key, src] of Object.entries(SUBFAM_IMG)) {
+      if (n.includes(key.toLowerCase())) return src;
+    }
+    return null;
+  }
+
   let _productos   = [];
-  let _banners     = [];
   let _subfamilias = [];
-  let _familias    = [];  // fotos de las 3 familias padre desde landing_familias
   let _catalogo    = [];  // data/catalogo.json para búsqueda estática
 
   let _heroIdx   = 0;
@@ -26,17 +53,13 @@
 
   // ─── Init ──────────────────────────────────────────────────────────────────
   async function init() {
-    const [prods, bans, subs, fams, cat] = await Promise.allSettled([
+    const [prods, subs, cat] = await Promise.allSettled([
       fetch(ERP + '/api/public/landing/productos').then(r => r.ok ? r.json() : []),
-      fetch(ERP + '/api/public/landing/banners').then(r => r.ok ? r.json() : []),
       fetch(ERP + '/api/public/landing/subfamilias').then(r => r.ok ? r.json() : []),
-      fetch(ERP + '/api/public/landing/familias').then(r => r.ok ? r.json() : []),
       fetch('data/catalogo.json').then(r => r.ok ? r.json() : []),
     ]);
     _productos   = prods.status === 'fulfilled'  ? (Array.isArray(prods.value)  ? prods.value  : []) : [];
-    _banners     = bans.status === 'fulfilled'   ? (Array.isArray(bans.value)   ? bans.value   : []) : [];
     _subfamilias = subs.status === 'fulfilled'   ? (Array.isArray(subs.value)   ? subs.value   : []) : [];
-    _familias    = fams.status === 'fulfilled'   ? (Array.isArray(fams.value)   ? fams.value   : []) : [];
     _catalogo    = cat.status === 'fulfilled'    ? (Array.isArray(cat.value)    ? cat.value    : []) : [];
 
     _buildNavDropdowns();
@@ -55,10 +78,6 @@
   function _waLink(texto) {
     const msg = encodeURIComponent(texto);
     return WA_NR ? `https://wa.me/${WA_NR}?text=${msg}` : `https://wa.me/?text=${msg}`;
-  }
-
-  function _imgSrc(tabla, id) {
-    return id ? `${ERP}/api/public/landing/foto/${tabla}/${id}` : null;
   }
 
   // ─── Nav mega-menu ─────────────────────────────────────────────────────────
@@ -81,13 +100,12 @@
   function _renderHero() {
     const wrap = document.getElementById('landing-hero');
     if (!wrap) return;
-    if (!_banners.length) return;  // conserva el carousel estático si no hay banners
 
     wrap.innerHTML = `
       <div class="lh-track" id="lhTrack">
-        ${_banners.map((b, i) => `
+        ${BANNERS.map((src, i) => `
           <div class="lh-slide${i === 0 ? ' active' : ''}">
-            <img src="${ERP}/api/public/landing/foto/banners/${b.id}" alt="Banner ${b.id}"
+            <img src="${src}" alt="Banner ${i + 1}"
                  loading="${i === 0 ? 'eager' : 'lazy'}"
                  onerror="this.parentElement.style.background='#0c1523'">
           </div>
@@ -96,7 +114,7 @@
       <button class="lh-arrow lh-prev" onclick="Landing.heroGo(Landing._heroIdx-1)" aria-label="Anterior">&#8249;</button>
       <button class="lh-arrow lh-next" onclick="Landing.heroGo(Landing._heroIdx+1)" aria-label="Siguiente">&#8250;</button>
       <div class="lh-dots">
-        ${_banners.map((_,i) => `<button class="lh-dot${i===0?' active':''}" onclick="Landing.heroGo(${i})" aria-label="Slide ${i+1}"></button>`).join('')}
+        ${BANNERS.map((_, i) => `<button class="lh-dot${i === 0 ? ' active' : ''}" onclick="Landing.heroGo(${i})" aria-label="Slide ${i + 1}"></button>`).join('')}
       </div>
     `;
 
@@ -129,13 +147,7 @@
       const countTxt = subCount > 0
         ? `<span class="catbox-count">${subCount} subfamilias</span>`
         : prodCount > 0 ? `<span class="catbox-count">${prodCount} productos</span>` : '';
-      // Prioridad: foto de landing_familias → primera subfamilia con foto → primer producto con foto → nulo
-      const famRow    = _familias.find(f => f.familia === fam.key);
-      const firstSub  = _subfamilias.find(s => s.familia === fam.key && s.foto_mimetype);
-      const firstProd = _productos.find(p => p.familia === fam.key && p.foto_mimetype);
-      const imgSrc = (famRow && famRow.foto_mimetype)
-        ? _imgSrc('familias', famRow.familia)
-        : (firstSub ? _imgSrc('subfamilias', firstSub.id) : (firstProd ? _imgSrc('productos', firstProd.id) : null));
+      const imgSrc = FAMILIA_IMG[fam.key] || null;
 
       return `
         <div class="catbox" onclick="Landing.selectFamilia('${fam.key}')">
@@ -221,7 +233,7 @@
         </div>
         <div class="subfam-grid">
           ${subs.map(s => {
-            const imgSrc = s.foto_mimetype ? _imgSrc('subfamilias', s.id) : null;
+            const imgSrc = _subfamImg(s.nombre);
             return `
               <div class="subfam-card" onclick="Landing.selectSub(${s.id})">
                 <div class="subfam-card-img" style="background:${fam ? fam.color + '22' : '#0071BD22'}">
@@ -259,7 +271,7 @@
   }
 
   function _cardHTML(p) {
-    const imgSrc = p.foto_mimetype ? _imgSrc('productos', p.id) : null;
+    const imgSrc = null; // fotos de producto pendientes
     const fam    = FAMILIAS.find(f => f.key === p.familia);
     const icon   = fam ? fam.icon : '📦';
     const badge  = p.codigo

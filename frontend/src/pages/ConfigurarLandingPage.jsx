@@ -169,8 +169,12 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
                 <Field label="Orden">
                   <input type="number" className="rmg-input" value={form.orden} onChange={setF('orden')} />
                 </Field>
-                <Field label="Foto (JPG/PNG/WebP, máx 5MB)">
-                  <input type="file" className="rmg-input" accept="image/*" ref={fotoRef} />
+                <Field label="Archivo de foto (ej: camiones.png)">
+                  <input className="rmg-input font-mono text-xs" placeholder="nombre-del-archivo.png"
+                    value={form.foto_archivo || ''} onChange={setF('foto_archivo')} />
+                  <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>
+                    Solo referencia — las fotos se gestionan en el repositorio.
+                  </p>
                 </Field>
               </div>
             </div>
@@ -468,117 +472,39 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
 
 // ─── Tab Familias ─────────────────────────────────────────
 const FAM_META = {
-  NEUMATICOS:  { label: 'Neumáticos',  icon: '🛞' },
-  BATERIAS:    { label: 'Baterías',    icon: '🔋' },
-  LUBRICANTES: { label: 'Lubricantes', icon: '🛢️' },
+  NEUMATICOS:  { label: 'Neumáticos',  icon: '🛞', archivo: 'titular familias/neumatico icono.png' },
+  BATERIAS:    { label: 'Baterías',    icon: '🔋', archivo: 'titular familias/baterias icono.png' },
+  LUBRICANTES: { label: 'Lubricantes', icon: '🛢️', archivo: 'titular familias/lubricantes icono.png' },
 }
 const FAM_KEYS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
-const EMPTY_PER_FAM = () => Object.fromEntries(FAM_KEYS.map(k => [k, null]))
 
-function TabFamilias({ familias = [], isLoading }) {
-  const qc = useQueryClient()
-  const refNeu = useRef(null)
-  const refBat = useRef(null)
-  const refLub = useRef(null)
-  const fotoRefs = { NEUMATICOS: refNeu, BATERIAS: refBat, LUBRICANTES: refLub }
-
-  // Estado per-familia
-  const [selected,  setSelected]  = useState(EMPTY_PER_FAM)   // File | null por familia
-  const [uploading, setUploading] = useState(EMPTY_PER_FAM)   // bool por familia
-  const [done,      setDone]      = useState(EMPTY_PER_FAM)   // bool éxito per-familia
-
-  const handleFileChange = (famKey, e) => {
-    const file = e.target.files[0] || null
-    setSelected(prev  => ({ ...prev, [famKey]: file }))
-    setDone(prev => ({ ...prev, [famKey]: false }))
-  }
-
-  const handleUpload = async (famKey) => {
-    const file = selected[famKey]
-    if (!file) return
-    setUploading(prev => ({ ...prev, [famKey]: true }))
-    setDone(prev => ({ ...prev, [famKey]: false }))
-    try {
-      const fd = new FormData()
-      fd.append('foto', file)
-      await api.put(`/admin/landing/familias/${famKey}`, fd)
-      await qc.invalidateQueries(['landing-familias'])
-      setSelected(prev  => ({ ...prev, [famKey]: null }))
-      setDone(prev => ({ ...prev, [famKey]: true }))
-      if (fotoRefs[famKey]?.current) fotoRefs[famKey].current.value = ''
-      toast.success(`Foto de ${FAM_META[famKey]?.label} actualizada`)
-      setTimeout(() => setDone(prev => ({ ...prev, [famKey]: false })), 3500)
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Error al actualizar foto')
-    } finally {
-      setUploading(prev => ({ ...prev, [famKey]: false }))
-    }
-  }
-
+function TabFamilias({ isLoading }) {
   if (isLoading) return <div className="py-12 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando…</div>
-
   return (
     <div className="space-y-4">
-      <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
-        Foto de portada de cada categoría. Aparece en las cajas grandes de la home de la landing.
-      </p>
-      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+      <div className="rmg-card px-5 py-4 flex items-start gap-3"
+        style={{ borderLeft: '3px solid var(--rmg-blt)' }}>
+        <Image size={18} style={{ color: 'var(--rmg-blt)', flexShrink: 0, marginTop: 2 }} />
+        <div>
+          <p className="text-sm font-semibold" style={{ color: 'var(--rmg-off)' }}>
+            Fotos gestionadas en el repositorio del proyecto
+          </p>
+          <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>
+            Ruta: <code>landing/assets/img/Fotos RMG PARTS/titular familias/</code>
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
         {FAM_KEYS.map(famKey => {
-          const row      = familias.find(f => f.familia === famKey)
-          const meta     = FAM_META[famKey]
-          const src      = row?.foto_mimetype ? FOTO_URL('familias', famKey) : null
-          const isUp     = !!uploading[famKey]
-          const hasFile  = !!selected[famKey]
-          const didDone  = !!done[famKey]
-
+          const meta = FAM_META[famKey]
           return (
-            <div key={famKey} className="rounded-xl overflow-hidden border"
-              style={{ background: 'var(--rmg-card)', borderColor: didDone ? 'rgba(45,201,138,0.4)' : 'rgba(56,182,255,0.12)', transition: 'border-color .3s' }}>
-
-              {/* Imagen actual */}
-              <div className="relative flex items-center justify-center" style={{ height: 140, background: 'rgba(255,255,255,0.04)' }}>
-                {src
-                  ? <img src={src} alt={meta?.label} className="w-full h-full object-cover" />
-                  : <span style={{ fontSize: 48, opacity: 0.3 }}>{meta?.icon}</span>
-                }
-                {didDone && (
-                  <div className="absolute inset-0 flex items-center justify-center"
-                    style={{ background: 'rgba(45,201,138,0.15)' }}>
-                    <span className="text-2xl font-black" style={{ color: 'var(--rmg-teal)' }}>✓ Actualizada</span>
-                  </div>
-                )}
+            <div key={famKey} className="rmg-card rounded-xl overflow-hidden">
+              <div className="flex items-center justify-center" style={{ height: 100, background: 'rgba(255,255,255,0.04)' }}>
+                <span style={{ fontSize: 48 }}>{meta.icon}</span>
               </div>
-
-              <div className="p-4 space-y-3">
-                <div className="font-bold text-sm">{meta?.icon} {meta?.label}</div>
-
-                <input
-                  ref={fotoRefs[famKey]}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="w-full text-xs"
-                  style={{ color: 'var(--rmg-muted)' }}
-                  onChange={e => handleFileChange(famKey, e)}
-                />
-
-                {hasFile && !isUp && (
-                  <div className="text-xs truncate" style={{ color: 'var(--rmg-teal)' }}>
-                    📎 {selected[famKey]?.name}
-                  </div>
-                )}
-
-                <button
-                  className="w-full py-2 rounded-lg text-sm font-semibold transition-all"
-                  style={{
-                    background: (!hasFile || isUp) ? 'rgba(255,255,255,0.08)' : 'var(--rmg-blue)',
-                    color: (!hasFile || isUp) ? 'var(--rmg-muted)' : '#fff',
-                    cursor: (!hasFile || isUp) ? 'not-allowed' : 'pointer',
-                  }}
-                  onClick={() => handleUpload(famKey)}
-                  disabled={!hasFile || isUp}
-                >
-                  {isUp ? 'Guardando…' : hasFile ? 'Guardar foto' : 'Selecciona una imagen primero'}
-                </button>
+              <div className="px-4 py-3 space-y-1">
+                <div className="font-bold text-sm">{meta.icon} {meta.label}</div>
+                <div className="text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>{meta.archivo}</div>
               </div>
             </div>
           )
@@ -589,147 +515,45 @@ function TabFamilias({ familias = [], isLoading }) {
 }
 
 // ─── Tab Banners ──────────────────────────────────────────
-function TabBanners({ banners = [], isLoading }) {
-  const qc = useQueryClient()
-  const fotoRef = useRef(null)
+const BANNERS_REPO = [
+  'banner/home.png',
+  'banner/neumaticos.png',
+  'banner/baterias.png',
+  'banner/lubricantes.png',
+  'banner/despacho.png',
+]
 
-  const FORM_INIT = { orden: 0, activo: true }
-  const [showForm, setShowForm] = useState(false)
-  const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState(FORM_INIT)
-
-  const setF = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
-
-  const buildFormData = () => {
-    const fd = new FormData()
-    fd.append('orden', form.orden)
-    fd.append('activo', form.activo ? '1' : '0')
-    if (fotoRef.current?.files[0]) fd.append('foto', fotoRef.current.files[0])
-    return fd
-  }
-
-  const invalidate = () => qc.invalidateQueries(['landing-banners'])
-
-  const createMut = useMutation({
-    mutationFn: (fd) => api.post('/admin/landing/banners', fd).then(r => r.data),
-    onSuccess: () => { invalidate(); resetForm(); toast.success('Banner creado') },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al crear banner'),
-  })
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, fd }) => api.put(`/admin/landing/banners/${id}`, fd).then(r => r.data),
-    onSuccess: () => { invalidate(); resetForm(); toast.success('Banner actualizado') },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar banner'),
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: (id) => api.delete(`/admin/landing/banners/${id}`).then(r => r.data),
-    onSuccess: () => { invalidate(); toast.success('Banner eliminado') },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar banner'),
-  })
-
-  const resetForm = () => { setForm(FORM_INIT); setEditId(null); setShowForm(false); if (fotoRef.current) fotoRef.current.value = '' }
-
-  const handleEdit = (b) => {
-    setForm({ orden: b.orden ?? 0, activo: !!b.activo })
-    setEditId(b.id)
-    setShowForm(true)
-  }
-
-  const handleSubmit = () => {
-    if (!editId && !fotoRef.current?.files[0]) { toast.error('La foto es obligatoria para nuevos banners'); return }
-    const fd = buildFormData()
-    if (editId) updateMut.mutate({ id: editId, fd })
-    else createMut.mutate(fd)
-  }
-
-  const isPending = createMut.isPending || updateMut.isPending
-
+function TabBanners() {
   return (
     <div className="space-y-4">
-      <div className="rmg-card overflow-hidden">
-        <div className="px-5 py-4 border-b flex justify-between items-center"
-          style={{ borderColor: 'rgba(56,182,255,0.1)' }}>
-          <div className="flex items-center gap-2">
-            <span className="font-bold">Banners</span>
-            <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
-              style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blt)' }}>
-              {banners.length}
-            </span>
-          </div>
-          <button onClick={() => { resetForm(); setShowForm(v => !v) }}
-            className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5">
-            {showForm && !editId ? <X size={13} /> : <Plus size={13} />}
-            {showForm && !editId ? 'Cancelar' : 'Nuevo banner'}
-          </button>
+      <div className="rmg-card px-5 py-4 flex items-start gap-3"
+        style={{ borderLeft: '3px solid var(--rmg-blt)' }}>
+        <Image size={18} style={{ color: 'var(--rmg-blt)', flexShrink: 0, marginTop: 2 }} />
+        <div>
+          <p className="text-sm font-semibold" style={{ color: 'var(--rmg-off)' }}>
+            Banners gestionados en la carpeta banner/ del proyecto
+          </p>
+          <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>
+            Ruta: <code>landing/assets/img/Fotos RMG PARTS/banner/</code>
+          </p>
         </div>
-
-        {showForm && (
-          <div className="px-5 py-4 border-b space-y-3"
-            style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(56,182,255,0.04)' }}>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>
-                {editId ? 'Editar banner' : 'Nuevo banner'}
-              </span>
-              {editId && (
-                <button onClick={resetForm} className="p-1 rounded hover:bg-white/5"
-                  style={{ color: 'var(--rmg-muted)' }}><X size={14} /></button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={`Foto${editId ? ' (opcional — solo si cambia)' : ' * (JPG/PNG/WebP, requerida)'}`}>
-                <input type="file" className="rmg-input" accept="image/*" ref={fotoRef} />
-              </Field>
-              <Field label="Orden">
-                <input type="number" className="rmg-input" value={form.orden} onChange={setF('orden')} />
-              </Field>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--rmg-off)' }}>
-              <input type="checkbox" checked={form.activo} onChange={setF('activo')} className="w-4 h-4 rounded" />
-              Activo
-            </label>
-            <div className="flex gap-2 pt-1">
-              <button onClick={handleSubmit} disabled={isPending}
-                className="btn-primary flex items-center gap-2 disabled:opacity-50">
-                <Check size={14} />{isPending ? 'Guardando...' : editId ? 'Actualizar' : 'Crear'}
-              </button>
-              <button onClick={resetForm} className="btn-secondary flex items-center gap-2">
-                <X size={14} />Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="p-8 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando...</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-                <TH>ID</TH><TH>Foto</TH><TH>Orden</TH><TH>Activo</TH><TH></TH>
-              </tr>
-            </thead>
-            <tbody>
-              {banners.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin banners</td></tr>
-              ) : banners.map(b => (
-                <TR key={b.id}>
-                  <TD><span style={{ color: 'var(--rmg-muted)' }}>#{b.id}</span></TD>
-                  <TD><Thumbnail src={b.foto_mimetype ? FOTO_URL('banners', b.id) : null} size={60} /></TD>
-                  <TD style={{ color: 'var(--rmg-muted)' }}>{b.orden}</TD>
-                  <TD><ActiveBadge activo={b.activo} /></TD>
-                  <TD>
-                    <div className="flex items-center gap-1">
-                      <ActionBtn onClick={() => handleEdit(b)} icon={Pencil} color="var(--rmg-blt)" title="Editar" />
-                      <ActionBtn onClick={() => { if (!confirm('¿Eliminar?')) return; deleteMut.mutate(b.id) }}
-                        icon={Trash2} color="var(--rmg-red, #ef4444)" title="Eliminar" />
-                    </div>
-                  </TD>
-                </TR>
-              ))}
-            </tbody>
-          </table>
-        )}
+      </div>
+      <div className="rmg-card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <TH>#</TH><TH>Archivo</TH>
+            </tr>
+          </thead>
+          <tbody>
+            {BANNERS_REPO.map((f, i) => (
+              <TR key={f}>
+                <TD><span style={{ color: 'var(--rmg-muted)' }}>{i + 1}</span></TD>
+                <TD><span className="font-mono text-xs" style={{ color: 'var(--rmg-off)' }}>{f}</span></TD>
+              </TR>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -746,12 +570,6 @@ export default function ConfigurarLandingPage() {
     { k: 'banners',     l: 'Banners',     Icon: LayoutTemplate },
   ]
 
-  const { data: familias = [], isLoading: loadingFam } = useQuery({
-    queryKey: ['landing-familias'],
-    queryFn: () => api.get('/admin/landing/familias').then(r => r.data),
-    staleTime: 30_000,
-  })
-
   const { data: subfamilias = [], isLoading: loadingSF } = useQuery({
     queryKey: ['landing-subfamilias'],
     queryFn: () => api.get('/admin/landing/subfamilias').then(r => r.data),
@@ -761,12 +579,6 @@ export default function ConfigurarLandingPage() {
   const { data: productos = [], isLoading: loadingProd } = useQuery({
     queryKey: ['landing-productos'],
     queryFn: () => api.get('/admin/landing/productos').then(r => r.data),
-    staleTime: 30_000,
-  })
-
-  const { data: banners = [], isLoading: loadingBanners } = useQuery({
-    queryKey: ['landing-banners'],
-    queryFn: () => api.get('/admin/landing/banners').then(r => r.data),
     staleTime: 30_000,
   })
 
@@ -798,18 +610,10 @@ export default function ConfigurarLandingPage() {
       </div>
 
       {/* Contenido */}
-      {tab === 'familias' && (
-        <TabFamilias familias={familias} isLoading={loadingFam} />
-      )}
-      {tab === 'subfamilias' && (
-        <TabSubfamilias subfamilias={subfamilias} isLoading={loadingSF} />
-      )}
-      {tab === 'productos' && (
-        <TabProductos productos={productos} subfamilias={subfamilias} isLoading={loadingProd} />
-      )}
-      {tab === 'banners' && (
-        <TabBanners banners={banners} isLoading={loadingBanners} />
-      )}
+      {tab === 'familias'    && <TabFamilias />}
+      {tab === 'subfamilias' && <TabSubfamilias subfamilias={subfamilias} isLoading={loadingSF} />}
+      {tab === 'productos'   && <TabProductos productos={productos} subfamilias={subfamilias} isLoading={loadingProd} />}
+      {tab === 'banners'     && <TabBanners />}
     </div>
   )
 }
