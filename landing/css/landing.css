@@ -32,7 +32,7 @@
 
 /* ── Hero dinámico ───────────────────────────────────────────── */
 #landing-hero { position: relative; overflow: hidden; }
-.lh-track { position: relative; width: 100%; overflow: hidden; aspect-ratio: 1746/900; background: #0c1523; }
+.lh-track { position: relative; width: 100%; overflow: hidden; height: 500px; background: #0c1523; }
 .lh-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .7s ease; }
 .lh-slide.active { opacity: 1; }
 .lh-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -116,7 +116,7 @@
 }
 .catbox:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,113,189,0.18); }
 .catbox-img-wrap {
-  position: relative; aspect-ratio: 16/9; overflow: hidden;
+  position: relative; height: 250px; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
 .catbox-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .35s; }
@@ -166,7 +166,7 @@
 }
 .subfam-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,113,189,0.15); border-color: #29AAE1; }
 .subfam-card-img {
-  aspect-ratio: 4/3; overflow: hidden;
+  height: 200px; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
 .subfam-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
@@ -190,7 +190,7 @@
 }
 .pcard:hover { border-color: #29AAE1; box-shadow: 0 4px 20px rgba(41,170,225,0.18); }
 .pcard-img {
-  aspect-ratio: 4/3; overflow: hidden; background: #f4f7fb;
+  height: 180px; overflow: hidden; background: #f4f7fb;
   display: flex; align-items: center; justify-content: center;
 }
 .pcard-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -234,6 +234,14 @@
   transition: background .15s, color .15s;
 }
 .footer-social a:hover { background: rgba(41,170,225,0.25); color: #29AAE1; }
+
+/* ── Responsive imágenes ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  .lh-track { height: 300px; }
+  .catbox-img-wrap { height: 180px; }
+  .subfam-card-img { height: 160px; }
+  .pcard-img { height: 150px; }
+}
 
 /* ── Responsive nav ──────────────────────────────────────────── */
 @media (max-width: 900px) {
