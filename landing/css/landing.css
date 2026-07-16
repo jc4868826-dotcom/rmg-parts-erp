@@ -31,10 +31,10 @@
 .mega-empty { display: block; padding: 9px 18px; font-size: 12px; color: #aaa; }
 
 /* ── Hero carrusel horizontal ────────────────────────────────── */
-#landing-hero { position: relative; width: 100%; aspect-ratio: 16/6; overflow: hidden; background: #0a1628; }
+#landing-hero { position: relative; overflow: hidden; background: #0c1523; }
 .lh-track { display: flex; transition: transform 0.45s ease; will-change: transform; }
-.lh-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-.lh-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lh-slide { min-width: 100%; flex-shrink: 0; }
+.lh-slide img { width: 100%; height: auto; object-fit: contain; display: block; }
 .lh-arrow {
   position: absolute; top: 50%; transform: translateY(-50%);
   background: rgba(0,0,0,0.45); color: #fff; border: none;
@@ -106,7 +106,7 @@
 
 /* ── 3 cajas de categoría ────────────────────────────────────── */
 .catboxes-section { background: #fff; padding: 48px 0; border-bottom: 1.5px solid #dde4ef; }
-.cat-boxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 0 24px; width: 100%; }
+.cat-boxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; width: 100%; }
 @media (max-width: 768px) { .cat-boxes { grid-template-columns: 1fr; gap: 14px; } }
 .catbox {
   width: 100%; border-radius: 14px; overflow: hidden; cursor: pointer;
@@ -115,9 +115,9 @@
 }
 .catbox:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,113,189,0.18); }
 .catbox-img-wrap {
-  position: relative; width: 100%; aspect-ratio: 4/3; overflow: hidden; background: #0a1628;
+  position: relative; width: 100%; overflow: hidden;
 }
-.catbox-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.catbox-img-wrap img { width: 100%; height: auto; object-fit: contain; display: block; }
 .catbox-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.35) 100%);
@@ -151,8 +151,8 @@
 /* ── Grid de subfamilias ─────────────────────────────────────── */
 .subfam-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 18px;
   width: 100%;
   padding-bottom: 40px;
 }
@@ -164,9 +164,9 @@
 }
 .subfam-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,113,189,0.15); border-color: #29AAE1; }
 .subfam-card-img {
-  width: 100%; aspect-ratio: 4/3; overflow: hidden; background: #0a1628;
+  width: 100%; overflow: hidden;
 }
-.subfam-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.subfam-card-img img { width: 100%; height: auto; object-fit: contain; display: block; }
 .subfam-icon { font-size: 36px; opacity: 0.5; }
 .subfam-card-body { padding: 12px 14px; }
 .subfam-card-name { font-size: 13px; font-weight: 700; color: #0c1523; }
@@ -175,8 +175,8 @@
 /* ── Grid de productos ───────────────────────────────────────── */
 .prod-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 18px;
   width: 100%;
   padding-bottom: 40px;
 }
@@ -187,9 +187,9 @@
 }
 .pcard:hover { border-color: #29AAE1; box-shadow: 0 4px 20px rgba(41,170,225,0.18); }
 .pcard-img {
-  width: 100%; aspect-ratio: 1/1; overflow: hidden; background: #0a1628;
+  width: 100%; overflow: hidden; background: #f4f7fb;
 }
-.pcard-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pcard-img img { width: 100%; height: auto; object-fit: contain; display: block; }
 .pcard-icon { font-size: 40px; opacity: 0.6; }
 .pcard-body { padding: 14px; display: flex; flex-direction: column; flex: 1; gap: 6px; }
 .pcard-badge {
@@ -232,7 +232,6 @@
 
 /* ── Responsive imágenes ─────────────────────────────────────── */
 @media (max-width: 768px) {
-  #landing-hero { aspect-ratio: 16/9; }
   .subfam-grid { grid-template-columns: repeat(2, 1fr); }
   .prod-grid   { grid-template-columns: repeat(2, 1fr); }
 }
