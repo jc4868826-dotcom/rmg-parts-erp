@@ -5,45 +5,17 @@
   const ERP   = (typeof CONFIG !== 'undefined') ? CONFIG.BASE_URL : 'https://rmg-parts-erp.onrender.com';
   const WA_NR = (typeof CONFIG !== 'undefined') ? CONFIG.WHATSAPP : '';
 
+  // Familias: solo estructura (label, color). Sin fotos hardcodeadas.
   const FAMILIAS = [
-    { key: 'NEUMATICOS',  label: 'Neumáticos',  icon: '🛞', color: '#0071BD' },
-    { key: 'BATERIAS',    label: 'Baterías',    icon: '🔋', color: '#29AAE1' },
-    { key: 'LUBRICANTES', label: 'Lubricantes', icon: '🛢️', color: '#435664' },
+    { key: 'NEUMATICOS',  label: 'Neumáticos',  color: '#0071BD' },
+    { key: 'BATERIAS',    label: 'Baterías',    color: '#29AAE1' },
+    { key: 'LUBRICANTES', label: 'Lubricantes', color: '#435664' },
   ];
-
-  // Fotos estáticas — servidas directamente desde el repo, sin pasar por el backend
-  const BANNERS = [
-    'assets/img/Fotos RMG PARTS/banner/home.png',
-    'assets/img/Fotos RMG PARTS/banner/neumaticos.png',
-    'assets/img/Fotos RMG PARTS/banner/baterias.png',
-    'assets/img/Fotos RMG PARTS/banner/lubricantes.png',
-    'assets/img/Fotos RMG PARTS/banner/despacho.png',
-  ];
-
-  const FAMILIA_IMG = {
-    'NEUMATICOS':  'assets/img/Fotos RMG PARTS/titular familias/neumatico icono.png',
-    'BATERIAS':    'assets/img/Fotos RMG PARTS/titular familias/baterias icono.png',
-    'LUBRICANTES': 'assets/img/Fotos RMG PARTS/titular familias/lubricantes icono.png',
-  };
-
-  const SUBFAM_IMG = {
-    'Camiones':    'assets/img/Fotos RMG PARTS/sub familias/neumaticos/camiones.png',
-    'Camionetas':  'assets/img/Fotos RMG PARTS/sub familias/neumaticos/neumaticos camionetas.png',
-    'Tractores':   'assets/img/Fotos RMG PARTS/sub familias/neumaticos/tractores.png',
-  };
-
-  function _subfamImg(nombre) {
-    const n = (nombre || '').toLowerCase();
-    for (const [key, src] of Object.entries(SUBFAM_IMG)) {
-      if (n.includes(key.toLowerCase())) return src;
-    }
-    return null;
-  }
 
   let _productos   = [];
   let _subfamilias = [];
-  let _banners     = [];  // banners desde DB (si existen); fallback a BANNERS estático
-  let _catalogo    = [];  // data/catalogo.json para búsqueda estática
+  let _banners     = [];
+  let _catalogo    = [];
 
   let _heroIdx   = 0;
   let _heroTimer = null;
@@ -104,30 +76,26 @@
     const wrap = document.getElementById('landing-hero');
     if (!wrap) return;
 
-    // Usa banners DB si existen, sino cae a los estáticos del repo
-    const slides = _banners.length > 0
-      ? _banners.map((b, i) => ({
-          src:      ERP + '/api/public/landing/foto/banners/' + b.id,
-          fallback: BANNERS[i] || null,
-        }))
-      : BANNERS.map(src => ({ src, fallback: null }));
+    if (!_banners.length) {
+      wrap.style.display = 'none';
+      return;
+    }
 
+    wrap.style.display = '';
     wrap.innerHTML = `
       <div class="lh-track" id="lhTrack">
-        ${slides.map((s, i) => `
+        ${_banners.map((b, i) => `
           <div class="lh-slide${i === 0 ? ' active' : ''}">
-            <img src="${s.src}" alt="Banner ${i + 1}"
+            <img src="${ERP}/api/public/landing/foto/banners/${b.id}" alt="Banner ${i + 1}"
                  loading="${i === 0 ? 'eager' : 'lazy'}"
-                 onerror="${s.fallback
-                   ? `this.src='${s.fallback}';this.onerror=null`
-                   : `this.parentElement.style.background='#0c1523'`}">
+                 onerror="this.parentElement.style.display='none'">
           </div>
         `).join('')}
       </div>
       <button class="lh-arrow lh-prev" onclick="Landing.heroGo(Landing._heroIdx-1)" aria-label="Anterior">&#8249;</button>
       <button class="lh-arrow lh-next" onclick="Landing.heroGo(Landing._heroIdx+1)" aria-label="Siguiente">&#8250;</button>
       <div class="lh-dots">
-        ${slides.map((_, i) => `<button class="lh-dot${i === 0 ? ' active' : ''}" onclick="Landing.heroGo(${i})" aria-label="Slide ${i + 1}"></button>`).join('')}
+        ${_banners.map((_, i) => `<button class="lh-dot${i === 0 ? ' active' : ''}" onclick="Landing.heroGo(${i})" aria-label="Slide ${i + 1}"></button>`).join('')}
       </div>
     `;
 
@@ -155,23 +123,19 @@
     const el = document.getElementById('cat-boxes');
     if (!el) return;
     el.innerHTML = FAMILIAS.map(fam => {
-      const subCount = _subfamilias.filter(s => s.familia === fam.key).length;
+      const subCount  = _subfamilias.filter(s => s.familia === fam.key).length;
       const prodCount = _productos.filter(p => p.familia === fam.key).length;
-      const countTxt = subCount > 0
+      const countTxt  = subCount > 0
         ? `<span class="catbox-count">${subCount} subfamilias</span>`
         : prodCount > 0 ? `<span class="catbox-count">${prodCount} productos</span>` : '';
-      const erpSrc    = ERP + '/api/public/landing/foto/familias/' + fam.key;
-      const staticSrc = FAMILIA_IMG[fam.key] || null;
-      const onerr     = staticSrc
-        ? `this.src='${staticSrc}';this.onerror=null`
-        : `this.style.display='none'`;
+      const erpSrc = `${ERP}/api/public/landing/foto/familias/${fam.key}`;
 
       return `
         <div class="catbox" onclick="Landing.selectFamilia('${fam.key}')">
           <div class="catbox-img-wrap" style="background:${fam.color}33">
-            <img src="${erpSrc}" alt="${_esc(fam.label)}" loading="lazy" onerror="${onerr}">
+            <img src="${erpSrc}" alt="${_esc(fam.label)}" loading="lazy"
+                 onerror="this.style.display='none'">
             <div class="catbox-overlay"></div>
-            <div class="catbox-icon-big">${fam.icon}</div>
           </div>
           <div class="catbox-info">
             <div>
@@ -238,7 +202,10 @@
             <button class="drill-back" onclick="Landing.backToFamilias()">← Volver</button>
             <h2 class="drill-title">${_esc(famLabel)}</h2>
           </div>
-          ${prods.length ? `<div class="prod-grid">${prods.map(_cardHTML).join('')}</div>` : '<p class="drill-empty">Sin productos disponibles</p>'}
+          ${prods.length
+            ? `<div class="prod-grid">${prods.map(_cardHTML).join('')}</div>`
+            : '<p class="drill-empty">Próximamente</p>'
+          }
         `);
         return;
       }
@@ -250,15 +217,12 @@
         </div>
         <div class="subfam-grid">
           ${subs.map(s => {
-            const erpSrc    = ERP + '/api/public/landing/foto/subfamilias/' + s.id;
-            const staticSrc = _subfamImg(s.nombre);
-            const onerr     = staticSrc
-              ? `this.src='${staticSrc}';this.onerror=null`
-              : `this.parentElement.innerHTML='<span class=\\"subfam-icon\\">${fam ? fam.icon : '📦'}</span>'`;
+            const erpSrc = `${ERP}/api/public/landing/foto/subfamilias/${s.id}`;
             return `
               <div class="subfam-card" onclick="Landing.selectSub(${s.id})">
                 <div class="subfam-card-img" style="background:${fam ? fam.color + '22' : '#0071BD22'}">
-                  <img src="${erpSrc}" alt="${_esc(s.nombre)}" loading="lazy" onerror="${onerr}">
+                  <img src="${erpSrc}" alt="${_esc(s.nombre)}" loading="lazy"
+                       onerror="this.style.display='none'">
                 </div>
                 <div class="subfam-card-body">
                   <div class="subfam-card-name">${_esc(s.nombre)}</div>
@@ -283,15 +247,13 @@
       </div>
       ${prods.length
         ? `<div class="prod-grid">${prods.map(_cardHTML).join('')}</div>`
-        : '<p class="drill-empty">Sin productos en esta subfamilia</p>'
+        : '<p class="drill-empty">Próximamente</p>'
       }
     `);
   }
 
   function _cardHTML(p) {
-    const imgSrc = ERP + '/api/public/landing/foto/productos/' + p.id;
-    const fam    = FAMILIAS.find(f => f.key === p.familia);
-    const icon   = fam ? fam.icon : '📦';
+    const imgSrc = `${ERP}/api/public/landing/foto/productos/${p.id}`;
     const badge  = p.codigo
       ? `<div class="pcard-badge">${_esc(p.codigo)}${p.marca ? ' · ' + _esc(p.marca) : ''}</div>`
       : (p.marca ? `<div class="pcard-badge">${_esc(p.marca)}</div>` : '');
@@ -299,12 +261,9 @@
 
     return `
       <div class="pcard">
-        <div class="pcard-img${!imgSrc ? ' pcard-img--placeholder' : ''}">
-          ${imgSrc
-            ? `<img src="${imgSrc}" alt="${_esc(p.descripcion)}" loading="lazy"
-                   onerror="this.parentElement.classList.add('pcard-img--placeholder');this.remove()">`
-            : `<span class="pcard-icon">${icon}</span>`
-          }
+        <div class="pcard-img pcard-img--placeholder">
+          <img src="${imgSrc}" alt="${_esc(p.descripcion)}" loading="lazy"
+               onerror="this.style.display='none'">
         </div>
         <div class="pcard-body">
           ${badge}
