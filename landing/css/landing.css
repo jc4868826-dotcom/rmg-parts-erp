@@ -32,10 +32,10 @@
 
 /* ── Hero dinámico ───────────────────────────────────────────── */
 #landing-hero { position: relative; overflow: hidden; }
-.lh-track { position: relative; width: 100%; overflow: hidden; height: 500px; background: #0c1523; }
-.lh-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .7s ease; }
-.lh-slide.active { opacity: 1; }
-.lh-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lh-track { position: relative; width: 100%; background: #0c1523; }
+.lh-slide { position: relative; opacity: 0; transition: opacity .7s ease; display: none; }
+.lh-slide.active { opacity: 1; display: block; }
+.lh-slide img { width: 100%; height: auto; max-height: 500px; object-fit: contain; object-position: center; display: block; }
 .lh-arrow {
   position: absolute; top: 50%; transform: translateY(-50%);
   background: rgba(0,0,0,0.45); color: #fff; border: none;
@@ -116,11 +116,10 @@
 }
 .catbox:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,113,189,0.18); }
 .catbox-img-wrap {
-  position: relative; height: 250px; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
+  position: relative; width: 100%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; background: inherit;
 }
-.catbox-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .35s; }
-.catbox:hover .catbox-img-wrap img { transform: scale(1.04); }
+.catbox-img-wrap img { width: 100%; height: auto; max-height: 280px; object-fit: contain; object-position: center; display: block; }
 .catbox-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.35) 100%);
@@ -166,11 +165,10 @@
 }
 .subfam-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,113,189,0.15); border-color: #29AAE1; }
 .subfam-card-img {
-  height: 200px; overflow: hidden;
+  width: 100%; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
-.subfam-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
-.subfam-card:hover .subfam-card-img img { transform: scale(1.04); }
+.subfam-card-img img { width: 100%; height: auto; max-height: 220px; object-fit: contain; object-position: center; display: block; }
 .subfam-icon { font-size: 36px; opacity: 0.5; }
 .subfam-card-body { padding: 12px 14px; }
 .subfam-card-name { font-size: 13px; font-weight: 700; color: #0c1523; }
@@ -190,10 +188,10 @@
 }
 .pcard:hover { border-color: #29AAE1; box-shadow: 0 4px 20px rgba(41,170,225,0.18); }
 .pcard-img {
-  height: 180px; overflow: hidden; background: #f4f7fb;
+  width: 100%; overflow: hidden; background: #f4f7fb;
   display: flex; align-items: center; justify-content: center;
 }
-.pcard-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pcard-img img { width: 100%; height: auto; max-height: 200px; object-fit: contain; object-position: center; display: block; }
 .pcard-img--placeholder { background: linear-gradient(135deg, #e8f4fd, #f0f8ff); }
 .pcard-icon { font-size: 40px; opacity: 0.6; }
 .pcard-body { padding: 14px; display: flex; flex-direction: column; flex: 1; gap: 6px; }
@@ -237,10 +235,10 @@
 
 /* ── Responsive imágenes ─────────────────────────────────────── */
 @media (max-width: 768px) {
-  .lh-track { height: 300px; }
-  .catbox-img-wrap { height: 180px; }
-  .subfam-card-img { height: 160px; }
-  .pcard-img { height: 150px; }
+  .lh-slide img { max-height: 300px; }
+  .catbox-img-wrap img { max-height: 180px; }
+  .subfam-card-img img { max-height: 160px; }
+  .pcard-img img { max-height: 150px; }
 }
 
 /* ── Responsive nav ──────────────────────────────────────────── */
