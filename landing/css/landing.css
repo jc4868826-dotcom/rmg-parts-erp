@@ -151,11 +151,10 @@
 /* ── Grid de subfamilias ─────────────────────────────────────── */
 .subfam-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
   width: 100%;
-  padding: 0 24px 40px;
-  box-sizing: border-box;
+  padding-bottom: 40px;
 }
 .subfam-card {
   width: 100%; border-radius: 12px; overflow: hidden; cursor: pointer;
