@@ -154,7 +154,8 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 18px;
   width: 100%;
-  padding-bottom: 40px;
+  padding: 0 24px 40px;
+  box-sizing: border-box;
 }
 .subfam-card {
   width: 100%; border-radius: 12px; overflow: hidden; cursor: pointer;
