@@ -16,6 +16,7 @@
   let _subfamilias = [];
   let _banners     = [];
   let _catalogo    = [];
+  let _familiasDB  = [];
 
   let _heroIdx   = 0;
   let _heroTimer = null;
@@ -26,16 +27,18 @@
 
   // ─── Init ──────────────────────────────────────────────────────────────────
   async function init() {
-    const [prods, subs, bans, cat] = await Promise.allSettled([
+    const [prods, subs, bans, cat, fams] = await Promise.allSettled([
       fetch(ERP + '/api/public/landing/productos').then(r => r.ok ? r.json() : []),
       fetch(ERP + '/api/public/landing/subfamilias').then(r => r.ok ? r.json() : []),
       fetch(ERP + '/api/public/landing/banners').then(r => r.ok ? r.json() : []),
       fetch('data/catalogo.json').then(r => r.ok ? r.json() : []),
+      fetch(ERP + '/api/public/landing/familias').then(r => r.ok ? r.json() : []),
     ]);
     _productos   = prods.status === 'fulfilled'  ? (Array.isArray(prods.value)  ? prods.value  : []) : [];
     _subfamilias = subs.status === 'fulfilled'   ? (Array.isArray(subs.value)   ? subs.value   : []) : [];
     _banners     = bans.status === 'fulfilled'   ? (Array.isArray(bans.value)   ? bans.value   : []) : [];
     _catalogo    = cat.status === 'fulfilled'    ? (Array.isArray(cat.value)    ? cat.value    : []) : [];
+    _familiasDB  = fams.status === 'fulfilled'   ? (Array.isArray(fams.value)   ? fams.value   : []) : [];
 
     _buildNavDropdowns();
     _renderHero();
@@ -131,6 +134,8 @@
         ? `<span class="catbox-count">${subCount} subfamilias</span>`
         : prodCount > 0 ? `<span class="catbox-count">${prodCount} productos</span>` : '';
       const erpSrc = `${ERP}/api/public/landing/foto/familias/${fam.key}`;
+      const famDB  = _familiasDB.find(f => f.familia === fam.key);
+      const desc   = famDB?.descripcion || '';
 
       return `
         <div class="catbox" onclick="Landing.selectFamilia('${fam.key}')">
@@ -143,6 +148,7 @@
             <div>
               <div class="catbox-label">${_esc(fam.label)}</div>
               ${countTxt}
+              ${desc ? `<p class="catbox-desc">${_esc(desc)}</p>` : ''}
             </div>
             <svg class="catbox-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </div>

@@ -121,7 +121,7 @@ router.get('/landing/foto/:tabla/:id', (req, res) => {
 router.get('/landing/familias', (_req, res) => {
   try {
     const rows = db.prepare(
-      'SELECT familia, foto_path, updated_at FROM landing_familias ORDER BY familia ASC'
+      'SELECT familia, foto_path, descripcion, updated_at FROM landing_familias ORDER BY familia ASC'
     ).all()
     res.json(rows)
   } catch (err) {
