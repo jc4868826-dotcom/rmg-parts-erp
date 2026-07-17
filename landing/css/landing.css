@@ -161,6 +161,7 @@
   border: 1.5px solid #dde4ef; background: #fff;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   transition: transform .15s, box-shadow .15s, border-color .15s;
+  display: flex; flex-direction: column; height: 100%;
 }
 .subfam-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,113,189,0.15); border-color: #29AAE1; }
 .subfam-card-img {
@@ -168,9 +169,9 @@
 }
 .subfam-card-img img { width: 100%; height: auto; object-fit: contain; display: block; }
 .subfam-icon { font-size: 36px; opacity: 0.5; }
-.subfam-card-body { padding: 12px 14px; }
+.subfam-card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; }
 .subfam-card-name { font-size: 13px; font-weight: 700; color: #0c1523; }
-.subfam-card-desc { font-size: 11px; color: #7b8fa6; margin-top: 4px; line-height: 1.4; }
+.subfam-card-desc { font-size: 11px; color: #7b8fa6; margin-top: 4px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 
 /* ── Grid de productos ───────────────────────────────────────── */
 .prod-grid {

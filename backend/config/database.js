@@ -1300,6 +1300,15 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_base64_v1')
     console.log('✅ Migración landing_base64_v1 — foto_base64 y foto_mimetype añadidos a tablas landing')
   }
+
+  // Migration 18: landing_familias_descripcion_v1 — campo descripcion en familias padre
+  const m18 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_familias_descripcion_v1')
+  if (!m18) {
+    const cols = db.prepare('PRAGMA table_info(landing_familias)').all().map(c => c.name)
+    if (!cols.includes('descripcion')) db.exec('ALTER TABLE landing_familias ADD COLUMN descripcion TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_familias_descripcion_v1')
+    console.log('✅ Migración landing_familias_descripcion_v1 — columna descripcion añadida a landing_familias')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

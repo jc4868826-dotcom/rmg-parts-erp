@@ -28,7 +28,7 @@ const VALID_FAMILIAS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
 router.get('/familias', guard, (req, res) => {
   try {
     const rows = db.prepare(
-      'SELECT familia, foto_path, foto_mimetype, updated_at FROM landing_familias ORDER BY familia ASC'
+      'SELECT familia, foto_path, foto_mimetype, descripcion, updated_at FROM landing_familias ORDER BY familia ASC'
     ).all()
     res.json(rows)
   } catch (err) {
@@ -44,18 +44,29 @@ router.put('/familias/:familia', [...guard, uploadLanding.single('foto')], (req,
 
     const existing = db.prepare('SELECT familia FROM landing_familias WHERE familia = ?').get(familia)
     if (!existing) return res.status(404).json({ error: 'Familia no encontrada' })
-    if (!req.file)  return res.status(400).json({ error: 'Se requiere archivo de imagen (campo: foto)' })
+    if (!req.file && req.body.descripcion === undefined) {
+      return res.status(400).json({ error: 'Se requiere foto o descripción' })
+    }
 
-    const foto_base64   = req.file.buffer.toString('base64')
-    const foto_mimetype = req.file.mimetype
+    if (req.file) {
+      const foto_base64   = req.file.buffer.toString('base64')
+      const foto_mimetype = req.file.mimetype
+      db.prepare(`
+        UPDATE landing_familias
+        SET foto_base64 = ?, foto_mimetype = ?, updated_at = datetime('now')
+        WHERE familia = ?
+      `).run(foto_base64, foto_mimetype, familia)
+    }
 
-    db.prepare(`
-      UPDATE landing_familias
-      SET foto_base64 = ?, foto_mimetype = ?, updated_at = datetime('now')
-      WHERE familia = ?
-    `).run(foto_base64, foto_mimetype, familia)
+    if (req.body.descripcion !== undefined) {
+      db.prepare(`
+        UPDATE landing_familias
+        SET descripcion = ?, updated_at = datetime('now')
+        WHERE familia = ?
+      `).run(req.body.descripcion || null, familia)
+    }
 
-    res.json({ familia, foto_mimetype, updated_at: new Date().toISOString() })
+    res.json({ familia, updated_at: new Date().toISOString() })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

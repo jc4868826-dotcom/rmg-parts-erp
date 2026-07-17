@@ -474,23 +474,44 @@ function TabFamilias({ familias = [], isLoading }) {
 
   const [state, setState] = useState({})
   const [imgVer, setImgVer] = useState(Date.now())
+  const [descriptions, setDescriptions] = useState({})
 
-  const uploadFoto = async (famKey) => {
+  const initDescriptions = (fams) => {
+    const init = {}
+    FAM_KEYS.forEach(k => {
+      const f = fams.find(r => r.familia === k)
+      init[k] = f?.descripcion || ''
+    })
+    setDescriptions(init)
+  }
+
+  // populate descriptions when familias data loads
+  const prevFamilias = useRef(null)
+  if (familias !== prevFamilias.current) {
+    prevFamilias.current = familias
+    if (familias.length) initDescriptions(familias)
+  }
+
+  const guardarFamilia = async (famKey) => {
     const file = fotoRefs[famKey].current?.files[0]
-    if (!file) { toast.error('Selecciona una imagen primero'); return }
+    const desc = descriptions[famKey] ?? ''
+    if (!file && desc === (familias.find(f => f.familia === famKey)?.descripcion || '')) {
+      toast.error('No hay cambios para guardar'); return
+    }
     setState(p => ({ ...p, [famKey]: 'loading' }))
     try {
       const fd = new FormData()
-      fd.append('foto', file)
+      if (file) fd.append('foto', file)
+      fd.append('descripcion', desc)
       await api.put(`/admin/landing/familias/${famKey}`, fd)
       qc.invalidateQueries(['landing-familias'])
-      setImgVer(Date.now())
+      if (file) setImgVer(Date.now())
       setState(p => ({ ...p, [famKey]: 'ok' }))
-      toast.success(`Foto de ${FAM_META[famKey].label} guardada`)
+      toast.success(`${FAM_META[famKey].label} guardado`)
       setTimeout(() => setState(p => ({ ...p, [famKey]: null })), 3000)
     } catch (err) {
       setState(p => ({ ...p, [famKey]: 'error' }))
-      toast.error(err.response?.data?.error || 'Error al guardar foto')
+      toast.error(err.response?.data?.error || 'Error al guardar')
     }
     if (fotoRefs[famKey].current) fotoRefs[famKey].current.value = ''
   }
@@ -518,10 +539,17 @@ function TabFamilias({ familias = [], isLoading }) {
             <div className="px-4 py-3 space-y-2">
               <div className="font-bold">{meta.icon} {meta.label}</div>
               <input type="file" accept="image/*" ref={fotoRefs[famKey]} className="rmg-input text-xs" />
-              <button onClick={() => uploadFoto(famKey)} disabled={s === 'loading'}
+              <textarea
+                rows={2}
+                placeholder="Descripción (opcional)"
+                className="rmg-input text-xs w-full resize-none"
+                value={descriptions[famKey] || ''}
+                onChange={e => setDescriptions(p => ({ ...p, [famKey]: e.target.value }))}
+              />
+              <button onClick={() => guardarFamilia(famKey)} disabled={s === 'loading'}
                 className="btn-primary w-full flex items-center justify-center gap-2 text-sm disabled:opacity-50">
                 <Check size={13} />
-                {s === 'loading' ? 'Guardando...' : s === 'ok' ? 'Foto guardada ✓' : 'Guardar foto'}
+                {s === 'loading' ? 'Guardando...' : s === 'ok' ? 'Guardado ✓' : 'Guardar'}
               </button>
             </div>
           </div>
