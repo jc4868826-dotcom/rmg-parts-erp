@@ -22,8 +22,6 @@ function stripAll(rows) { return rows.map(strip) }
 
 // ─── FAMILIAS ─────────────────────────────────────────────────────────────────
 
-const VALID_FAMILIAS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
-
 // GET /api/admin/landing/familias
 router.get('/familias', guard, (req, res) => {
   try {
@@ -36,12 +34,37 @@ router.get('/familias', guard, (req, res) => {
   }
 })
 
+// POST /api/admin/landing/familias
+router.post('/familias', [...guard, uploadLanding.single('foto')], (req, res) => {
+  try {
+    const { familia, descripcion } = req.body
+    if (!familia || !familia.trim()) return res.status(400).json({ error: 'El nombre de familia es requerido' })
+
+    const key = familia.trim().toUpperCase().replace(/\s+/g, '_')
+    const existing = db.prepare('SELECT familia FROM landing_familias WHERE familia = ?').get(key)
+    if (existing) return res.status(409).json({ error: 'Ya existe una familia con ese nombre' })
+
+    const foto_base64   = req.file ? req.file.buffer.toString('base64') : null
+    const foto_mimetype = req.file ? req.file.mimetype : null
+
+    db.prepare(`
+      INSERT INTO landing_familias (familia, descripcion, foto_base64, foto_mimetype)
+      VALUES (?,?,?,?)
+    `).run(key, descripcion || null, foto_base64, foto_mimetype)
+
+    const row = db.prepare(
+      'SELECT familia, foto_path, foto_mimetype, descripcion, updated_at FROM landing_familias WHERE familia = ?'
+    ).get(key)
+    res.status(201).json(row)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // PUT /api/admin/landing/familias/:familia
 router.put('/familias/:familia', [...guard, uploadLanding.single('foto')], (req, res) => {
   try {
     const { familia } = req.params
-    if (!VALID_FAMILIAS.includes(familia)) return res.status(400).json({ error: 'Familia inválida' })
-
     const existing = db.prepare('SELECT familia FROM landing_familias WHERE familia = ?').get(familia)
     if (!existing) return res.status(404).json({ error: 'Familia no encontrada' })
     if (!req.file && req.body.descripcion === undefined) {
@@ -67,6 +90,20 @@ router.put('/familias/:familia', [...guard, uploadLanding.single('foto')], (req,
     }
 
     res.json({ familia, updated_at: new Date().toISOString() })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/admin/landing/familias/:familia
+router.delete('/familias/:familia', guard, (req, res) => {
+  try {
+    const { familia } = req.params
+    const existing = db.prepare('SELECT familia FROM landing_familias WHERE familia = ?').get(familia)
+    if (!existing) return res.status(404).json({ error: 'Familia no encontrada' })
+
+    db.prepare('DELETE FROM landing_familias WHERE familia = ?').run(familia)
+    res.json({ deleted: familia })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

@@ -5,12 +5,14 @@
   const ERP   = (typeof CONFIG !== 'undefined') ? CONFIG.BASE_URL : 'https://rmg-parts-erp.onrender.com';
   const WA_NR = (typeof CONFIG !== 'undefined') ? CONFIG.WHATSAPP : '';
 
-  // Familias: solo estructura (label, color). Sin fotos hardcodeadas.
+  // Familias: estructura base para nav y fallback. Las cajas se renderizan desde DB.
   const FAMILIAS = [
     { key: 'NEUMATICOS',  label: 'Neumáticos',  color: '#0071BD' },
     { key: 'BATERIAS',    label: 'Baterías',    color: '#29AAE1' },
     { key: 'LUBRICANTES', label: 'Lubricantes', color: '#435664' },
   ];
+  const FAM_META  = Object.fromEntries(FAMILIAS.map(f => [f.key, f]));
+  const COLOR_POOL = ['#0071BD', '#29AAE1', '#435664', '#e07b39', '#2a7a3b', '#8e44ad'];
 
   let _productos   = [];
   let _subfamilias = [];
@@ -123,30 +125,34 @@
     dots.forEach((d, j) => d.classList.toggle('active', j === _heroIdx));
   }
 
-  // ─── 3 cajas de categoría ──────────────────────────────────────────────────
+  // ─── Cajas de categoría (dinámicas desde DB) ──────────────────────────────
   function _renderCatBoxes() {
     const el = document.getElementById('cat-boxes');
     if (!el) return;
-    el.innerHTML = FAMILIAS.map(fam => {
-      const subCount  = _subfamilias.filter(s => s.familia === fam.key).length;
-      const prodCount = _productos.filter(p => p.familia === fam.key).length;
+    const source = _familiasDB.length
+      ? _familiasDB
+      : FAMILIAS.map(f => ({ familia: f.key, descripcion: '' }));
+
+    el.innerHTML = source.map((famDB, idx) => {
+      const meta      = FAM_META[famDB.familia] || { label: famDB.familia, color: COLOR_POOL[idx % COLOR_POOL.length] };
+      const subCount  = _subfamilias.filter(s => s.familia === famDB.familia).length;
+      const prodCount = _productos.filter(p => p.familia === famDB.familia).length;
       const countTxt  = subCount > 0
         ? `<span class="catbox-count">${subCount} subfamilias</span>`
         : prodCount > 0 ? `<span class="catbox-count">${prodCount} productos</span>` : '';
-      const erpSrc = `${ERP}/api/public/landing/foto/familias/${fam.key}`;
-      const famDB  = _familiasDB.find(f => f.familia === fam.key);
-      const desc   = famDB?.descripcion || '';
+      const erpSrc = `${ERP}/api/public/landing/foto/familias/${famDB.familia}`;
+      const desc   = famDB.descripcion || '';
 
       return `
-        <div class="catbox" onclick="Landing.selectFamilia('${fam.key}')">
-          <div class="catbox-img-wrap" style="background:${fam.color}33">
-            <img src="${erpSrc}" alt="${_esc(fam.label)}" loading="lazy"
+        <div class="catbox" onclick="Landing.selectFamilia('${famDB.familia}')">
+          <div class="catbox-img-wrap" style="background:${meta.color}33">
+            <img src="${erpSrc}" alt="${_esc(meta.label)}" loading="lazy"
                  onerror="this.style.display='none'">
             <div class="catbox-overlay"></div>
           </div>
           <div class="catbox-info">
             <div>
-              <div class="catbox-label">${_esc(fam.label)}</div>
+              <div class="catbox-label">${_esc(meta.label)}</div>
               ${countTxt}
               ${desc ? `<p class="catbox-desc">${_esc(desc)}</p>` : ''}
             </div>

@@ -458,103 +458,145 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
 }
 
 // ─── Tab Familias ─────────────────────────────────────────
-const FAM_META = {
-  NEUMATICOS:  { label: 'Neumáticos',  icon: '🛞' },
-  BATERIAS:    { label: 'Baterías',    icon: '🔋' },
-  LUBRICANTES: { label: 'Lubricantes', icon: '🛢️' },
-}
-const FAM_KEYS = ['NEUMATICOS', 'BATERIAS', 'LUBRICANTES']
-
 function TabFamilias({ familias = [], isLoading }) {
   const qc = useQueryClient()
-  const refNeu = useRef(null)
-  const refBat = useRef(null)
-  const refLub = useRef(null)
-  const fotoRefs = { NEUMATICOS: refNeu, BATERIAS: refBat, LUBRICANTES: refLub }
+  const fotoRef = useRef(null)
 
-  const [state, setState] = useState({})
+  const FORM_INIT = { familia: '', descripcion: '' }
+  const [showForm, setShowForm] = useState(false)
+  const [editKey, setEditKey] = useState(null)
+  const [form, setForm] = useState(FORM_INIT)
   const [imgVer, setImgVer] = useState(Date.now())
-  const [descriptions, setDescriptions] = useState({})
 
-  const initDescriptions = (fams) => {
-    const init = {}
-    FAM_KEYS.forEach(k => {
-      const f = fams.find(r => r.familia === k)
-      init[k] = f?.descripcion || ''
-    })
-    setDescriptions(init)
+  const setF = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
+  const invalidate = () => qc.invalidateQueries(['landing-familias'])
+
+  const createMut = useMutation({
+    mutationFn: (fd) => api.post('/admin/landing/familias', fd).then(r => r.data),
+    onSuccess: () => { invalidate(); resetForm(); toast.success('Familia creada') },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al crear familia'),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ key, fd }) => api.put(`/admin/landing/familias/${key}`, fd).then(r => r.data),
+    onSuccess: () => { invalidate(); setImgVer(Date.now()); resetForm(); toast.success('Familia actualizada') },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar familia'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (key) => api.delete(`/admin/landing/familias/${key}`).then(r => r.data),
+    onSuccess: () => { invalidate(); toast.success('Familia eliminada') },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar familia'),
+  })
+
+  const resetForm = () => { setForm(FORM_INIT); setEditKey(null); setShowForm(false); if (fotoRef.current) fotoRef.current.value = '' }
+
+  const handleEdit = (fam) => {
+    setForm({ familia: fam.familia || '', descripcion: fam.descripcion || '' })
+    setEditKey(fam.familia)
+    setShowForm(true)
   }
 
-  // populate descriptions when familias data loads
-  const prevFamilias = useRef(null)
-  if (familias !== prevFamilias.current) {
-    prevFamilias.current = familias
-    if (familias.length) initDescriptions(familias)
+  const handleSubmit = () => {
+    if (!form.familia.trim()) { toast.error('El nombre de familia es obligatorio'); return }
+    const fd = new FormData()
+    if (!editKey) fd.append('familia', form.familia)
+    fd.append('descripcion', form.descripcion)
+    if (fotoRef.current?.files[0]) fd.append('foto', fotoRef.current.files[0])
+    if (editKey) updateMut.mutate({ key: editKey, fd })
+    else createMut.mutate(fd)
   }
 
-  const guardarFamilia = async (famKey) => {
-    const file = fotoRefs[famKey].current?.files[0]
-    const desc = descriptions[famKey] ?? ''
-    if (!file && desc === (familias.find(f => f.familia === famKey)?.descripcion || '')) {
-      toast.error('No hay cambios para guardar'); return
-    }
-    setState(p => ({ ...p, [famKey]: 'loading' }))
-    try {
-      const fd = new FormData()
-      if (file) fd.append('foto', file)
-      fd.append('descripcion', desc)
-      await api.put(`/admin/landing/familias/${famKey}`, fd)
-      qc.invalidateQueries(['landing-familias'])
-      if (file) setImgVer(Date.now())
-      setState(p => ({ ...p, [famKey]: 'ok' }))
-      toast.success(`${FAM_META[famKey].label} guardado`)
-      setTimeout(() => setState(p => ({ ...p, [famKey]: null })), 3000)
-    } catch (err) {
-      setState(p => ({ ...p, [famKey]: 'error' }))
-      toast.error(err.response?.data?.error || 'Error al guardar')
-    }
-    if (fotoRefs[famKey].current) fotoRefs[famKey].current.value = ''
-  }
-
-  if (isLoading) return <div className="py-12 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando…</div>
+  const isPending = createMut.isPending || updateMut.isPending
 
   return (
-    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-      {FAM_KEYS.map(famKey => {
-        const meta    = FAM_META[famKey]
-        const fam     = familias.find(f => f.familia === famKey)
-        const hasFoto = !!fam?.foto_mimetype
-        const s       = state[famKey]
-        return (
-          <div key={famKey} className="rmg-card rounded-xl overflow-hidden">
-            <div className="flex items-center justify-center"
-              style={{ height: 140, background: 'rgba(255,255,255,0.04)', overflow: 'hidden', position: 'relative' }}>
-              {hasFoto
-                ? <img src={`${FOTO_URL('familias', famKey)}?t=${imgVer}`} alt={meta.label}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    onError={e => { e.currentTarget.style.display = 'none' }} />
-                : <span style={{ fontSize: 52 }}>{meta.icon}</span>
-              }
+    <div className="space-y-4">
+      <div className="rmg-card overflow-hidden">
+        <div className="px-5 py-4 border-b flex justify-between items-center"
+          style={{ borderColor: 'rgba(56,182,255,0.1)' }}>
+          <div className="flex items-center gap-2">
+            <span className="font-bold">Familias</span>
+            <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+              style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blt)' }}>
+              {familias.length}
+            </span>
+          </div>
+          <button onClick={() => { resetForm(); setShowForm(v => !v) }}
+            className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5">
+            {showForm && !editKey ? <X size={13} /> : <Plus size={13} />}
+            {showForm && !editKey ? 'Cancelar' : 'Nueva familia'}
+          </button>
+        </div>
+
+        {showForm && (
+          <div className="px-5 py-4 border-b space-y-3"
+            style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(56,182,255,0.04)' }}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>
+                {editKey ? 'Editar familia' : 'Nueva familia'}
+              </span>
+              {editKey && (
+                <button onClick={resetForm} className="p-1 rounded hover:bg-white/5"
+                  style={{ color: 'var(--rmg-muted)' }}><X size={14} /></button>
+              )}
             </div>
-            <div className="px-4 py-3 space-y-2">
-              <div className="font-bold">{meta.icon} {meta.label}</div>
-              <input type="file" accept="image/*" ref={fotoRefs[famKey]} className="rmg-input text-xs" />
-              <textarea
-                rows={2}
-                placeholder="Descripción (opcional)"
-                className="rmg-input text-xs w-full resize-none"
-                value={descriptions[famKey] || ''}
-                onChange={e => setDescriptions(p => ({ ...p, [famKey]: e.target.value }))}
-              />
-              <button onClick={() => guardarFamilia(famKey)} disabled={s === 'loading'}
-                className="btn-primary w-full flex items-center justify-center gap-2 text-sm disabled:opacity-50">
-                <Check size={13} />
-                {s === 'loading' ? 'Guardando...' : s === 'ok' ? 'Guardado ✓' : 'Guardar'}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Nombre (clave) *">
+                <input className="rmg-input" placeholder="Ej. ACCESORIOS" value={form.familia}
+                  onChange={setF('familia')} disabled={!!editKey}
+                  style={editKey ? { opacity: 0.5 } : {}} />
+              </Field>
+              <Field label="Descripción">
+                <textarea className="rmg-input" rows={2} placeholder="Descripción breve"
+                  value={form.descripcion} onChange={setF('descripcion')} />
+              </Field>
+              <Field label="Foto (JPG/PNG/WebP, máx 50MB)">
+                <input type="file" className="rmg-input" accept="image/*" ref={fotoRef} />
+              </Field>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={handleSubmit} disabled={isPending}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                <Check size={14} />{isPending ? 'Guardando...' : editKey ? 'Actualizar' : 'Crear'}
+              </button>
+              <button onClick={resetForm} className="btn-secondary flex items-center gap-2">
+                <X size={14} />Cancelar
               </button>
             </div>
           </div>
-        )
-      })}
+        )}
+
+        {isLoading ? (
+          <div className="p-8 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando...</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <TH>Familia</TH><TH>Descripción</TH><TH>Foto</TH><TH></TH>
+              </tr>
+            </thead>
+            <tbody>
+              {familias.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin registros</td></tr>
+              ) : familias.map(fam => (
+                <TR key={fam.familia}>
+                  <TD><span className="text-xs font-semibold px-2 py-0.5 rounded"
+                    style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)' }}>{fam.familia}</span></TD>
+                  <TD><span style={{ color: 'var(--rmg-off)' }}>{fam.descripcion || '—'}</span></TD>
+                  <TD><Thumbnail src={fam.foto_mimetype ? `${FOTO_URL('familias', fam.familia)}?t=${imgVer}` : null} size={40} /></TD>
+                  <TD>
+                    <div className="flex items-center gap-1">
+                      <ActionBtn onClick={() => handleEdit(fam)} icon={Pencil} color="var(--rmg-blt)" title="Editar" />
+                      <ActionBtn onClick={() => { if (!confirm('¿Eliminar familia? Las subfamilias asociadas quedarán sin familia padre.')) return; deleteMut.mutate(fam.familia) }}
+                        icon={Trash2} color="var(--rmg-red, #ef4444)" title="Eliminar" />
+                    </div>
+                  </TD>
+                </TR>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }

@@ -272,10 +272,6 @@
   font-weight: 600;
   color: var(--ci-text);
   line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .ci-card-pres {
