@@ -218,6 +218,22 @@
 }
 .pcard-wa:hover { background: #1DA851; }
 
+/* ── Segmentos con íconos SVG ────────────────────────────────── */
+.seg-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+.seg-card {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 20px 16px; background: #f8fafc; border-radius: 12px;
+  text-align: center; font-size: 0.9rem; font-weight: 500; color: #435664;
+}
+@media (max-width: 640px) {
+  .seg-cards { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ── Bloque de contenido descriptivo (nivel subfamilia) ─────── */
 .prod-content { max-width: 800px; margin: 0 auto; padding: 0 0 40px; }
 .prod-content-block {
