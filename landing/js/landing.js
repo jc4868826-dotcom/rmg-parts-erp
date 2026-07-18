@@ -60,6 +60,24 @@
     return WA_NR ? `https://wa.me/${WA_NR}?text=${msg}` : `https://wa.me/?text=${msg}`;
   }
 
+  function getWhatsAppMessage() {
+    if (_activeSub) {
+      const sub = _subfamilias.find(s => s.id === _activeSub);
+      const subNombre = sub ? sub.nombre : 'esta sección';
+      return `Hola RMG Parts, estoy revisando la sección de ${subNombre} y necesito asesoría comercial.`;
+    }
+    if (_activeFam) {
+      const meta = FAM_META[_activeFam] || { label: _activeFam };
+      return `Hola RMG Parts, estoy revisando la sección de ${meta.label} y necesito asesoría comercial.`;
+    }
+    return 'Hola RMG Parts, estoy en su sitio web y me interesa conocer más sobre su catálogo B2B.';
+  }
+
+  function getWaUrl() {
+    const msg = encodeURIComponent(getWhatsAppMessage());
+    return WA_NR ? `https://wa.me/${WA_NR}?text=${msg}` : `https://wa.me/?text=${msg}`;
+  }
+
   // ─── Nav mega-menu ─────────────────────────────────────────────────────────
   function _buildNavDropdowns() {
     FAMILIAS.forEach(fam => {
@@ -296,7 +314,7 @@
           ${p.descripcion ? `<div class="${p.nombre ? 'pcard-pres' : 'pcard-name'}">${_esc(p.descripcion)}</div>` : ''}
           ${p.presentacion ? `<div class="pcard-pres">${_esc(p.presentacion)}</div>` : ''}
           <div class="pcard-price">${_fmt(p.precio)}</div>
-          <a class="pcard-wa" href="${_waLink(waMsg)}" target="_blank" rel="noopener noreferrer">
+          <a class="pcard-wa" href="#" onclick="event.preventDefault();window.open(Landing.getWaUrl(),'_blank','noopener noreferrer')">
             <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.001 2.003c-5.522 0-10 4.477-10 10 0 1.765.46 3.464 1.334 4.965L2 22l5.164-1.323A9.953 9.953 0 0012 22.003c5.523 0 10-4.477 10-10s-4.477-10-9.999-10zm0 18.166a8.14 8.14 0 01-4.16-1.14l-.298-.177-3.065.785.82-2.988-.194-.307a8.16 8.16 0 01-1.264-4.339c0-4.512 3.672-8.183 8.184-8.183 4.512 0 8.183 3.671 8.183 8.183-.002 4.512-3.672 8.166-8.206 8.166z"/></svg>
             Cotizar por WhatsApp
           </a>
@@ -392,7 +410,7 @@
   // ─── Expose ────────────────────────────────────────────────────────────────
   window.Landing = {
     init, heroGo, selectFamilia, selectSub, backToFamilias, backToSubs,
-    _schInput, _schClear,
+    _schInput, _schClear, getWaUrl,
   };
   Object.defineProperty(window.Landing, '_heroIdx', { get: () => _heroIdx });
 

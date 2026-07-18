@@ -19,22 +19,23 @@ const FEATURED_PRODUCTS = [
 
 document.addEventListener('DOMContentLoaded', async () => {
 
-  // ── WhatsApp ─────────────────────────────────────────────────
+  // ── WhatsApp — URL dinámica según contexto de navegación ─────
   const WA = CONFIG.WHATSAPP;
-  const waUrl = WA
-    ? `https://wa.me/${WA}?text=${encodeURIComponent('Hola, me interesa cotizar en RMG Parts')}`
-    : null;
+
+  function _getWaUrl() {
+    return window.Landing?.getWaUrl?.() || (WA ? `https://wa.me/${WA}?text=${encodeURIComponent('Hola RMG Parts, estoy en su sitio web y me interesa conocer más sobre su catálogo B2B.')}` : null);
+  }
 
   const waFloatEl = document.getElementById('waFloat');
-  if (waFloatEl && waUrl) {
-    waFloatEl.addEventListener('click', () => window.open(waUrl, '_blank', 'noopener'));
+  if (waFloatEl && WA) {
+    waFloatEl.addEventListener('click', () => { const u = _getWaUrl(); if (u) window.open(u, '_blank', 'noopener'); });
   }
 
   ['heroWaBtn', 'bulkWaBtn', 'bulkWaBtnSec'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-    if (waUrl) {
-      el.addEventListener('click', () => window.open(waUrl, '_blank', 'noopener'));
+    if (WA) {
+      el.addEventListener('click', () => { const u = _getWaUrl(); if (u) window.open(u, '_blank', 'noopener'); });
     } else {
       if (id === 'heroWaBtn') {
         el.addEventListener('click', () => {
@@ -46,8 +47,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const footerWa = document.getElementById('footerWa');
   if (footerWa) {
-    if (waUrl) { footerWa.href = waUrl; footerWa.target = '_blank'; footerWa.rel = 'noopener'; }
-    else footerWa.style.display = 'none';
+    if (WA) {
+      footerWa.href = '#';
+      footerWa.addEventListener('click', (e) => { e.preventDefault(); const u = _getWaUrl(); if (u) window.open(u, '_blank', 'noopener'); });
+    } else footerWa.style.display = 'none';
   }
 
   // ── Category strip ────────────────────────────────────────────
@@ -233,12 +236,9 @@ function goToPage(n) {
 }
 
 function _openWa() {
-  const WA = CONFIG.WHATSAPP;
-  if (!WA) return;
-  window.open(
-    `https://wa.me/${WA}?text=${encodeURIComponent('Hola, me interesa cotizar en RMG Parts')}`,
-    '_blank', 'noopener'
-  );
+  const u = window.Landing?.getWaUrl?.();
+  if (!u) return;
+  window.open(u, '_blank', 'noopener');
 }
 
 function _focusBusqueda() {
