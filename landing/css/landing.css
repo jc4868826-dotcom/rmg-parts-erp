@@ -171,6 +171,7 @@
 }
 .subfam-card-img img { width: 100%; height: 100%; object-fit: cover; object-position: center center; display: block; transition: transform 0.3s ease; }
 .subfam-card-img img:hover { transform: scale(1.03); }
+
 .subfam-icon { font-size: 36px; opacity: 0.5; }
 .subfam-card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; }
 .subfam-card-name { font-size: 13px; font-weight: 700; color: #0c1523; }
