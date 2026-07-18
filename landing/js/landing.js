@@ -237,6 +237,7 @@
                 <div class="subfam-card-img">
                   <img src="${erpSrc}" alt="${_esc(s.nombre)}" loading="lazy"
                        onerror="this.style.display='none'">
+                  <div class="catbox-overlay"></div>
                 </div>
                 <div class="subfam-card-body">
                   <div class="subfam-card-name">${_esc(s.nombre)}</div>
