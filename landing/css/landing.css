@@ -216,6 +216,21 @@
 }
 .pcard-wa:hover { background: #1DA851; }
 
+/* ── Bloque de contenido descriptivo (nivel subfamilia) ─────── */
+.prod-content { max-width: 800px; margin: 0 auto; padding: 0 0 40px; }
+.prod-content-block {
+  background: #f8fafc; border-radius: 12px; padding: 28px 32px; margin-bottom: 20px;
+}
+.prod-content-title {
+  font-size: 18px; font-weight: 700; color: #0c1523; margin: 0 0 14px;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.prod-content-body { font-size: 16px; color: #435664; line-height: 1.75; }
+.prod-content-body p { margin: 0 0 12px; }
+.prod-content-body p:last-child { margin-bottom: 0; }
+.prod-content-body ul, .prod-content-body ol { padding-left: 20px; margin: 0 0 12px; }
+.prod-content-body li { margin-bottom: 6px; }
+
 /* ── Marca strip ─────────────────────────────────────────────── */
 .brands-section { background: #fff; padding: 40px 0; border-top: 1.5px solid #e0e7f0; }
 .brands-label { text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #7b8fa6; margin-bottom: 24px; }

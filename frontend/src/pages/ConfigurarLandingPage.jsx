@@ -228,12 +228,10 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
 // ─── Tab Productos ────────────────────────────────────────
 function TabProductos({ productos = [], subfamilias = [], isLoading }) {
   const qc = useQueryClient()
-  const fotoRef = useRef(null)
 
   const FORM_INIT = {
     familia: 'NEUMATICOS', subfamilia_id: '', subfamilia: '',
-    codigo: '', marca: '', nombre: '', descripcion: '', um: '', presentacion: '',
-    precio: '', detalles_tecnicos: '', orden: 0, activo: true,
+    nombre: '', contenido: '', orden: 0, activo: true,
   }
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -241,7 +239,6 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
 
   const setF = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
-  // Subfamilias filtradas por familia seleccionada
   const sfFiltradas = subfamilias.filter(sf => sf.familia === form.familia)
 
   const handleSubfamiliaIdChange = (e) => {
@@ -258,37 +255,31 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
 
   const createMut = useMutation({
     mutationFn: (fd) => api.post('/admin/landing/productos', fd).then(r => r.data),
-    onSuccess: () => { invalidate(); resetForm(); toast.success('Producto creado') },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al crear producto'),
+    onSuccess: () => { invalidate(); resetForm(); toast.success('Bloque creado') },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al crear bloque'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, fd }) => api.put(`/admin/landing/productos/${id}`, fd).then(r => r.data),
-    onSuccess: () => { invalidate(); resetForm(); toast.success('Producto actualizado') },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar producto'),
+    onSuccess: () => { invalidate(); resetForm(); toast.success('Bloque actualizado') },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar bloque'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id) => api.delete(`/admin/landing/productos/${id}`).then(r => r.data),
-    onSuccess: () => { invalidate(); toast.success('Producto eliminado') },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar producto'),
+    onSuccess: () => { invalidate(); toast.success('Bloque eliminado') },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar bloque'),
   })
 
-  const resetForm = () => { setForm(FORM_INIT); setEditId(null); setShowForm(false); if (fotoRef.current) fotoRef.current.value = '' }
+  const resetForm = () => { setForm(FORM_INIT); setEditId(null); setShowForm(false) }
 
   const handleEdit = (p) => {
     setForm({
       familia: p.familia || 'NEUMATICOS',
       subfamilia_id: p.subfamilia_id ?? '',
       subfamilia: p.subfamilia || '',
-      codigo: p.codigo || '',
-      marca: p.marca || '',
       nombre: p.nombre || '',
-      descripcion: p.descripcion || '',
-      um: p.um || '',
-      presentacion: p.presentacion || '',
-      precio: p.precio ?? '',
-      detalles_tecnicos: p.detalles_tecnicos || '',
+      contenido: p.contenido || '',
       orden: p.orden ?? 0,
       activo: !!p.activo,
     })
@@ -302,17 +293,10 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
     fd.append('familia', form.familia)
     fd.append('subfamilia_id', form.subfamilia_id)
     fd.append('subfamilia', form.subfamilia)
-    fd.append('codigo', form.codigo)
-    fd.append('marca', form.marca)
     fd.append('nombre', form.nombre)
-    fd.append('descripcion', form.descripcion)
-    fd.append('um', form.um)
-    fd.append('presentacion', form.presentacion)
-    fd.append('precio', form.precio)
-    fd.append('detalles_tecnicos', form.detalles_tecnicos)
+    fd.append('contenido', form.contenido)
     fd.append('orden', form.orden)
     fd.append('activo', form.activo ? '1' : '0')
-    if (fotoRef.current?.files[0]) fd.append('foto', fotoRef.current.files[0])
     if (editId) updateMut.mutate({ id: editId, fd })
     else createMut.mutate(fd)
   }
@@ -325,7 +309,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
         <div className="px-5 py-4 border-b flex justify-between items-center"
           style={{ borderColor: 'rgba(56,182,255,0.1)' }}>
           <div className="flex items-center gap-2">
-            <span className="font-bold">Productos</span>
+            <span className="font-bold">Bloques de contenido</span>
             <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
               style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blt)' }}>
               {productos.length}
@@ -334,7 +318,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
           <button onClick={() => { resetForm(); setShowForm(v => !v) }}
             className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5">
             {showForm && !editId ? <X size={13} /> : <Plus size={13} />}
-            {showForm && !editId ? 'Cancelar' : 'Nuevo producto'}
+            {showForm && !editId ? 'Cancelar' : 'Nuevo bloque'}
           </button>
         </div>
 
@@ -343,7 +327,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
             style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(56,182,255,0.04)' }}>
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>
-                {editId ? 'Editar producto' : 'Nuevo producto'}
+                {editId ? 'Editar bloque' : 'Nuevo bloque de contenido'}
               </span>
               {editId && (
                 <button onClick={resetForm} className="p-1 rounded hover:bg-white/5"
@@ -362,41 +346,18 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
                   {sfFiltradas.map(sf => <option key={sf.id} value={sf.id}>{sf.nombre}</option>)}
                 </select>
               </Field>
-              <Field label="Subfamilia (texto)">
-                <input className="rmg-input" placeholder="Nombre de subfamilia" value={form.subfamilia}
-                  onChange={setF('subfamilia')} />
-              </Field>
-              <Field label="Código">
-                <input className="rmg-input" placeholder="Ej. NEU-001" value={form.codigo} onChange={setF('codigo')} />
-              </Field>
-              <Field label="Marca">
-                <input className="rmg-input" placeholder="Ej. Bridgestone" value={form.marca} onChange={setF('marca')} />
-              </Field>
               <Field label="Nombre *">
-                <input className="rmg-input" placeholder="Ej. Neumático 195/65R15" value={form.nombre} onChange={setF('nombre')} />
-              </Field>
-              <Field label="Descripción">
-                <input className="rmg-input" placeholder="Descripción del producto" value={form.descripcion} onChange={setF('descripcion')} />
-              </Field>
-              <Field label="UM">
-                <input className="rmg-input" placeholder="Ej. unidad, litro" value={form.um} onChange={setF('um')} />
-              </Field>
-              <Field label="Presentación">
-                <input className="rmg-input" placeholder="Ej. 4 unidades" value={form.presentacion} onChange={setF('presentacion')} />
-              </Field>
-              <Field label="Precio">
-                <input type="number" className="rmg-input" placeholder="0" value={form.precio} onChange={setF('precio')} />
+                <input className="rmg-input" placeholder="Título del bloque" value={form.nombre} onChange={setF('nombre')} />
               </Field>
               <Field label="Orden">
                 <input type="number" className="rmg-input" value={form.orden} onChange={setF('orden')} />
               </Field>
-              <Field label="Detalles técnicos">
-                <textarea className="rmg-input" rows={2} value={form.detalles_tecnicos} onChange={setF('detalles_tecnicos')} />
-              </Field>
-              <Field label="Foto (JPG/PNG/WebP, máx 50MB)">
-                <input type="file" className="rmg-input" accept="image/*" ref={fotoRef} />
-              </Field>
             </div>
+            <Field label="Contenido (texto o HTML simple)">
+              <textarea className="rmg-input" rows={8}
+                placeholder="Descripción detallada. Puede incluir HTML: <p>, <ul>, <li>, <strong>…"
+                value={form.contenido} onChange={setF('contenido')} />
+            </Field>
             <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--rmg-off)' }}>
               <input type="checkbox" checked={form.activo} onChange={setF('activo')} className="w-4 h-4 rounded" />
               Activo
@@ -420,28 +381,23 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-                  <TH>ID</TH><TH>Familia</TH><TH>Subfamilia</TH><TH>Código</TH>
-                  <TH>Marca</TH><TH>Descripción</TH><TH>Precio</TH><TH>Activo</TH><TH></TH>
+                  <TH>ID</TH><TH>Familia</TH><TH>Subfamilia</TH><TH>Nombre</TH><TH>Contenido</TH><TH>Activo</TH><TH></TH>
                 </tr>
               </thead>
               <tbody>
                 {productos.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin registros</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin registros</td></tr>
                 ) : productos.map(p => (
                   <TR key={p.id}>
                     <TD><span style={{ color: 'var(--rmg-muted)' }}>#{p.id}</span></TD>
                     <TD><span className="text-xs font-semibold px-2 py-0.5 rounded"
                       style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)' }}>{p.familia}</span></TD>
                     <TD><span style={{ color: 'var(--rmg-muted)' }}>{p.subfamilia || '—'}</span></TD>
-                    <TD><span className="font-mono text-xs" style={{ color: 'var(--rmg-off)' }}>{p.codigo || '—'}</span></TD>
-                    <TD style={{ color: 'var(--rmg-off)' }}>{p.marca || '—'}</TD>
-                    <TD style={{ color: 'var(--rmg-off)', maxWidth: 200 }}>
-                      <span title={p.descripcion}>
-                        {p.descripcion?.length > 40 ? p.descripcion.slice(0, 40) + '…' : p.descripcion}
+                    <TD style={{ color: 'var(--rmg-off)', fontWeight: 600 }}>{p.nombre || '—'}</TD>
+                    <TD style={{ color: 'var(--rmg-muted)', maxWidth: 240 }}>
+                      <span title={p.contenido}>
+                        {p.contenido?.length > 60 ? p.contenido.slice(0, 60) + '…' : (p.contenido || '—')}
                       </span>
-                    </TD>
-                    <TD style={{ color: 'var(--rmg-teal)' }}>
-                      {p.precio != null ? `$${Number(p.precio).toLocaleString('es-CL')}` : '—'}
                     </TD>
                     <TD><ActiveBadge activo={p.activo} /></TD>
                     <TD>

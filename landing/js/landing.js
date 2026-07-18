@@ -253,17 +253,27 @@
 
     const sub = _subfamilias.find(s => s.id === _activeSub);
     const subLabel = sub ? sub.nombre : '';
-    const prods = _productos.filter(p => p.subfamilia_id === _activeSub);
+    const bloques = _productos.filter(p => p.subfamilia_id === _activeSub);
 
     el.innerHTML = _wrap(`
       <div class="drilldown-header">
         <button class="drill-back" onclick="Landing.backToSubs()">← ${_esc(famLabel)}</button>
         <h2 class="drill-title">${_esc(subLabel)}</h2>
       </div>
-      ${prods.length
-        ? `<div class="prod-grid">${prods.map(_cardHTML).join('')}</div>`
-        : '<p class="drill-empty">Próximamente</p>'
-      }
+      <div class="prod-content">
+        ${bloques.length
+          ? bloques.map(b => {
+              const body = b.contenido || (b.descripcion ? _esc(b.descripcion) : null);
+              return `
+                <div class="prod-content-block">
+                  ${b.nombre ? `<h3 class="prod-content-title">${_esc(b.nombre)}</h3>` : ''}
+                  <div class="prod-content-body">${body || 'Información disponible próximamente.'}</div>
+                </div>
+              `;
+            }).join('')
+          : '<p class="drill-empty">Información disponible próximamente.</p>'
+        }
+      </div>
     `);
   }
 
