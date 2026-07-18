@@ -234,7 +234,7 @@
             const erpSrc = `${ERP}/api/public/landing/foto/subfamilias/${s.id}`;
             return `
               <div class="subfam-card" onclick="Landing.selectSub(${s.id})">
-                <div class="subfam-card-img" style="background:${fam ? fam.color + '22' : '#0071BD22'}">
+                <div class="subfam-card-img">
                   <img src="${erpSrc}" alt="${_esc(s.nombre)}" loading="lazy"
                        onerror="this.style.display='none'">
                 </div>
