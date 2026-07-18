@@ -115,9 +115,10 @@
 }
 .catbox:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,113,189,0.18); }
 .catbox-img-wrap {
-  position: relative; width: 100%; overflow: hidden; aspect-ratio: 1 / 1; background: #0a1628;
+  position: relative; width: 100%; overflow: hidden; aspect-ratio: 4 / 3; background: #0a1628; border-radius: 12px 12px 0 0;
 }
-.catbox-img-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.catbox-img-wrap img { width: 100%; height: 100%; object-fit: cover; object-position: center center; display: block; transition: transform 0.3s ease; }
+.catbox-img-wrap img:hover { transform: scale(1.03); }
 .catbox-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.35) 100%);
@@ -166,9 +167,10 @@
 }
 .subfam-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,113,189,0.15); border-color: #29AAE1; }
 .subfam-card-img {
-  width: 100%; overflow: hidden; aspect-ratio: 1 / 1; background: #0a1628;
+  width: 100%; overflow: hidden; aspect-ratio: 4 / 3; background: #0a1628; border-radius: 12px 12px 0 0;
 }
-.subfam-card-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.subfam-card-img img { width: 100%; height: 100%; object-fit: cover; object-position: center center; display: block; transition: transform 0.3s ease; }
+.subfam-card-img img:hover { transform: scale(1.03); }
 .subfam-icon { font-size: 36px; opacity: 0.5; }
 .subfam-card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; }
 .subfam-card-name { font-size: 13px; font-weight: 700; color: #0c1523; }
@@ -190,9 +192,10 @@
 }
 .pcard:hover { border-color: #29AAE1; box-shadow: 0 4px 20px rgba(41,170,225,0.18); }
 .pcard-img {
-  width: 100%; overflow: hidden; background: #0a1628; aspect-ratio: 1 / 1;
+  width: 100%; overflow: hidden; background: #0a1628; aspect-ratio: 4 / 3; border-radius: 12px 12px 0 0;
 }
-.pcard-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.pcard-img img { width: 100%; height: 100%; object-fit: cover; object-position: center center; display: block; transition: transform 0.3s ease; }
+.pcard-img img:hover { transform: scale(1.03); }
 .pcard-icon { font-size: 40px; opacity: 0.6; }
 .pcard-body { padding: 14px; display: flex; flex-direction: column; flex: 1; gap: 6px; }
 .pcard-badge {
@@ -246,10 +249,10 @@
 }
 @media (max-width: 680px) { .nav-catalog-link { display: none; } }
 
-/* ── Imágenes uniformes 1:1 ──────────────────────────────────── */
+/* ── Imágenes uniformes 4:3 ──────────────────────────────────── */
 .catbox-img-wrap img, .subfam-card-img img, .pcard-img img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  object-position: center;
+  object-fit: cover;
+  object-position: center center;
 }
