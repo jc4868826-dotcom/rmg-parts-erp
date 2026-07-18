@@ -200,7 +200,7 @@ router.delete('/subfamilias/:id', guard, (req, res) => {
 
 // ─── PRODUCTOS ────────────────────────────────────────────────────────────────
 
-const PROD_COLS = 'id, familia, subfamilia, subfamilia_id, codigo, marca, descripcion, um, presentacion, precio, detalles_tecnicos, foto_mimetype, activo, orden, created_at, updated_at'
+const PROD_COLS = 'id, familia, subfamilia, subfamilia_id, codigo, marca, nombre, descripcion, um, presentacion, precio, detalles_tecnicos, foto_mimetype, activo, orden, created_at, updated_at'
 
 // GET /api/admin/landing/productos
 router.get('/productos', guard, (req, res) => {
@@ -215,23 +215,23 @@ router.get('/productos', guard, (req, res) => {
 // POST /api/admin/landing/productos
 router.post('/productos', [...guard, uploadLanding.single('foto')], (req, res) => {
   try {
-    const { familia, subfamilia, subfamilia_id, codigo, marca,
+    const { familia, subfamilia, subfamilia_id, codigo, marca, nombre,
             descripcion, um, presentacion,
             precio, detalles_tecnicos, activo = 1, orden = 0 } = req.body
-    if (!descripcion) return res.status(400).json({ error: 'descripcion es requerida' })
+    if (!nombre && !descripcion) return res.status(400).json({ error: 'nombre o descripcion son requeridos' })
 
     const foto_base64   = req.file ? req.file.buffer.toString('base64') : null
     const foto_mimetype = req.file ? req.file.mimetype : null
 
     db.prepare(`
       INSERT INTO landing_productos
-        (familia, subfamilia, subfamilia_id, codigo, marca, descripcion, um, presentacion,
+        (familia, subfamilia, subfamilia_id, codigo, marca, nombre, descripcion, um, presentacion,
          precio, detalles_tecnicos, foto_base64, foto_mimetype, activo, orden)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       familia || null, subfamilia || null,
       subfamilia_id ? parseInt(subfamilia_id) : null,
-      codigo || null, marca || null, descripcion, um || null, presentacion || null,
+      codigo || null, marca || null, nombre || null, descripcion || null, um || null, presentacion || null,
       precio != null && precio !== '' ? parseFloat(precio) : null,
       detalles_tecnicos || null, foto_base64, foto_mimetype,
       parseInt(activo), parseInt(orden)
@@ -251,7 +251,7 @@ router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res
     const existing = db.prepare('SELECT id, foto_base64, foto_mimetype FROM landing_productos WHERE id = ?').get(parseInt(id))
     if (!existing) return res.status(404).json({ error: 'Producto no encontrado' })
 
-    const { familia, subfamilia, subfamilia_id, codigo, marca,
+    const { familia, subfamilia, subfamilia_id, codigo, marca, nombre,
             descripcion, um, presentacion,
             precio, detalles_tecnicos, activo, orden } = req.body
 
@@ -265,6 +265,7 @@ router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res
         subfamilia_id     = CASE WHEN ? IS NOT NULL THEN CAST(? AS INTEGER) ELSE subfamilia_id END,
         codigo            = COALESCE(?, codigo),
         marca             = COALESCE(?, marca),
+        nombre            = COALESCE(?, nombre),
         descripcion       = COALESCE(?, descripcion),
         um                = COALESCE(?, um),
         presentacion      = COALESCE(?, presentacion),
@@ -279,7 +280,7 @@ router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res
     `).run(
       familia || null, subfamilia || null,
       subfamilia_id != null ? subfamilia_id : null, subfamilia_id != null ? parseInt(subfamilia_id) : null,
-      codigo || null, marca || null, descripcion || null, um || null, presentacion || null,
+      codigo || null, marca || null, nombre || null, descripcion || null, um || null, presentacion || null,
       precio != null && precio !== '' ? precio : null, precio != null && precio !== '' ? parseFloat(precio) : null,
       detalles_tecnicos || null, foto_base64, foto_mimetype,
       activo != null ? activo : null, activo != null ? parseInt(activo) : null,

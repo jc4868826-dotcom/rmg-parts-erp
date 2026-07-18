@@ -281,7 +281,8 @@
         </div>
         <div class="pcard-body">
           ${badge}
-          <div class="pcard-name">${_esc(p.descripcion)}</div>
+          ${p.nombre ? `<div class="pcard-name">${_esc(p.nombre)}</div>` : ''}
+          ${p.descripcion ? `<div class="${p.nombre ? 'pcard-pres' : 'pcard-name'}">${_esc(p.descripcion)}</div>` : ''}
           ${p.presentacion ? `<div class="pcard-pres">${_esc(p.presentacion)}</div>` : ''}
           <div class="pcard-price">${_fmt(p.precio)}</div>
           <a class="pcard-wa" href="${_waLink(waMsg)}" target="_blank" rel="noopener noreferrer">

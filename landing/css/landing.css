@@ -177,10 +177,11 @@
 /* ── Grid de productos ───────────────────────────────────────── */
 .prod-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
   width: 100%;
-  padding-bottom: 40px;
+  padding: 0 24px 40px;
+  box-sizing: border-box;
 }
 .pcard {
   width: 100%; border-radius: 12px; border: 1.5px solid #dde4ef; background: #fff;
@@ -235,7 +236,7 @@
 /* ── Responsive imágenes ─────────────────────────────────────── */
 @media (max-width: 768px) {
   .subfam-grid { grid-template-columns: repeat(2, 1fr); }
-  .prod-grid   { grid-template-columns: repeat(2, 1fr); }
+  .prod-grid   { grid-template-columns: 1fr; }
 }
 
 /* ── Responsive nav ──────────────────────────────────────────── */

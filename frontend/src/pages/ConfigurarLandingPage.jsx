@@ -232,7 +232,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
 
   const FORM_INIT = {
     familia: 'NEUMATICOS', subfamilia_id: '', subfamilia: '',
-    codigo: '', marca: '', descripcion: '', um: '', presentacion: '',
+    codigo: '', marca: '', nombre: '', descripcion: '', um: '', presentacion: '',
     precio: '', detalles_tecnicos: '', orden: 0, activo: true,
   }
   const [showForm, setShowForm] = useState(false)
@@ -283,6 +283,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
       subfamilia: p.subfamilia || '',
       codigo: p.codigo || '',
       marca: p.marca || '',
+      nombre: p.nombre || '',
       descripcion: p.descripcion || '',
       um: p.um || '',
       presentacion: p.presentacion || '',
@@ -296,13 +297,14 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
   }
 
   const handleSubmit = () => {
-    if (!form.descripcion.trim()) { toast.error('La descripción es obligatoria'); return }
+    if (!form.nombre.trim()) { toast.error('El nombre es obligatorio'); return }
     const fd = new FormData()
     fd.append('familia', form.familia)
     fd.append('subfamilia_id', form.subfamilia_id)
     fd.append('subfamilia', form.subfamilia)
     fd.append('codigo', form.codigo)
     fd.append('marca', form.marca)
+    fd.append('nombre', form.nombre)
     fd.append('descripcion', form.descripcion)
     fd.append('um', form.um)
     fd.append('presentacion', form.presentacion)
@@ -370,7 +372,10 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
               <Field label="Marca">
                 <input className="rmg-input" placeholder="Ej. Bridgestone" value={form.marca} onChange={setF('marca')} />
               </Field>
-              <Field label="Descripción *">
+              <Field label="Nombre *">
+                <input className="rmg-input" placeholder="Ej. Neumático 195/65R15" value={form.nombre} onChange={setF('nombre')} />
+              </Field>
+              <Field label="Descripción">
                 <input className="rmg-input" placeholder="Descripción del producto" value={form.descripcion} onChange={setF('descripcion')} />
               </Field>
               <Field label="UM">

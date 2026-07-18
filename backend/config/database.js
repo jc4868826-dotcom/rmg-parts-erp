@@ -1309,6 +1309,15 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_familias_descripcion_v1')
     console.log('✅ Migración landing_familias_descripcion_v1 — columna descripcion añadida a landing_familias')
   }
+
+  // Migration 19: landing_productos_nombre_v1 — campo nombre en landing_productos
+  const m19 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_productos_nombre_v1')
+  if (!m19) {
+    const cols = db.prepare('PRAGMA table_info(landing_productos)').all().map(c => c.name)
+    if (!cols.includes('nombre')) db.exec('ALTER TABLE landing_productos ADD COLUMN nombre TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_productos_nombre_v1')
+    console.log('✅ Migración landing_productos_nombre_v1 — columna nombre añadida a landing_productos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
