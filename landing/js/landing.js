@@ -278,21 +278,37 @@
         <button class="drill-back" onclick="Landing.backToSubs()">← ${_esc(famLabel)}</button>
         <h2 class="drill-title">${_esc(subLabel)}</h2>
       </div>
-      <div class="prod-content">
-        ${bloques.length
-          ? bloques.map(b => {
-              const body = b.contenido || (b.descripcion ? _esc(b.descripcion) : null);
-              return `
-                <div class="prod-content-block">
-                  ${b.nombre ? `<h3 class="prod-content-title">${_esc(b.nombre)}</h3>` : ''}
-                  <div class="prod-content-body">${body || 'Información disponible próximamente.'}</div>
-                </div>
-              `;
-            }).join('')
-          : '<p class="drill-empty">Información disponible próximamente.</p>'
-        }
-      </div>
+      ${bloques.length
+        ? `<div class="subfam-grid">${bloques.map(_bloqueCardHTML).join('')}</div>`
+        : '<p class="drill-empty">Información disponible próximamente.</p>'
+      }
     `);
+  }
+
+  function _bloqueCardHTML(b) {
+    const hasImg = b.imagen_url && b.imagen_url.trim();
+    const imgSection = hasImg
+      ? `<div class="subfam-card-img" style="background:#0a1628">
+           <img src="${_esc(b.imagen_url)}" alt="${_esc(b.nombre)}" loading="lazy"
+                onerror="this.style.display='none'">
+           <div class="catbox-overlay"></div>
+         </div>`
+      : `<div class="subfam-card-img" style="background:#29AAE1;display:flex;align-items:center;justify-content:center;">
+           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+         </div>`;
+
+    const desc = b.contenido || (b.descripcion || null);
+
+    return `
+      <div class="subfam-card">
+        ${imgSection}
+        <div class="subfam-card-body">
+          <div class="subfam-card-name">${_esc(b.nombre)}</div>
+          ${b.subtitulo ? `<div class="subfam-card-desc" style="font-weight:600;color:#435664;">${_esc(b.subtitulo)}</div>` : ''}
+          ${desc ? `<div class="subfam-card-desc" style="margin-top:${b.subtitulo ? '4px' : '4px'}">${_esc(desc).replace(/\n/g,'<br>')}</div>` : ''}
+        </div>
+      </div>
+    `;
   }
 
   function _cardHTML(p) {

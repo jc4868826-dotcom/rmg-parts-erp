@@ -1327,6 +1327,16 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_productos_contenido_v1')
     console.log('✅ Migración landing_productos_contenido_v1 — columna contenido añadida a landing_productos')
   }
+
+  // Migration 21: landing_productos_imagen_subtitulo_v1 — imagen_url y subtitulo para tarjetas visuales
+  const m21 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_productos_imagen_subtitulo_v1')
+  if (!m21) {
+    const cols = db.prepare('PRAGMA table_info(landing_productos)').all().map(c => c.name)
+    if (!cols.includes('imagen_url')) db.exec('ALTER TABLE landing_productos ADD COLUMN imagen_url TEXT')
+    if (!cols.includes('subtitulo'))  db.exec('ALTER TABLE landing_productos ADD COLUMN subtitulo TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_productos_imagen_subtitulo_v1')
+    console.log('✅ Migración landing_productos_imagen_subtitulo_v1 — imagen_url y subtitulo añadidos a landing_productos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

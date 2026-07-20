@@ -231,7 +231,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
 
   const FORM_INIT = {
     familia: 'NEUMATICOS', subfamilia_id: '', subfamilia: '',
-    nombre: '', contenido: '', orden: 0, activo: true,
+    nombre: '', subtitulo: '', contenido: '', imagen_url: '', orden: 0, activo: true,
   }
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -279,7 +279,9 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
       subfamilia_id: p.subfamilia_id ?? '',
       subfamilia: p.subfamilia || '',
       nombre: p.nombre || '',
+      subtitulo: p.subtitulo || '',
       contenido: p.contenido || '',
+      imagen_url: p.imagen_url || '',
       orden: p.orden ?? 0,
       activo: !!p.activo,
     })
@@ -294,7 +296,9 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
     fd.append('subfamilia_id', form.subfamilia_id)
     fd.append('subfamilia', form.subfamilia)
     fd.append('nombre', form.nombre)
+    fd.append('subtitulo', form.subtitulo)
     fd.append('contenido', form.contenido)
+    fd.append('imagen_url', form.imagen_url)
     fd.append('orden', form.orden)
     fd.append('activo', form.activo ? '1' : '0')
     if (editId) updateMut.mutate({ id: editId, fd })
@@ -352,10 +356,16 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
               <Field label="Orden">
                 <input type="number" className="rmg-input" value={form.orden} onChange={setF('orden')} />
               </Field>
+              <Field label="URL de imagen">
+                <input className="rmg-input" placeholder="https://…" value={form.imagen_url} onChange={setF('imagen_url')} />
+              </Field>
+              <Field label="Subtítulo">
+                <input className="rmg-input" placeholder="Subtítulo breve (opcional)" value={form.subtitulo} onChange={setF('subtitulo')} />
+              </Field>
             </div>
-            <Field label="Contenido (texto o HTML simple)">
-              <textarea className="rmg-input" rows={8}
-                placeholder="Descripción detallada. Puede incluir HTML: <p>, <ul>, <li>, <strong>…"
+            <Field label="Descripción (opcional, texto o HTML simple)">
+              <textarea className="rmg-input" rows={5}
+                placeholder="Descripción adicional. Puede incluir HTML: <p>, <ul>, <li>, <strong>…"
                 value={form.contenido} onChange={setF('contenido')} />
             </Field>
             <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--rmg-off)' }}>
@@ -381,12 +391,12 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-                  <TH>ID</TH><TH>Familia</TH><TH>Subfamilia</TH><TH>Nombre</TH><TH>Contenido</TH><TH>Activo</TH><TH></TH>
+                  <TH>ID</TH><TH>Familia</TH><TH>Subfamilia</TH><TH>Nombre</TH><TH>Imagen</TH><TH>Descripción</TH><TH>Activo</TH><TH></TH>
                 </tr>
               </thead>
               <tbody>
                 {productos.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin registros</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-6 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin registros</td></tr>
                 ) : productos.map(p => (
                   <TR key={p.id}>
                     <TD><span style={{ color: 'var(--rmg-muted)' }}>#{p.id}</span></TD>
@@ -394,9 +404,18 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
                       style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)' }}>{p.familia}</span></TD>
                     <TD><span style={{ color: 'var(--rmg-muted)' }}>{p.subfamilia || '—'}</span></TD>
                     <TD style={{ color: 'var(--rmg-off)', fontWeight: 600 }}>{p.nombre || '—'}</TD>
-                    <TD style={{ color: 'var(--rmg-muted)', maxWidth: 240 }}>
-                      <span title={p.contenido}>
-                        {p.contenido?.length > 60 ? p.contenido.slice(0, 60) + '…' : (p.contenido || '—')}
+                    <TD>
+                      {p.imagen_url
+                        ? <img src={p.imagen_url} alt="" className="rounded object-cover"
+                            style={{ width: 40, height: 40 }}
+                            onError={e => { e.currentTarget.style.display = 'none' }} />
+                        : <span style={{ color: 'var(--rmg-muted)', fontSize: 11 }}>—</span>}
+                    </TD>
+                    <TD style={{ color: 'var(--rmg-muted)', maxWidth: 200 }}>
+                      <span title={p.contenido || p.subtitulo}>
+                        {(p.contenido || p.subtitulo || '').length > 50
+                          ? (p.contenido || p.subtitulo || '').slice(0, 50) + '…'
+                          : (p.contenido || p.subtitulo || '—')}
                       </span>
                     </TD>
                     <TD><ActiveBadge activo={p.activo} /></TD>
