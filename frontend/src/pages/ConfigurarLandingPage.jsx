@@ -228,14 +228,16 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
 // ─── Tab Productos ────────────────────────────────────────
 function TabProductos({ productos = [], subfamilias = [], isLoading }) {
   const qc = useQueryClient()
+  const fotoRef = useRef(null)
 
   const FORM_INIT = {
     familia: 'NEUMATICOS', subfamilia_id: '', subfamilia: '',
-    nombre: '', subtitulo: '', contenido: '', imagen_url: '', orden: 0, activo: true,
+    nombre: '', subtitulo: '', contenido: '', hasFoto: false, orden: 0, activo: true,
   }
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(FORM_INIT)
+  const [imgVer, setImgVer] = useState(Date.now())
 
   const setF = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
@@ -261,7 +263,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
 
   const updateMut = useMutation({
     mutationFn: ({ id, fd }) => api.put(`/admin/landing/productos/${id}`, fd).then(r => r.data),
-    onSuccess: () => { invalidate(); resetForm(); toast.success('Bloque actualizado') },
+    onSuccess: () => { invalidate(); setImgVer(Date.now()); resetForm(); toast.success('Bloque actualizado') },
     onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar bloque'),
   })
 
@@ -271,7 +273,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
     onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar bloque'),
   })
 
-  const resetForm = () => { setForm(FORM_INIT); setEditId(null); setShowForm(false) }
+  const resetForm = () => { setForm(FORM_INIT); setEditId(null); setShowForm(false); if (fotoRef.current) fotoRef.current.value = '' }
 
   const handleEdit = (p) => {
     setForm({
@@ -281,7 +283,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
       nombre: p.nombre || '',
       subtitulo: p.subtitulo || '',
       contenido: p.contenido || '',
-      imagen_url: p.imagen_url || '',
+      hasFoto: !!p.foto_mimetype,
       orden: p.orden ?? 0,
       activo: !!p.activo,
     })
@@ -298,9 +300,9 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
     fd.append('nombre', form.nombre)
     fd.append('subtitulo', form.subtitulo)
     fd.append('contenido', form.contenido)
-    fd.append('imagen_url', form.imagen_url)
     fd.append('orden', form.orden)
     fd.append('activo', form.activo ? '1' : '0')
+    if (fotoRef.current?.files[0]) fd.append('foto', fotoRef.current.files[0])
     if (editId) updateMut.mutate({ id: editId, fd })
     else createMut.mutate(fd)
   }
@@ -353,15 +355,22 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
               <Field label="Nombre *">
                 <input className="rmg-input" placeholder="Título del bloque" value={form.nombre} onChange={setF('nombre')} />
               </Field>
-              <Field label="Orden">
-                <input type="number" className="rmg-input" value={form.orden} onChange={setF('orden')} />
-              </Field>
-              <Field label="URL de imagen">
-                <input className="rmg-input" placeholder="https://…" value={form.imagen_url} onChange={setF('imagen_url')} />
-              </Field>
               <Field label="Subtítulo">
                 <input className="rmg-input" placeholder="Subtítulo breve (opcional)" value={form.subtitulo} onChange={setF('subtitulo')} />
               </Field>
+              <Field label="Orden">
+                <input type="number" className="rmg-input" value={form.orden} onChange={setF('orden')} />
+              </Field>
+              <div className="space-y-3">
+                {editId && form.hasFoto && (
+                  <div>
+                    <Thumbnail src={`${FOTO_URL('productos', editId)}?t=${imgVer}`} size={56} />
+                  </div>
+                )}
+                <Field label="Foto (JPG/PNG/WebP, máx 50MB)">
+                  <input type="file" className="rmg-input" accept="image/jpeg,image/png,image/webp" ref={fotoRef} />
+                </Field>
+              </div>
             </div>
             <Field label="Descripción (opcional, texto o HTML simple)">
               <textarea className="rmg-input" rows={5}
@@ -391,7 +400,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-                  <TH>ID</TH><TH>Familia</TH><TH>Subfamilia</TH><TH>Nombre</TH><TH>Imagen</TH><TH>Descripción</TH><TH>Activo</TH><TH></TH>
+                  <TH>ID</TH><TH>Familia</TH><TH>Subfamilia</TH><TH>Nombre</TH><TH>Foto</TH><TH>Descripción</TH><TH>Activo</TH><TH></TH>
                 </tr>
               </thead>
               <tbody>
@@ -404,13 +413,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
                       style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)' }}>{p.familia}</span></TD>
                     <TD><span style={{ color: 'var(--rmg-muted)' }}>{p.subfamilia || '—'}</span></TD>
                     <TD style={{ color: 'var(--rmg-off)', fontWeight: 600 }}>{p.nombre || '—'}</TD>
-                    <TD>
-                      {p.imagen_url
-                        ? <img src={p.imagen_url} alt="" className="rounded object-cover"
-                            style={{ width: 40, height: 40 }}
-                            onError={e => { e.currentTarget.style.display = 'none' }} />
-                        : <span style={{ color: 'var(--rmg-muted)', fontSize: 11 }}>—</span>}
-                    </TD>
+                    <TD><Thumbnail src={p.foto_mimetype ? `${FOTO_URL('productos', p.id)}?t=${imgVer}` : null} size={40} /></TD>
                     <TD style={{ color: 'var(--rmg-muted)', maxWidth: 200 }}>
                       <span title={p.contenido || p.subtitulo}>
                         {(p.contenido || p.subtitulo || '').length > 50

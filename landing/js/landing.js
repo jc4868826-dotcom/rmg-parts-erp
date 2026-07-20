@@ -286,10 +286,13 @@
   }
 
   function _bloqueCardHTML(b) {
-    const hasImg = b.imagen_url && b.imagen_url.trim();
-    const imgSection = hasImg
+    // Foto binaria (subida via ERP) tiene prioridad; imagen_url es fallback legacy
+    const fotoSrc = b.foto_mimetype
+      ? `${ERP}/api/public/landing/foto/productos/${b.id}`
+      : (b.imagen_url && b.imagen_url.trim() ? b.imagen_url : null);
+    const imgSection = fotoSrc
       ? `<div class="subfam-card-img" style="background:#0a1628">
-           <img src="${_esc(b.imagen_url)}" alt="${_esc(b.nombre)}" loading="lazy"
+           <img src="${_esc(fotoSrc)}" alt="${_esc(b.nombre)}" loading="lazy"
                 onerror="this.style.display='none'">
            <div class="catbox-overlay"></div>
          </div>`

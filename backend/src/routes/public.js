@@ -148,7 +148,8 @@ router.get('/landing/productos', (_req, res) => {
   try {
     const rows = db.prepare(`
       SELECT id, familia, subfamilia, subfamilia_id, codigo, marca, nombre,
-             descripcion, contenido, imagen_url, subtitulo, um, presentacion, precio, detalles_tecnicos,
+             descripcion, contenido, imagen_url, subtitulo, foto_mimetype,
+             um, presentacion, precio, detalles_tecnicos,
              activo, orden, created_at, updated_at
       FROM landing_productos WHERE activo = 1
       ORDER BY familia ASC, orden ASC, id ASC
