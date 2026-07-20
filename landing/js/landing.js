@@ -272,6 +272,7 @@
     const sub = _subfamilias.find(s => s.id === _activeSub);
     const subLabel = sub ? sub.nombre : '';
     const bloques = _productos.filter(p => p.subfamilia_id === _activeSub);
+    const hasPremium = bloques.some(b => (b.subtitulo || '').toLowerCase().includes('premium'));
 
     el.innerHTML = _wrap(`
       <div class="drilldown-header">
@@ -279,39 +280,92 @@
         <h2 class="drill-title">${_esc(subLabel)}</h2>
       </div>
       ${bloques.length
-        ? `<div class="subfam-grid">${bloques.map(_bloqueCardHTML).join('')}</div>`
+        ? `<div class="bloques-grid">${bloques.map(_bloqueCardHTML).join('')}</div>
+           ${bloques.length > 1 ? _bloquesLegend(hasPremium) : ''}`
         : '<p class="drill-empty">Información disponible próximamente.</p>'
       }
     `);
   }
 
+  // ── Helpers de tarjeta técnica ─────────────────────────────────────────────
+
+  function _extractBrand(nombre) {
+    const words = String(nombre || '').trim().split(/\s+/);
+    const last = words[words.length - 1] || '';
+    return (last.length > 1 && last === last.toUpperCase() && /[A-Z]/.test(last)) ? last : null;
+  }
+
+  function _parseSpecs(texto) {
+    if (!texto || !texto.trim()) return null;
+    const lines = texto.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) return { type: 'text', text: texto };
+    const avgLen = lines.reduce((s, l) => s + l.length, 0) / lines.length;
+    if (avgLen <= 40) {
+      const pairs = [];
+      for (let i = 0; i < lines.length; i += 2) {
+        pairs.push({ label: lines[i], val: lines[i + 1] || '' });
+      }
+      return { type: 'specs', pairs };
+    }
+    return { type: 'text', text: texto };
+  }
+
+  function _famIconSvg(familia) {
+    if (familia === 'BATERIAS') return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><rect x="2" y="8" width="16" height="8" rx="2"/><path d="M22 11v2"/><path d="M6 12h4"/><path d="M12 12h4"/></svg>`;
+    if (familia === 'LUBRICANTES') return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`;
+    return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>`;
+  }
+
+  function _bloquesLegend(hasPremium) {
+    return `<div class="bloques-legend">
+      <span style="display:flex;align-items:center;gap:6px;"><span class="bloques-legend-dot" style="background:#b0bec5;"></span>Línea estándar</span>
+      ${hasPremium ? `<span style="display:flex;align-items:center;gap:6px;"><span class="bloques-legend-dot" style="background:#27A8E0;"></span>Línea premium</span>` : ''}
+    </div>`;
+  }
+
   function _bloqueCardHTML(b) {
-    // Foto binaria (subida via ERP) tiene prioridad; imagen_url es fallback legacy
     const fotoSrc = b.foto_mimetype
       ? `${ERP}/api/public/landing/foto/productos/${b.id}`
       : (b.imagen_url && b.imagen_url.trim() ? b.imagen_url : null);
-    const imgSection = fotoSrc
-      ? `<div class="subfam-card-img" style="background:#0a1628">
-           <img src="${_esc(fotoSrc)}" alt="${_esc(b.nombre)}" loading="lazy"
-                onerror="this.style.display='none'">
-           <div class="catbox-overlay"></div>
-         </div>`
-      : `<div class="subfam-card-img" style="background:#29AAE1;display:flex;align-items:center;justify-content:center;">
-           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-         </div>`;
 
-    const desc = b.contenido || (b.descripcion || null);
+    const isPremium = (b.subtitulo || '').toLowerCase().includes('premium');
+    const brand     = _extractBrand(b.nombre);
+    const specs     = _parseSpecs(b.contenido || b.descripcion || '');
+
+    const imgSection = `
+      <div class="bcard-img">
+        ${fotoSrc
+          ? `<img src="${_esc(fotoSrc)}" alt="${_esc(b.nombre)}" loading="lazy" onerror="this.style.display='none'">`
+          : `<div class="bcard-img-placeholder">${_famIconSvg(b.familia)}</div>`
+        }
+        ${b.subtitulo ? `<span class="bcard-badge-float">${_esc(b.subtitulo)}</span>` : ''}
+      </div>`;
+
+    let specsHTML = '';
+    if (specs) {
+      if (specs.type === 'specs') {
+        specsHTML = `<div class="bcard-specs">${
+          specs.pairs.map(p => `
+            <div class="bcard-spec-row">
+              <span class="bcard-spec-label">${_esc(p.label)}</span>
+              <span class="bcard-spec-val">${_esc(p.val)}</span>
+            </div>`).join('')
+        }</div>`;
+      } else {
+        specsHTML = `<div class="bcard-specs"><p class="bcard-spec-text">${_esc(specs.text).replace(/\n/g, '<br>')}</p></div>`;
+      }
+    }
 
     return `
-      <div class="subfam-card">
+      <div class="bcard${isPremium ? ' bcard--premium' : ''}">
         ${imgSection}
-        <div class="subfam-card-body">
-          <div class="subfam-card-name">${_esc(b.nombre)}</div>
-          ${b.subtitulo ? `<div class="subfam-card-desc" style="font-weight:600;color:#435664;">${_esc(b.subtitulo)}</div>` : ''}
-          ${desc ? `<div class="subfam-card-desc" style="margin-top:${b.subtitulo ? '4px' : '4px'}">${_esc(desc).replace(/\n/g,'<br>')}</div>` : ''}
+        <div class="bcard-body">
+          ${brand ? `<span class="bcard-brand">${_esc(brand)}</span>` : ''}
+          <div class="bcard-title">${_esc(b.nombre)}</div>
+          ${b.subtitulo ? `<div class="bcard-subtitle">${_esc(b.subtitulo)}</div>` : ''}
         </div>
-      </div>
-    `;
+        ${specsHTML}
+      </div>`;
   }
 
   function _cardHTML(p) {
