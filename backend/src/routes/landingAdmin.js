@@ -200,7 +200,7 @@ router.delete('/subfamilias/:id', guard, (req, res) => {
 
 // ─── PRODUCTOS ────────────────────────────────────────────────────────────────
 
-const PROD_COLS = 'id, familia, subfamilia, subfamilia_id, codigo, marca, nombre, descripcion, contenido, imagen_url, subtitulo, um, presentacion, precio, detalles_tecnicos, foto_mimetype, activo, orden, created_at, updated_at'
+const PROD_COLS = 'id, familia, subfamilia, subfamilia_id, codigo, marca, nombre, descripcion, contenido, imagen_url, subtitulo, sae, tipo, aplicaciones, beneficios, presentaciones, ficha_tecnica_url, compatibilidad, um, presentacion, precio, detalles_tecnicos, foto_mimetype, activo, orden, created_at, updated_at'
 
 // GET /api/admin/landing/productos
 router.get('/productos', guard, (req, res) => {
@@ -216,8 +216,9 @@ router.get('/productos', guard, (req, res) => {
 router.post('/productos', [...guard, uploadLanding.single('foto')], (req, res) => {
   try {
     const { familia, subfamilia, subfamilia_id, codigo, marca, nombre,
-            descripcion, contenido, imagen_url, subtitulo, um, presentacion,
-            precio, detalles_tecnicos, activo = 1, orden = 0 } = req.body
+            descripcion, contenido, imagen_url, subtitulo,
+            sae, tipo, aplicaciones, beneficios, presentaciones, ficha_tecnica_url, compatibilidad,
+            um, presentacion, precio, detalles_tecnicos, activo = 1, orden = 0 } = req.body
     if (!nombre && !descripcion) return res.status(400).json({ error: 'nombre o descripcion son requeridos' })
 
     const foto_base64   = req.file ? req.file.buffer.toString('base64') : null
@@ -226,13 +227,16 @@ router.post('/productos', [...guard, uploadLanding.single('foto')], (req, res) =
     db.prepare(`
       INSERT INTO landing_productos
         (familia, subfamilia, subfamilia_id, codigo, marca, nombre, descripcion, contenido, imagen_url, subtitulo,
+         sae, tipo, aplicaciones, beneficios, presentaciones, ficha_tecnica_url, compatibilidad,
          um, presentacion, precio, detalles_tecnicos, foto_base64, foto_mimetype, activo, orden)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       familia || null, subfamilia || null,
       subfamilia_id ? parseInt(subfamilia_id) : null,
       codigo || null, marca || null, nombre || null, descripcion || null, contenido || null,
       imagen_url || null, subtitulo || null,
+      sae || null, tipo || null, aplicaciones || null, beneficios || null,
+      presentaciones || null, ficha_tecnica_url || null, compatibilidad || null,
       um || null, presentacion || null,
       precio != null && precio !== '' ? parseFloat(precio) : null,
       detalles_tecnicos || null, foto_base64, foto_mimetype,
@@ -254,8 +258,9 @@ router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res
     if (!existing) return res.status(404).json({ error: 'Producto no encontrado' })
 
     const { familia, subfamilia, subfamilia_id, codigo, marca, nombre,
-            descripcion, contenido, imagen_url, subtitulo, um, presentacion,
-            precio, detalles_tecnicos, activo, orden } = req.body
+            descripcion, contenido, imagen_url, subtitulo,
+            sae, tipo, aplicaciones, beneficios, presentaciones, ficha_tecnica_url, compatibilidad,
+            um, presentacion, precio, detalles_tecnicos, activo, orden } = req.body
 
     const foto_base64   = req.file ? req.file.buffer.toString('base64') : existing.foto_base64
     const foto_mimetype = req.file ? req.file.mimetype : existing.foto_mimetype
@@ -272,6 +277,13 @@ router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res
         contenido         = COALESCE(?, contenido),
         imagen_url        = COALESCE(?, imagen_url),
         subtitulo         = COALESCE(?, subtitulo),
+        sae               = COALESCE(?, sae),
+        tipo              = COALESCE(?, tipo),
+        aplicaciones      = COALESCE(?, aplicaciones),
+        beneficios        = COALESCE(?, beneficios),
+        presentaciones    = COALESCE(?, presentaciones),
+        ficha_tecnica_url = COALESCE(?, ficha_tecnica_url),
+        compatibilidad    = COALESCE(?, compatibilidad),
         um                = COALESCE(?, um),
         presentacion      = COALESCE(?, presentacion),
         precio            = CASE WHEN ? IS NOT NULL THEN CAST(? AS REAL) ELSE precio END,
@@ -287,6 +299,8 @@ router.put('/productos/:id', [...guard, uploadLanding.single('foto')], (req, res
       subfamilia_id != null ? subfamilia_id : null, subfamilia_id != null ? parseInt(subfamilia_id) : null,
       codigo || null, marca || null, nombre || null, descripcion || null, contenido || null,
       imagen_url || null, subtitulo || null,
+      sae || null, tipo || null, aplicaciones || null, beneficios || null,
+      presentaciones || null, ficha_tecnica_url || null, compatibilidad || null,
       um || null, presentacion || null,
       precio != null && precio !== '' ? precio : null, precio != null && precio !== '' ? parseFloat(precio) : null,
       detalles_tecnicos || null, foto_base64, foto_mimetype,

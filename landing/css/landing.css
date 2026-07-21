@@ -382,3 +382,187 @@
   object-fit: cover;
   object-position: center center;
 }
+
+/* ── bcard clickeable ────────────────────────────────────────── */
+.bcard { cursor: pointer; }
+
+/* ── Ficha individual de producto ────────────────────────────── */
+.ficha-prod-wrap {
+  display: flex;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  margin: 0 0 0;
+  min-height: 400px;
+}
+.ficha-prod-img {
+  width: 50%;
+  background: #f5f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  box-sizing: border-box;
+  min-height: 400px;
+}
+.ficha-prod-img img {
+  max-width: 85%;
+  max-height: 380px;
+  object-fit: contain;
+  display: block;
+}
+.ficha-prod-data {
+  width: 50%;
+  background: #016EB9;
+  padding: 40px;
+  box-sizing: border-box;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+.ficha-prod-breadcrumb {
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.ficha-prod-breadcrumb a {
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color .15s;
+}
+.ficha-prod-breadcrumb a:hover { color: rgba(255,255,255,0.9); text-decoration: underline; }
+.ficha-prod-breadcrumb span { color: rgba(255,255,255,0.9); }
+.ficha-prod-nombre {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 4px;
+  font-family: 'Space Grotesk', sans-serif;
+  line-height: 1.2;
+}
+.ficha-prod-sae {
+  font-size: 18px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 16px;
+}
+.ficha-prod-tipo-badge {
+  display: inline-block;
+  background: rgba(255,255,255,0.15);
+  color: #ffffff;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+}
+.ficha-prod-desc {
+  font-size: 14px;
+  color: rgba(255,255,255,0.85);
+  line-height: 1.7;
+  margin-bottom: 24px;
+  margin-top: 8px;
+}
+.ficha-prod-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.ficha-prod-pres-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ficha-prod-pres-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #ffffff;
+}
+.ficha-prod-doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #ffffff;
+  text-decoration: underline;
+  transition: color .15s;
+}
+.ficha-prod-doc-link:hover { color: rgba(255,255,255,0.8); }
+.ficha-prod-ctas {
+  margin-top: auto;
+  padding-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ficha-prod-cta-wa {
+  background: #ffffff;
+  color: #016EB9;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s;
+  font-family: 'Inter', sans-serif;
+}
+.ficha-prod-cta-wa:hover { background: #f0f0f0; }
+
+/* ── Sección características ─────────────────────────────────── */
+.ficha-caract-section {
+  background: #ffffff;
+  padding: 0;
+  border-top: 1px solid #e0e7f0;
+}
+.ficha-caract { padding: 40px 0; }
+.ficha-caract-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a2332;
+  margin: 0 0 20px;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.ficha-caract-list { list-style: none; padding: 0; margin: 0; }
+.ficha-caract-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: #4a5568;
+  line-height: 2;
+}
+
+/* ── Sección productos relacionados ──────────────────────────── */
+.ficha-rel-section {
+  background: #f8fafc;
+  padding: 0;
+  border-top: 1px solid #e0e7f0;
+}
+.ficha-relacionados { padding: 40px 0 60px; }
+.ficha-relacionados-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0c1523;
+  margin: 0 0 20px;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* ── Responsive ficha ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .ficha-prod-wrap { flex-direction: column; min-height: unset; }
+  .ficha-prod-img  { width: 100%; height: 250px; min-height: unset; padding: 24px; }
+  .ficha-prod-data { width: 100%; padding: 24px; }
+  .ficha-prod-nombre { font-size: 22px; }
+  .ficha-prod-sae    { font-size: 15px; }
+}

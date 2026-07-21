@@ -149,12 +149,31 @@ router.get('/landing/productos', (_req, res) => {
     const rows = db.prepare(`
       SELECT id, familia, subfamilia, subfamilia_id, codigo, marca, nombre,
              descripcion, contenido, imagen_url, subtitulo, foto_mimetype,
+             sae, tipo, aplicaciones, beneficios, presentaciones, ficha_tecnica_url, compatibilidad,
              um, presentacion, precio, detalles_tecnicos,
              activo, orden, created_at, updated_at
       FROM landing_productos WHERE activo = 1
       ORDER BY familia ASC, orden ASC, id ASC
     `).all()
     res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/public/landing/productos/:id — ficha individual de producto
+router.get('/landing/productos/:id', (req, res) => {
+  try {
+    const row = db.prepare(`
+      SELECT id, familia, subfamilia, subfamilia_id, codigo, marca, nombre,
+             descripcion, contenido, imagen_url, subtitulo, foto_mimetype,
+             sae, tipo, aplicaciones, beneficios, presentaciones, ficha_tecnica_url, compatibilidad,
+             um, presentacion, precio, detalles_tecnicos,
+             activo, orden, created_at, updated_at
+      FROM landing_productos WHERE id = ?
+    `).get(parseInt(req.params.id))
+    if (!row) return res.status(404).json({ error: 'Producto no encontrado' })
+    res.json(row)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

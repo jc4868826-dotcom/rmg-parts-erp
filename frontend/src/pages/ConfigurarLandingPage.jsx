@@ -233,6 +233,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
   const FORM_INIT = {
     familia: 'NEUMATICOS', subfamilia_id: '', subfamilia: '',
     nombre: '', subtitulo: '', contenido: '', hasFoto: false, orden: 0, activo: true,
+    sae: '', tipo: '', aplicaciones: '', beneficios: '', presentaciones: '', ficha_tecnica_url: '', compatibilidad: '',
   }
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -286,6 +287,13 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
       hasFoto: !!p.foto_mimetype,
       orden: p.orden ?? 0,
       activo: !!p.activo,
+      sae: p.sae || '',
+      tipo: p.tipo || '',
+      aplicaciones: p.aplicaciones || '',
+      beneficios: p.beneficios || '',
+      presentaciones: p.presentaciones || '',
+      ficha_tecnica_url: p.ficha_tecnica_url || '',
+      compatibilidad: p.compatibilidad || '',
     })
     setEditId(p.id)
     setShowForm(true)
@@ -300,6 +308,13 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
     fd.append('nombre', form.nombre)
     fd.append('subtitulo', form.subtitulo)
     fd.append('contenido', form.contenido)
+    fd.append('sae', form.sae)
+    fd.append('tipo', form.tipo)
+    fd.append('aplicaciones', form.aplicaciones)
+    fd.append('beneficios', form.beneficios)
+    fd.append('presentaciones', form.presentaciones)
+    fd.append('ficha_tecnica_url', form.ficha_tecnica_url)
+    fd.append('compatibilidad', form.compatibilidad)
     fd.append('orden', form.orden)
     fd.append('activo', form.activo ? '1' : '0')
     if (fotoRef.current?.files[0]) fd.append('foto', fotoRef.current.files[0])
@@ -372,10 +387,44 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
                 </Field>
               </div>
             </div>
-            <Field label="Descripción (opcional, texto o HTML simple)">
+            <Field label="Descripción / Specs (una línea por ítem, ✓ para beneficios)">
               <textarea className="rmg-input" rows={5}
-                placeholder="Descripción adicional. Puede incluir HTML: <p>, <ul>, <li>, <strong>…"
+                placeholder="Cada línea aparece como una fila en la tarjeta. Líneas con ✓ aparecen como pills."
                 value={form.contenido} onChange={setF('contenido')} />
+            </Field>
+            <Field label="SAE (solo lubricantes)">
+              <input className="rmg-input" placeholder="5W-30 / 5W-40" value={form.sae} onChange={setF('sae')} />
+            </Field>
+            <Field label="Tipo">
+              <select className="rmg-input" value={form.tipo} onChange={setF('tipo')}>
+                <option value="">— Sin especificar —</option>
+                <option value="100% Sintético">100% Sintético</option>
+                <option value="Sintético">Sintético</option>
+                <option value="Semisintético">Semisintético</option>
+                <option value="Mineral">Mineral</option>
+                <option value="Premium">Premium</option>
+              </select>
+            </Field>
+            <Field label="Presentaciones">
+              <input className="rmg-input" placeholder="1L, 1 Gal, 5 Gal, 55 Gal" value={form.presentaciones} onChange={setF('presentaciones')} />
+            </Field>
+            <Field label="URL Ficha Técnica (PDF)">
+              <input className="rmg-input" placeholder="https://..." value={form.ficha_tecnica_url} onChange={setF('ficha_tecnica_url')} />
+            </Field>
+            <Field label="Aplicaciones">
+              <textarea className="rmg-input" rows={2}
+                placeholder="Motores gasolina con inyección electrónica..."
+                value={form.aplicaciones} onChange={setF('aplicaciones')} />
+            </Field>
+            <Field label="Beneficios (uno por línea — aparecen con ✓ en la ficha)">
+              <textarea className="rmg-input" rows={3}
+                placeholder="Mayor vida útil del motor&#10;Protección en arranques en frío&#10;Reduce el consumo de combustible"
+                value={form.beneficios} onChange={setF('beneficios')} />
+            </Field>
+            <Field label="Compatibilidad">
+              <textarea className="rmg-input" rows={2}
+                placeholder="Toyota, Nissan, Hyundai..."
+                value={form.compatibilidad} onChange={setF('compatibilidad')} />
             </Field>
             <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--rmg-off)' }}>
               <input type="checkbox" checked={form.activo} onChange={setF('activo')} className="w-4 h-4 rounded" />

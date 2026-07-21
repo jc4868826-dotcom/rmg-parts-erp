@@ -26,6 +26,7 @@
   // Estado drill-down
   let _activeFam = null;  // key: 'NEUMATICOS'|'BATERIAS'|'LUBRICANTES'
   let _activeSub = null;  // id numérico de landing_subfamilias
+  let _activeProd = null; // id numérico de landing_productos (ficha individual)
 
   // ─── Init ──────────────────────────────────────────────────────────────────
   async function init() {
@@ -185,6 +186,7 @@
   function selectFamilia(famKey) {
     _activeFam = famKey;
     _activeSub = null;
+    _activeProd = null;
     _renderDrillDown();
     const el = document.getElementById('drilldown-section');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -193,6 +195,21 @@
   function selectSub(subId, famKey) {
     if (famKey) _activeFam = famKey;
     _activeSub = subId;
+    _activeProd = null;
+    _renderDrillDown();
+    const el = document.getElementById('drilldown-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function selectProducto(prodId) {
+    _activeProd = prodId;
+    _renderDrillDown();
+    const el = document.getElementById('drilldown-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function backToProductos() {
+    _activeProd = null;
     _renderDrillDown();
     const el = document.getElementById('drilldown-section');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -201,11 +218,13 @@
   function backToFamilias() {
     _activeFam = null;
     _activeSub = null;
+    _activeProd = null;
     _renderDrillDown();
   }
 
   function backToSubs() {
     _activeSub = null;
+    _activeProd = null;
     _renderDrillDown();
     const el = document.getElementById('drilldown-section');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -215,11 +234,134 @@
     return `<section class="drilldown-section"><div class="container">${inner}</div></section>`;
   }
 
+  function _renderFichaHTML(b) {
+    const fam      = FAMILIAS.find(f => f.key === _activeFam);
+    const famLabel = fam ? fam.label : (_activeFam || '');
+    const sub      = _subfamilias.find(s => s.id === _activeSub);
+    const subLabel = sub ? sub.nombre : '';
+
+    const fotoSrc = b.foto_mimetype
+      ? `${ERP}/api/public/landing/foto/productos/${b.id}`
+      : (b.imagen_url && b.imagen_url.trim() ? b.imagen_url : null);
+
+    const waMsg = `Hola, necesito información sobre ${b.nombre}${b.sae ? ' ' + b.sae : ''}. Vi su catálogo en rmgautoparts.cl`;
+    const waUrl = _waLink(waMsg);
+
+    const presList   = (b.presentaciones || '').split(',').map(p => p.trim()).filter(Boolean);
+    const benefLines = (b.beneficios     || '').split('\n').map(l => l.trim()).filter(Boolean);
+    const aplicText  = (b.aplicaciones   || '').trim();
+    const hasCaract  = benefLines.length > 0 || aplicText.length > 0;
+
+    const relacionados = _productos.filter(p => p.subfamilia_id === _activeSub && p.id !== b.id);
+
+    const imgHTML = fotoSrc
+      ? `<img src="${_esc(fotoSrc)}" alt="${_esc(b.nombre)}" loading="lazy" onerror="this.style.display='none'">`
+      : `<div class="bcard-img-placeholder" style="display:flex;align-items:center;justify-content:center">${_famIconSvg(b.familia)}</div>`;
+
+    const presHTML = presList.length ? `
+      <div style="margin-bottom:24px">
+        <div class="ficha-prod-section-label">PRESENTACIONES</div>
+        <div class="ficha-prod-pres-row">
+          ${presList.map(p => `<div class="ficha-prod-pres-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9h18M9 21V9M15 21V9M3 3h18v6H3z"/></svg>
+            ${_esc(p)}
+          </div>`).join('')}
+        </div>
+      </div>` : '';
+
+    const docsHTML = b.ficha_tecnica_url ? `
+      <div style="margin-bottom:24px">
+        <div class="ficha-prod-section-label">DOCUMENTOS</div>
+        <a href="${_esc(b.ficha_tecnica_url)}" target="_blank" rel="noopener" class="ficha-prod-doc-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Ficha Técnica
+        </a>
+      </div>` : '';
+
+    const waIconSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.001 2.003c-5.522 0-10 4.477-10 10 0 1.765.46 3.464 1.334 4.965L2 22l5.164-1.323A9.953 9.953 0 0012 22.003c5.523 0 10-4.477 10-10s-4.477-10-9.999-10zm0 18.166a8.14 8.14 0 01-4.16-1.14l-.298-.177-3.065.785.82-2.988-.194-.307a8.16 8.16 0 01-1.264-4.339c0-4.512 3.672-8.183 8.184-8.183 4.512 0 8.183 3.671 8.183 8.183-.002 4.512-3.672 8.166-8.206 8.166z"/></svg>`;
+
+    const checkSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0071BD" stroke-width="2.5" aria-hidden="true" style="flex-shrink:0;margin-top:4px"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+    const caractSection = hasCaract ? `
+      <section class="ficha-caract-section">
+        <div class="container">
+          <div class="ficha-caract">
+            <h2 class="ficha-caract-title">Características</h2>
+            <ul class="ficha-caract-list">
+              ${benefLines.length
+                ? benefLines.map(l => `<li class="ficha-caract-item">${checkSvg}${_esc(l)}</li>`).join('')
+                : `<li class="ficha-caract-item">${checkSvg}${_esc(aplicText)}</li>`
+              }
+            </ul>
+          </div>
+        </div>
+      </section>` : '';
+
+    const relSection = relacionados.length ? `
+      <section class="ficha-rel-section">
+        <div class="container">
+          <div class="ficha-relacionados">
+            <h2 class="ficha-relacionados-title">Más productos en ${_esc(subLabel)}</h2>
+            <div class="bloques-grid">${relacionados.map(_bloqueCardHTML).join('')}</div>
+          </div>
+        </div>
+      </section>` : '';
+
+    return `
+      <section class="drilldown-section" style="padding-bottom:0;border-bottom:none">
+        <div class="container">
+          <div class="drilldown-header">
+            <button class="drill-back" onclick="Landing.backToProductos()">← ${_esc(subLabel || famLabel)}</button>
+          </div>
+          <div class="ficha-prod-wrap">
+            <div class="ficha-prod-img">${imgHTML}</div>
+            <div class="ficha-prod-data">
+              <div class="ficha-prod-breadcrumb">
+                <a onclick="Landing.backToFamilias()">Inicio</a> ›
+                <a onclick="Landing.backToSubs()">${_esc(famLabel)}</a> ›
+                <a onclick="Landing.backToProductos()">${_esc(subLabel)}</a> ›
+                <span>${_esc(b.nombre)}</span>
+              </div>
+              <h1 class="ficha-prod-nombre">${_esc(b.nombre)}</h1>
+              ${b.sae  ? `<div class="ficha-prod-sae">${_esc(b.sae)}</div>` : ''}
+              ${b.tipo ? `<span class="ficha-prod-tipo-badge">${_esc(b.tipo)}</span>` : ''}
+              ${(b.contenido || b.descripcion)
+                ? `<p class="ficha-prod-desc">${_esc(b.contenido || b.descripcion || '').replace(/\n/g, '<br>')}</p>`
+                : ''}
+              ${presHTML}
+              ${docsHTML}
+              <div class="ficha-prod-ctas">
+                <a href="${_esc(waUrl)}" target="_blank" rel="noopener" class="ficha-prod-cta-wa">
+                  ${waIconSvg}
+                  Cotizar por WhatsApp
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      ${caractSection}
+      ${relSection}`;
+  }
+
   function _renderDrillDown() {
     const el = document.getElementById('drilldown-section');
     if (!el) return;
 
     if (!_activeFam) { el.innerHTML = ''; return; }
+
+    if (_activeProd) {
+      const prod = _productos.find(p => p.id === _activeProd);
+      if (!prod) { _activeProd = null; _renderDrillDown(); return; }
+      el.innerHTML = _renderFichaHTML(prod);
+      return;
+    }
 
     const fam = FAMILIAS.find(f => f.key === _activeFam);
     const famLabel = fam ? fam.label : _activeFam;
@@ -330,7 +472,7 @@
       : '';
 
     return `
-      <div class="bcard${isPremium ? ' bcard--premium' : ''}">
+      <div class="bcard${isPremium ? ' bcard--premium' : ''}" onclick="Landing.selectProducto(${b.id})">
         <div class="bcard-body">
           ${badgesHTML}
           <div class="bcard-title">${_esc(b.nombre)}</div>
@@ -461,7 +603,8 @@
 
   // ─── Expose ────────────────────────────────────────────────────────────────
   window.Landing = {
-    init, heroGo, selectFamilia, selectSub, backToFamilias, backToSubs,
+    init, heroGo, selectFamilia, selectSub, selectProducto,
+    backToFamilias, backToSubs, backToProductos,
     _schInput, _schClear, getWaUrl,
   };
   Object.defineProperty(window.Landing, '_heroIdx', { get: () => _heroIdx });

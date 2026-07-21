@@ -1337,6 +1337,21 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_productos_imagen_subtitulo_v1')
     console.log('✅ Migración landing_productos_imagen_subtitulo_v1 — imagen_url y subtitulo añadidos a landing_productos')
   }
+
+  // Migration 22: landing_productos_ficha_v1 — campos de ficha técnica individual
+  const m22 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('landing_productos_ficha_v1')
+  if (!m22) {
+    const cols = db.prepare('PRAGMA table_info(landing_productos)').all().map(c => c.name)
+    if (!cols.includes('sae'))               db.exec('ALTER TABLE landing_productos ADD COLUMN sae TEXT')
+    if (!cols.includes('tipo'))              db.exec('ALTER TABLE landing_productos ADD COLUMN tipo TEXT')
+    if (!cols.includes('aplicaciones'))      db.exec('ALTER TABLE landing_productos ADD COLUMN aplicaciones TEXT')
+    if (!cols.includes('beneficios'))        db.exec('ALTER TABLE landing_productos ADD COLUMN beneficios TEXT')
+    if (!cols.includes('presentaciones'))    db.exec('ALTER TABLE landing_productos ADD COLUMN presentaciones TEXT')
+    if (!cols.includes('ficha_tecnica_url')) db.exec('ALTER TABLE landing_productos ADD COLUMN ficha_tecnica_url TEXT')
+    if (!cols.includes('compatibilidad'))    db.exec('ALTER TABLE landing_productos ADD COLUMN compatibilidad TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_productos_ficha_v1')
+    console.log('✅ Migración landing_productos_ficha_v1 — sae, tipo, aplicaciones, beneficios, presentaciones, ficha_tecnica_url, compatibilidad añadidos a landing_productos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
