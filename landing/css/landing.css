@@ -282,13 +282,14 @@
   display: flex;
   flex-direction: row;
   background: #ffffff;
-  border: 1px solid #e5e8ec;
+  border: 1px solid #e2e6ec;
   border-radius: 12px;
   overflow: hidden;
   min-height: 180px;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  transition: all 0.2s ease;
 }
-.bcard:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.07); transform: translateY(-2px); }
+.bcard:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.08); transform: translateY(-2px); border-color: #c8d0da; }
 .bcard--premium { border-left: 3px solid #27A8E0; }
 
 /* zona contenido (izquierda) */
@@ -299,44 +300,44 @@
   flex-direction: column;
   min-width: 0;
 }
-.bcard-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.bcard-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .bcard-brand {
   display: inline-block;
-  background: #e8f6fc;
-  color: #016EB9;
+  background: #016EB9;
+  color: #ffffff;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 3px 8px;
+  padding: 3px 10px;
   border-radius: 4px;
 }
-.bcard-linea {
-  display: inline-block;
-  background: #f4f5f7;
-  color: #6b7a8d;
-  font-size: 10px;
-  font-weight: 500;
-  padding: 3px 8px;
-  border-radius: 4px;
-}
-.bcard-linea--premium { background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; }
-.bcard-title { font-size: 15px; font-weight: 600; color: #1a2332; line-height: 1.35; margin-bottom: 10px; }
-.bcard-spec-text { font-size: 12px; color: #5a6577; line-height: 1.8; }
+.bcard-linea { font-size: 12px; color: #27A8E0; font-weight: 500; margin-bottom: 12px; }
+.bcard-linea--premium { color: #0e7490; }
+.bcard-title { font-size: 16px; font-weight: 700; color: #0f1d2e; line-height: 1.3; margin-bottom: 2px; }
+.bcard-spec-text { font-size: 12px; color: #4a5568; line-height: 1.85; }
 .bcard-spec-text span { display: block; }
-.bcard-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
-.bcard-pill { font-size: 10px; color: #016EB9; background: #e8f6fc; padding: 3px 10px; border-radius: 12px; }
+.bcard-spec-text .aplicaciones { color: #6b7a8d; font-style: italic; margin-top: 4px; }
+.bcard-benefits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e8ecf0;
+}
+.bcard-pill { font-size: 10px; color: #2d7a3a; background: #eef7ed; padding: 4px 10px; border-radius: 14px; font-weight: 500; }
 
 /* zona imagen (derecha) */
 .bcard-img {
   width: 160px;
   flex-shrink: 0;
   align-self: stretch;
-  background: #f5f7fa;
+  background: linear-gradient(135deg, #f8fafb 0%, #eef2f6 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-left: 1px solid #f0f2f5;
+  border-left: 1px solid #eef1f5;
   padding: 16px;
   box-sizing: border-box;
 }
@@ -361,7 +362,7 @@
     width: 100%;
     height: 140px;
     border-left: none;
-    border-bottom: 1px solid #f0f2f5;
+    border-bottom: 1px solid #eef1f5;
     align-self: auto;
   }
   .bcard-img img { max-width: 100px; max-height: 100px; }

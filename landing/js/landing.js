@@ -307,20 +307,26 @@
     const brand = _extractBrand(b.nombre);
 
     const lines    = (b.contenido || '').split('\n').filter(l => l.trim() !== '');
-    const specs    = lines.filter(l => !l.trim().startsWith('✓'));
-    const benefits = lines.filter(l =>  l.trim().startsWith('✓'));
+    const specs    = lines.filter(l => !l.trim().match(/^[✓✔]/u));
+    const benefits = lines.filter(l =>  l.trim().match(/^[✓✔]/u));
 
-    const badgesHTML = (brand || b.subtitulo) ? `
-      <div class="bcard-badges">
-        ${brand ? `<span class="bcard-brand">${_esc(brand)}</span>` : ''}
-        ${b.subtitulo ? `<span class="bcard-linea${isPremium ? ' bcard-linea--premium' : ''}">${_esc(b.subtitulo)}</span>` : ''}
-      </div>` : '';
+    const badgesHTML = brand
+      ? `<div class="bcard-badges"><span class="bcard-brand">${_esc(brand)}</span></div>`
+      : '';
+
+    const lineaHTML = b.subtitulo
+      ? `<div class="bcard-linea${isPremium ? ' bcard-linea--premium' : ''}">${_esc(b.subtitulo)}</div>`
+      : '';
 
     const specsHTML = specs.length
-      ? `<div class="bcard-spec-text">${specs.map(l => `<span>${_esc(l)}</span>`).join('')}</div>`
+      ? `<div class="bcard-spec-text">${specs.map(l => {
+          const cls = l.trim().startsWith('Aplicaciones:') ? ' class="aplicaciones"' : '';
+          return `<span${cls}>${_esc(l)}</span>`;
+        }).join('')}</div>`
       : '';
-    const pillsHTML = benefits.length
-      ? `<div class="bcard-pills">${benefits.map(l => `<span class="bcard-pill">${_esc(l.trim().replace(/^✓\s*/, ''))}</span>`).join('')}</div>`
+
+    const benefitsHTML = benefits.length
+      ? `<div class="bcard-benefits">${benefits.map(l => `<span class="bcard-pill">${_esc(l.trim().replace(/^[✓✔]\s*/u, ''))}</span>`).join('')}</div>`
       : '';
 
     return `
@@ -328,7 +334,9 @@
         <div class="bcard-body">
           ${badgesHTML}
           <div class="bcard-title">${_esc(b.nombre)}</div>
+          ${lineaHTML}
           ${specsHTML}
+          ${benefitsHTML}
         </div>
         <div class="bcard-img">
           ${fotoSrc
