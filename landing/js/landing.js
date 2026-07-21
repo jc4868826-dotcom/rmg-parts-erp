@@ -298,25 +298,6 @@
     return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c0c8d0" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>`;
   }
 
-  function _parseContenido(raw) {
-    const lines = (raw || '').trim().split('\n').map(l => l.trim()).filter(Boolean);
-    const specRows = [];
-    const pills = [];
-    let i = 0;
-    while (i < lines.length) {
-      if (lines[i].startsWith('✓')) {
-        pills.push(lines[i].slice(1).trim());
-        i++;
-      } else if (i + 1 < lines.length && !lines[i + 1].startsWith('✓')) {
-        specRows.push([lines[i], lines[i + 1]]);
-        i += 2;
-      } else {
-        i++;
-      }
-    }
-    return { specRows, pills, raw: lines };
-  }
-
   function _bloqueCardHTML(b) {
     const fotoSrc = b.foto_mimetype
       ? `${ERP}/api/public/landing/foto/productos/${b.id}`
@@ -324,8 +305,10 @@
 
     const isPremium = (b.subtitulo || '').toLowerCase().includes('premium');
     const brand = _extractBrand(b.nombre);
-    const { specRows, pills, raw } = _parseContenido(b.contenido);
-    const hasStructured = specRows.length > 0 || pills.length > 0;
+
+    const lines    = (b.contenido || '').split('\n').filter(l => l.trim() !== '');
+    const specs    = lines.filter(l => !l.trim().startsWith('✓'));
+    const benefits = lines.filter(l =>  l.trim().startsWith('✓'));
 
     const badgesHTML = (brand || b.subtitulo) ? `
       <div class="bcard-badges">
@@ -333,18 +316,12 @@
         ${b.subtitulo ? `<span class="bcard-linea${isPremium ? ' bcard-linea--premium' : ''}">${_esc(b.subtitulo)}</span>` : ''}
       </div>` : '';
 
-    let specsHTML = '';
-    if (hasStructured) {
-      const rowsHTML = specRows.map(([lbl, val]) =>
-        `<div class="bcard-spec-row"><span class="bcard-spec-label">${_esc(lbl)}</span><span class="bcard-spec-val">${_esc(val)}</span></div>`
-      ).join('');
-      const pillsHTML = pills.length
-        ? `<div class="bcard-pills">${pills.map(p => `<span class="bcard-pill">${_esc(p)}</span>`).join('')}</div>`
-        : '';
-      specsHTML = `<div class="bcard-spec-rows">${rowsHTML}</div>${pillsHTML}`;
-    } else if (raw.length) {
-      specsHTML = `<div class="bcard-spec-text">${raw.map(l => `<span style="display:block">${_esc(l)}</span>`).join('')}</div>`;
-    }
+    const specsHTML = specs.length
+      ? `<div class="bcard-spec-text">${specs.map(l => `<span>${_esc(l)}</span>`).join('')}</div>`
+      : '';
+    const pillsHTML = benefits.length
+      ? `<div class="bcard-pills">${benefits.map(l => `<span class="bcard-pill">${_esc(l.trim().replace(/^✓\s*/, ''))}</span>`).join('')}</div>`
+      : '';
 
     return `
       <div class="bcard${isPremium ? ' bcard--premium' : ''}">
