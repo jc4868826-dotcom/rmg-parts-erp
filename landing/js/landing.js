@@ -184,9 +184,14 @@
 
   // ─── Drill-down (familia → subfamilias → productos) ────────────────────────
   function selectFamilia(famKey) {
-    _activeFam = famKey;
-    _activeSub = null;
+    _activeFam  = famKey;
+    _activeSub  = null;
     _activeProd = null;
+    if (famKey === 'LUBRICANTES') {
+      const subs = _subfamilias.filter(s => s.familia === 'LUBRICANTES')
+        .sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.id - b.id);
+      if (subs.length) _activeSub = subs[0].id;
+    }
     _renderDrillDown();
     const el = document.getElementById('drilldown-section');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -232,6 +237,73 @@
 
   function _wrap(inner) {
     return `<section class="drilldown-section"><div class="container">${inner}</div></section>`;
+  }
+
+  function _lubProductCardHTML(p) {
+    const fotoSrc = p.foto_mimetype
+      ? `${ERP}/api/public/landing/foto/productos/${p.id}`
+      : (p.imagen_url && p.imagen_url.trim() ? p.imagen_url : null);
+    const desc = p.subtitulo || '';
+
+    const imgContent = fotoSrc
+      ? `<img src="${_esc(fotoSrc)}" alt="${_esc(p.nombre)}" loading="lazy"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="lub-prod-no-img" style="display:none">${_famIconSvg(p.familia)}</div>`
+      : `<div class="lub-prod-no-img">${_famIconSvg(p.familia)}</div>`;
+
+    return `<div class="lub-prod-card" onclick="Landing.selectProducto(${p.id})">
+      <div class="lub-prod-card-img">${imgContent}</div>
+      <div class="lub-prod-card-body">
+        <div class="lub-prod-card-name">${_esc(p.nombre)}</div>
+        ${desc ? `<div class="lub-prod-card-desc">${_esc(desc)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  function _renderLubricantesSidebar() {
+    const subs = _subfamilias
+      .filter(s => s.familia === 'LUBRICANTES')
+      .sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.id - b.id);
+
+    const activeSub = subs.find(s => s.id === _activeSub) || subs[0];
+    const prods     = activeSub ? _productos.filter(p => p.subfamilia_id === activeSub.id) : [];
+
+    const sidebarItems = subs.map(s => {
+      const cnt      = _productos.filter(p => p.subfamilia_id === s.id).length;
+      const isActive = activeSub && s.id === activeSub.id;
+      return `<li class="lub-sidebar-item${isActive ? ' active' : ''}" onclick="Landing.selectSub(${s.id},'LUBRICANTES')">
+        <div class="lub-sidebar-item-name">${_esc(s.nombre)}</div>
+        <div class="lub-sidebar-item-count">${cnt > 0 ? cnt + ' producto' + (cnt !== 1 ? 's' : '') : 'Próximamente'}</div>
+      </li>`;
+    }).join('');
+
+    const prodCards  = prods.length ? prods.map(_lubProductCardHTML).join('') : '<p class="drill-empty">Próximamente</p>';
+    const titleText  = activeSub ? _esc(activeSub.nombre) : 'Lubricantes';
+    const countText  = prods.length > 0 ? `${prods.length} producto${prods.length !== 1 ? 's' : ''}` : '';
+    const breadcrumb = activeSub ? `Lubricantes › ${_esc(activeSub.nombre)}` : 'Lubricantes';
+
+    return `<section class="drilldown-section">
+      <div class="container">
+        <div class="drilldown-header">
+          <button class="drill-back" onclick="Landing.backToFamilias()">← Volver</button>
+          <h2 class="drill-title">Lubricantes</h2>
+        </div>
+        <div class="lub-layout">
+          <aside class="lub-sidebar">
+            <div class="lub-sidebar-title">Categorías</div>
+            <ul class="lub-sidebar-list">${sidebarItems}</ul>
+          </aside>
+          <div class="lub-grid-area">
+            <div class="lub-grid-header">
+              <div class="lub-breadcrumb">${breadcrumb}</div>
+              <h3 class="lub-grid-title">${titleText}</h3>
+              ${countText ? `<div class="lub-grid-count">${countText}</div>` : ''}
+            </div>
+            <div class="lub-prod-grid">${prodCards}</div>
+          </div>
+        </div>
+      </div>
+    </section>`;
   }
 
   function _renderFichaHTML(b) {
@@ -324,7 +396,7 @@
             <div class="ficha-prod-data">
               <div class="ficha-prod-breadcrumb">
                 <a onclick="Landing.backToFamilias()">Inicio</a> ›
-                <a onclick="Landing.backToSubs()">${_esc(famLabel)}</a> ›
+                <a onclick="${_activeFam === 'LUBRICANTES' ? 'Landing.backToProductos()' : 'Landing.backToSubs()'}">${_esc(famLabel)}</a> ›
                 <a onclick="Landing.backToProductos()">${_esc(subLabel)}</a> ›
                 <span>${_esc(b.nombre)}</span>
               </div>
@@ -360,6 +432,16 @@
       const prod = _productos.find(p => p.id === _activeProd);
       if (!prod) { _activeProd = null; _renderDrillDown(); return; }
       el.innerHTML = _renderFichaHTML(prod);
+      return;
+    }
+
+    if (_activeFam === 'LUBRICANTES') {
+      if (!_activeSub) {
+        const subs = _subfamilias.filter(s => s.familia === 'LUBRICANTES')
+          .sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.id - b.id);
+        if (subs.length) _activeSub = subs[0].id;
+      }
+      el.innerHTML = _renderLubricantesSidebar();
       return;
     }
 
