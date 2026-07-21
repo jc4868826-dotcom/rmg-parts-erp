@@ -284,7 +284,7 @@
     `);
   }
 
-  // ── Helpers de tarjeta compacta horizontal ────────────────────────────────
+  // ── Helpers de tarjeta horizontal ────────────────────────────────────────
 
   function _extractBrand(nombre) {
     const words = String(nombre || '').trim().split(/\s+/);
@@ -293,9 +293,28 @@
   }
 
   function _famIconSvg(familia) {
-    if (familia === 'BATERIAS') return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><rect x="2" y="8" width="16" height="8" rx="2"/><path d="M22 11v2"/><path d="M6 12h4"/><path d="M12 12h4"/></svg>`;
-    if (familia === 'LUBRICANTES') return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`;
-    return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>`;
+    if (familia === 'BATERIAS') return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c0c8d0" stroke-width="1.5" aria-hidden="true"><rect x="2" y="8" width="16" height="8" rx="2"/><path d="M22 11v2"/><path d="M6 12h4"/><path d="M12 12h4"/></svg>`;
+    if (familia === 'LUBRICANTES') return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c0c8d0" stroke-width="1.5" aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`;
+    return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c0c8d0" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>`;
+  }
+
+  function _parseContenido(raw) {
+    const lines = (raw || '').trim().split('\n').map(l => l.trim()).filter(Boolean);
+    const specRows = [];
+    const pills = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i].startsWith('✓')) {
+        pills.push(lines[i].slice(1).trim());
+        i++;
+      } else if (i + 1 < lines.length && !lines[i + 1].startsWith('✓')) {
+        specRows.push([lines[i], lines[i + 1]]);
+        i += 2;
+      } else {
+        i++;
+      }
+    }
+    return { specRows, pills, raw: lines };
   }
 
   function _bloqueCardHTML(b) {
@@ -305,22 +324,40 @@
 
     const isPremium = (b.subtitulo || '').toLowerCase().includes('premium');
     const brand = _extractBrand(b.nombre);
-    const specsLines = (b.contenido || '').trim()
-      .split('\n').map(l => l.trim()).filter(Boolean);
+    const { specRows, pills, raw } = _parseContenido(b.contenido);
+    const hasStructured = specRows.length > 0 || pills.length > 0;
+
+    const badgesHTML = (brand || b.subtitulo) ? `
+      <div class="bcard-badges">
+        ${brand ? `<span class="bcard-brand">${_esc(brand)}</span>` : ''}
+        ${b.subtitulo ? `<span class="bcard-linea${isPremium ? ' bcard-linea--premium' : ''}">${_esc(b.subtitulo)}</span>` : ''}
+      </div>` : '';
+
+    let specsHTML = '';
+    if (hasStructured) {
+      const rowsHTML = specRows.map(([lbl, val]) =>
+        `<div class="bcard-spec-row"><span class="bcard-spec-label">${_esc(lbl)}</span><span class="bcard-spec-val">${_esc(val)}</span></div>`
+      ).join('');
+      const pillsHTML = pills.length
+        ? `<div class="bcard-pills">${pills.map(p => `<span class="bcard-pill">${_esc(p)}</span>`).join('')}</div>`
+        : '';
+      specsHTML = `<div class="bcard-spec-rows">${rowsHTML}</div>${pillsHTML}`;
+    } else if (raw.length) {
+      specsHTML = `<div class="bcard-spec-text">${raw.map(l => `<span style="display:block">${_esc(l)}</span>`).join('')}</div>`;
+    }
 
     return `
       <div class="bcard${isPremium ? ' bcard--premium' : ''}">
+        <div class="bcard-body">
+          ${badgesHTML}
+          <div class="bcard-title">${_esc(b.nombre)}</div>
+          ${specsHTML}
+        </div>
         <div class="bcard-img">
           ${fotoSrc
             ? `<img src="${_esc(fotoSrc)}" alt="${_esc(b.nombre)}" loading="lazy" onerror="this.style.display='none'">`
             : `<div class="bcard-img-placeholder">${_famIconSvg(b.familia)}</div>`
           }
-        </div>
-        <div class="bcard-body">
-          ${brand ? `<span class="bcard-brand">${_esc(brand)}</span>` : ''}
-          <div class="bcard-title">${_esc(b.nombre)}</div>
-          ${b.subtitulo ? `<div class="bcard-subtitle">${_esc(b.subtitulo)}</div>` : ''}
-          ${specsLines.length ? `<hr class="bcard-divider"><div class="bcard-spec-text">${specsLines.map(l => `<span>${_esc(l)}</span>`).join('')}</div>` : ''}
         </div>
       </div>`;
   }
