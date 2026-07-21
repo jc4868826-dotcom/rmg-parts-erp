@@ -306,7 +306,7 @@
     const isPremium = (b.subtitulo || '').toLowerCase().includes('premium');
     const brand = _extractBrand(b.nombre);
     const specsLines = (b.contenido || b.descripcion || '').trim()
-      .split('\n').map(l => l.trim()).filter(Boolean).slice(0, 4).join('\n');
+      .split('\n').map(l => l.trim()).filter(Boolean);
 
     return `
       <div class="bcard${isPremium ? ' bcard--premium' : ''}">
@@ -320,7 +320,7 @@
           ${brand ? `<span class="bcard-brand">${_esc(brand)}</span>` : ''}
           <div class="bcard-title">${_esc(b.nombre)}</div>
           ${b.subtitulo ? `<div class="bcard-subtitle">${_esc(b.subtitulo)}</div>` : ''}
-          ${specsLines ? `<div class="bcard-spec-text">${_esc(specsLines).replace(/\n/g, '<br>')}</div>` : ''}
+          ${specsLines.length ? `<div class="bcard-spec-text">${specsLines.map(l => `<span>${_esc(l)}</span>`).join('')}</div>` : ''}
         </div>
       </div>`;
   }
