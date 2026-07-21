@@ -293,9 +293,9 @@
   }
 
   function _famIconSvg(familia) {
-    if (familia === 'BATERIAS') return `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><rect x="2" y="8" width="16" height="8" rx="2"/><path d="M22 11v2"/><path d="M6 12h4"/><path d="M12 12h4"/></svg>`;
-    if (familia === 'LUBRICANTES') return `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`;
-    return `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>`;
+    if (familia === 'BATERIAS') return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><rect x="2" y="8" width="16" height="8" rx="2"/><path d="M22 11v2"/><path d="M6 12h4"/><path d="M12 12h4"/></svg>`;
+    if (familia === 'LUBRICANTES') return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`;
+    return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#29AAE1" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>`;
   }
 
   function _bloqueCardHTML(b) {
@@ -305,7 +305,7 @@
 
     const isPremium = (b.subtitulo || '').toLowerCase().includes('premium');
     const brand = _extractBrand(b.nombre);
-    const specsLines = (b.contenido || b.descripcion || '').trim()
+    const specsLines = (b.contenido || '').trim()
       .split('\n').map(l => l.trim()).filter(Boolean);
 
     return `
@@ -320,7 +320,7 @@
           ${brand ? `<span class="bcard-brand">${_esc(brand)}</span>` : ''}
           <div class="bcard-title">${_esc(b.nombre)}</div>
           ${b.subtitulo ? `<div class="bcard-subtitle">${_esc(b.subtitulo)}</div>` : ''}
-          ${specsLines.length ? `<div class="bcard-spec-text">${specsLines.map(l => `<span>${_esc(l)}</span>`).join('')}</div>` : ''}
+          ${specsLines.length ? `<hr class="bcard-divider"><div class="bcard-spec-text">${specsLines.map(l => `<span>${_esc(l)}</span>`).join('')}</div>` : ''}
         </div>
       </div>`;
   }
