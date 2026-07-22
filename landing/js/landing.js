@@ -187,11 +187,9 @@
     _activeFam  = famKey;
     _activeSub  = null;
     _activeProd = null;
-    if (famKey === 'LUBRICANTES') {
-      const subs = _subfamilias.filter(s => s.familia === 'LUBRICANTES')
-        .sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.id - b.id);
-      if (subs.length) _activeSub = subs[0].id;
-    }
+    const subs = _subfamilias.filter(s => s.familia === famKey)
+      .sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.id - b.id);
+    if (subs.length) _activeSub = subs[0].id;
     _renderDrillDown();
     const el = document.getElementById('drilldown-section');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -260,9 +258,12 @@
     </div>`;
   }
 
-  function _renderLubricantesSidebar() {
+  function _renderSidebarLayout(famKey) {
+    const fam      = FAMILIAS.find(f => f.key === famKey);
+    const famLabel = fam ? fam.label : famKey;
+
     const subs = _subfamilias
-      .filter(s => s.familia === 'LUBRICANTES')
+      .filter(s => s.familia === famKey)
       .sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.id - b.id);
 
     const activeSub = subs.find(s => s.id === _activeSub) || subs[0];
@@ -271,22 +272,22 @@
     const sidebarItems = subs.map(s => {
       const cnt      = _productos.filter(p => p.subfamilia_id === s.id).length;
       const isActive = activeSub && s.id === activeSub.id;
-      return `<li class="lub-sidebar-item${isActive ? ' active' : ''}" onclick="Landing.selectSub(${s.id},'LUBRICANTES')">
+      return `<li class="lub-sidebar-item${isActive ? ' active' : ''}" onclick="Landing.selectSub(${s.id},'${famKey}')">
         <div class="lub-sidebar-item-name">${_esc(s.nombre)}</div>
         <div class="lub-sidebar-item-count">${cnt > 0 ? cnt + ' producto' + (cnt !== 1 ? 's' : '') : 'Próximamente'}</div>
       </li>`;
     }).join('');
 
     const prodCards  = prods.length ? prods.map(_lubProductCardHTML).join('') : '<p class="drill-empty">Próximamente</p>';
-    const titleText  = activeSub ? _esc(activeSub.nombre) : 'Lubricantes';
+    const titleText  = activeSub ? _esc(activeSub.nombre) : _esc(famLabel);
     const countText  = prods.length > 0 ? `${prods.length} producto${prods.length !== 1 ? 's' : ''}` : '';
-    const breadcrumb = activeSub ? `Lubricantes › ${_esc(activeSub.nombre)}` : 'Lubricantes';
+    const breadcrumb = activeSub ? `${_esc(famLabel)} › ${_esc(activeSub.nombre)}` : _esc(famLabel);
 
     return `<section class="drilldown-section">
       <div class="container">
         <div class="drilldown-header">
           <button class="drill-back" onclick="Landing.backToFamilias()">← Volver</button>
-          <h2 class="drill-title">Lubricantes</h2>
+          <h2 class="drill-title">${_esc(famLabel)}</h2>
         </div>
         <div class="lub-layout">
           <aside class="lub-sidebar">
@@ -396,7 +397,7 @@
             <div class="ficha-prod-data">
               <div class="ficha-prod-breadcrumb">
                 <a onclick="Landing.backToFamilias()">Inicio</a> ›
-                <a onclick="${_activeFam === 'LUBRICANTES' ? 'Landing.backToProductos()' : 'Landing.backToSubs()'}">${_esc(famLabel)}</a> ›
+                <a onclick="Landing.backToProductos()">${_esc(famLabel)}</a> ›
                 <a onclick="Landing.backToProductos()">${_esc(subLabel)}</a> ›
                 <span>${_esc(b.nombre)}</span>
               </div>
@@ -435,75 +436,29 @@
       return;
     }
 
-    if (_activeFam === 'LUBRICANTES') {
+    const subs = _subfamilias.filter(s => s.familia === _activeFam);
+
+    if (subs.length) {
       if (!_activeSub) {
-        const subs = _subfamilias.filter(s => s.familia === 'LUBRICANTES')
-          .sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.id - b.id);
-        if (subs.length) _activeSub = subs[0].id;
+        const sorted = subs.slice().sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.id - b.id);
+        _activeSub = sorted[0].id;
       }
-      el.innerHTML = _renderLubricantesSidebar();
+      el.innerHTML = _renderSidebarLayout(_activeFam);
       return;
     }
 
+    // Sin subfamilias: grilla plana de productos
     const fam = FAMILIAS.find(f => f.key === _activeFam);
     const famLabel = fam ? fam.label : _activeFam;
-
-    if (!_activeSub) {
-      const subs = _subfamilias.filter(s => s.familia === _activeFam);
-
-      if (!subs.length) {
-        const prods = _productos.filter(p => p.familia === _activeFam);
-        el.innerHTML = _wrap(`
-          <div class="drilldown-header">
-            <button class="drill-back" onclick="Landing.backToFamilias()">← Volver</button>
-            <h2 class="drill-title">${_esc(famLabel)}</h2>
-          </div>
-          ${prods.length
-            ? `<div class="prod-grid">${prods.map(_cardHTML).join('')}</div>`
-            : '<p class="drill-empty">Próximamente</p>'
-          }
-        `);
-        return;
-      }
-
-      el.innerHTML = _wrap(`
-        <div class="drilldown-header">
-          <button class="drill-back" onclick="Landing.backToFamilias()">← Volver</button>
-          <h2 class="drill-title">${_esc(famLabel)}</h2>
-        </div>
-        <div class="subfam-grid">
-          ${subs.map(s => {
-            const erpSrc = `${ERP}/api/public/landing/foto/subfamilias/${s.id}`;
-            return `
-              <div class="subfam-card" onclick="Landing.selectSub(${s.id})">
-                <div class="subfam-card-img">
-                  <img src="${erpSrc}" alt="${_esc(s.nombre)}" loading="lazy"
-                       onerror="this.style.display='none'">
-                  <div class="catbox-overlay"></div>
-                </div>
-                <div class="subfam-card-body">
-                  <div class="subfam-card-name">${_esc(s.nombre)}</div>
-                  ${s.descripcion ? `<div class="subfam-card-desc">${_esc(s.descripcion)}</div>` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `);
-      return;
-    }
-
-    const sub = _subfamilias.find(s => s.id === _activeSub);
-    const subLabel = sub ? sub.nombre : '';
-    const bloques = _productos.filter(p => p.subfamilia_id === _activeSub);
+    const prods = _productos.filter(p => p.familia === _activeFam);
     el.innerHTML = _wrap(`
       <div class="drilldown-header">
-        <button class="drill-back" onclick="Landing.backToSubs()">← ${_esc(famLabel)}</button>
-        <h2 class="drill-title">${_esc(subLabel)}</h2>
+        <button class="drill-back" onclick="Landing.backToFamilias()">← Volver</button>
+        <h2 class="drill-title">${_esc(famLabel)}</h2>
       </div>
-      ${bloques.length
-        ? `<div class="bloques-grid">${bloques.map(_bloqueCardHTML).join('')}</div>`
-        : '<p class="drill-empty">Información disponible próximamente.</p>'
+      ${prods.length
+        ? `<div class="prod-grid">${prods.map(_cardHTML).join('')}</div>`
+        : '<p class="drill-empty">Próximamente</p>'
       }
     `);
   }
