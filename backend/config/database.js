@@ -1471,6 +1471,14 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('stock_reset_v1')
     console.log('✅ Migración stock_reset_v1 — stock_actual = 0 en todos los productos')
   }
+
+  // Migration 25: gastos_reset_v1 — borrar todos los registros de gastos
+  const m25 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('gastos_reset_v1')
+  if (!m25) {
+    db.prepare('DELETE FROM gastos').run()
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('gastos_reset_v1')
+    console.log('✅ Migración gastos_reset_v1 — todos los registros de gastos eliminados')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
