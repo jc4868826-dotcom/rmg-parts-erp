@@ -196,4 +196,94 @@ const moverAContacto = (req, res) => {
   }
 }
 
-module.exports = { list, getStats, cambiarEtapa, descartar, moverAContacto }
+const ORIGENES_VALIDOS = ['Manual', 'Excel', 'WhatsApp', 'Web', 'Referido', 'Google Ads', 'Meta Ads', 'LinkedIn']
+
+// POST /api/prospeccion — crear un prospecto
+const create = (req, res) => {
+  try {
+    const {
+      empresa, segmento = 'taller', rubro_especialidad, nombre_contacto, cargo,
+      telefono_empresa, telefono_contacto, email, direccion, comuna, region = 'RM',
+      prioridad = 'media', notas, fuente = 'Manual', origen = 'Manual',
+    } = req.body
+    if (!empresa) return res.status(400).json({ error: 'empresa es requerida' })
+    const id = uuidv4()
+    db.prepare(`
+      INSERT INTO pipeline_contactos
+        (id, empresa, segmento, rubro_especialidad, nombre_contacto, cargo,
+         telefono_empresa, telefono_contacto, email, direccion, comuna, region,
+         prioridad, notas, fuente, origen, etapa, estado)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prospecto','activo')
+    `).run(id, empresa, segmento, rubro_especialidad || null, nombre_contacto || null,
+      cargo || null, telefono_empresa || null, telefono_contacto || null,
+      email || null, direccion || null, comuna || null, region,
+      prioridad, notas || null, fuente, ORIGENES_VALIDOS.includes(origen) ? origen : 'Manual')
+    res.status(201).json(db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(id))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// PUT /api/prospeccion/:id — actualizar prospecto
+const update = (req, res) => {
+  try {
+    const reg = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id)
+    if (!reg) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    const allowed = [
+      'empresa', 'segmento', 'rubro_especialidad', 'nombre_contacto', 'cargo',
+      'telefono_empresa', 'telefono_contacto', 'email', 'direccion', 'comuna',
+      'region', 'prioridad', 'notas', 'origen',
+    ]
+    const toUpdate = allowed.filter(f => req.body[f] !== undefined)
+    if (!toUpdate.length) return res.json(reg)
+    const set = toUpdate.map(f => `${f} = ?`).join(', ')
+    db.prepare(`UPDATE pipeline_contactos SET ${set}, fecha_ultima_actualizacion = datetime('now') WHERE id = ?`)
+      .run(...toUpdate.map(f => req.body[f]), req.params.id)
+    res.json(db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// POST /api/prospeccion/bulk — importación masiva desde Excel
+const bulkImport = (req, res) => {
+  try {
+    const registros = req.body
+    if (!Array.isArray(registros) || registros.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de prospectos' })
+    }
+    let importados = 0
+    const errores = []
+    const stmt = db.prepare(`
+      INSERT INTO pipeline_contactos
+        (id, empresa, segmento, rubro_especialidad, nombre_contacto, cargo,
+         telefono_empresa, telefono_contacto, email, direccion, comuna, region,
+         prioridad, notas, fuente, origen, etapa, estado)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prospecto','activo')
+    `)
+    for (const r of registros) {
+      try {
+        if (!r.empresa) { errores.push({ empresa: r.empresa, error: 'empresa vacía' }); continue }
+        const prioridad = ['alta', 'media', 'baja'].includes((r.prioridad || '').toLowerCase())
+          ? r.prioridad.toLowerCase() : 'alta'
+        const origen = ORIGENES_VALIDOS.includes(r.origen) ? r.origen : 'Excel'
+        stmt.run(
+          uuidv4(), r.empresa, r.segmento || 'taller',
+          r.rubro_especialidad || null, r.nombre_contacto || null, r.cargo || null,
+          r.telefono_empresa || r.telefono || null,
+          r.telefono_contacto || r.telefono || null,
+          r.email || null, r.direccion || null, r.comuna || null, r.region || 'RM',
+          prioridad, r.notas || null, 'Importación Excel', origen
+        )
+        importados++
+      } catch (e) {
+        errores.push({ empresa: r.empresa, error: e.message })
+      }
+    }
+    res.json({ importados, errores })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { list, getStats, cambiarEtapa, descartar, moverAContacto, create, update, bulkImport }

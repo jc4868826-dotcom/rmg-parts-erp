@@ -9,6 +9,15 @@ router.get('/',                      authenticate, c.list)
 // GET  /api/prospeccion/stats    — conteo de activos en etapa='prospecto'
 router.get('/stats',                 authenticate, c.getStats)
 
+// POST /api/prospeccion          — crear un prospecto
+router.post('/',                     authenticate, c.create)
+
+// POST /api/prospeccion/bulk     — importación masiva desde Excel
+router.post('/bulk',                 authenticate, c.bulkImport)
+
+// PUT  /api/prospeccion/:id      — actualizar prospecto
+router.put('/:id',                   authenticate, c.update)
+
 // PATCH /api/prospeccion/:id/etapa    — cambiar etapa del prospecto
 router.patch('/:id/etapa',           authenticate, c.cambiarEtapa)
 

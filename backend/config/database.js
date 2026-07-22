@@ -1487,6 +1487,17 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('flujo_reset_v1')
     console.log('✅ Migración flujo_reset_v1 — todos los movimientos de caja eliminados')
   }
+
+  // Migration 27: prospeccion_origen_v1 — columna origen en pipeline_contactos
+  const m27 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('prospeccion_origen_v1')
+  if (!m27) {
+    const pcCols = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+    if (!pcCols.includes('origen')) {
+      db.exec("ALTER TABLE pipeline_contactos ADD COLUMN origen TEXT DEFAULT 'Manual'")
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('prospeccion_origen_v1')
+    console.log('✅ Migración prospeccion_origen_v1 — columna origen en pipeline_contactos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

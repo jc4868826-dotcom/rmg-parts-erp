@@ -1,8 +1,55 @@
-import { useState, useMemo } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState, useMemo, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import toast from 'react-hot-toast'
-import { UserCheck, Trash2, MessageCircle, Search } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check } from 'lucide-react'
+
+// ─── constants ──────────────────────────────────────────────────────────────
+
+const ORIGENES = ['Manual', 'Excel', 'WhatsApp', 'Web', 'Referido', 'Google Ads', 'Meta Ads', 'LinkedIn']
+const PRIORIDADES = ['alta', 'media', 'baja']
+const SEGMENTOS = ['taller', 'flota', 'concesionario', 'construccion', 'rentacar']
+
+const ORIGEN_STYLE = {
+  Manual:       { bg: 'rgba(90,143,168,0.12)',  color: 'rgba(90,143,168,0.9)' },
+  Excel:        { bg: 'rgba(45,201,138,0.12)',  color: '#2dc98a' },
+  WhatsApp:     { bg: 'rgba(45,201,138,0.15)',  color: '#25d366' },
+  Web:          { bg: 'rgba(56,182,255,0.12)',  color: 'var(--rmg-blt)' },
+  Referido:     { bg: 'rgba(244,162,60,0.12)',  color: '#f4a23c' },
+  'Google Ads': { bg: 'rgba(234,67,53,0.12)',   color: '#ea4335' },
+  'Meta Ads':   { bg: 'rgba(24,119,242,0.12)',  color: '#1877f2' },
+  LinkedIn:     { bg: 'rgba(0,119,181,0.12)',   color: '#0077b5' },
+}
+
+// columnas de Excel → campos internos (case-insensitive)
+const EXCEL_MAP = {
+  empresa: 'empresa',
+  'nombre empresa': 'empresa',
+  contacto: 'nombre_contacto',
+  'nombre contacto': 'nombre_contacto',
+  telefono: 'telefono',
+  teléfono: 'telefono',
+  fono: 'telefono',
+  rubro: 'rubro_especialidad',
+  region: 'region',
+  región: 'region',
+  comuna: 'comuna',
+  notas: 'notas',
+  segmento: 'segmento',
+  prioridad: 'prioridad',
+  origen: 'origen',
+  cargo: 'cargo',
+  email: 'email',
+  direccion: 'direccion',
+  dirección: 'direccion',
+}
+
+const FORM_INIT = {
+  empresa: '', segmento: 'taller', rubro_especialidad: '', nombre_contacto: '',
+  cargo: '', telefono_contacto: '', email: '', comuna: '', region: 'RM',
+  prioridad: 'media', notas: '', origen: 'Manual',
+}
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -21,124 +68,110 @@ const PRIORITY_STYLE = {
 
 function PrioridadBadge({ value }) {
   const style = PRIORITY_STYLE[value] || PRIORITY_STYLE.baja
-  return (
-    <span style={{
-      fontSize: 11, fontWeight: 600, padding: '2px 9px',
-      borderRadius: 20, textTransform: 'capitalize', ...style,
-    }}>
-      {value || '—'}
-    </span>
-  )
+  return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, textTransform: 'capitalize', ...style }}>{value || '—'}</span>
+}
+
+function OrigenBadge({ value }) {
+  const st = ORIGEN_STYLE[value] || ORIGEN_STYLE.Manual
+  return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{value || 'Manual'}</span>
 }
 
 function SegmentoBadge({ segmento }) {
   if (!segmento) return null
-  if (segmento === 'rentacar') {
-    return (
-      <span style={{
-        fontSize: 11, fontWeight: 600, padding: '2px 8px',
-        borderRadius: 20, background: 'rgba(45,201,138,0.15)', color: '#2dc98a',
-      }}>
-        Rent-a-Car
-      </span>
-    )
-  }
+  if (segmento === 'rentacar') return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(45,201,138,0.15)', color: '#2dc98a' }}>Rent-a-Car</span>
   return <span className={`badge-${segmento}`}>{segmento}</span>
 }
 
 function NotasCell({ id, text, expanded, onToggle }) {
   if (!text) return <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>
-
   const lines = text.split('\n')
   const isLong = text.length > 100 || lines.length > 2
-
   return (
-    <div style={{ maxWidth: 220 }}>
-      <p style={{
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.55)',
-        margin: 0,
-        whiteSpace: 'pre-wrap',
-        overflow: expanded ? 'visible' : 'hidden',
-        display: expanded ? 'block' : '-webkit-box',
-        WebkitLineClamp: expanded ? undefined : 2,
-        WebkitBoxOrient: 'vertical',
-        lineHeight: '1.5',
-      }}>
+    <div style={{ maxWidth: 200 }}>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', margin: 0, whiteSpace: 'pre-wrap', overflow: expanded ? 'visible' : 'hidden', display: expanded ? 'block' : '-webkit-box', WebkitLineClamp: expanded ? undefined : 2, WebkitBoxOrient: 'vertical', lineHeight: '1.5' }}>
         {text}
       </p>
-      {isLong && (
-        <button
-          onClick={() => onToggle(id)}
-          style={{
-            fontSize: 11, color: 'var(--rmg-blue)', background: 'none',
-            border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: 2,
-          }}
-        >
-          {expanded ? 'Ver menos' : 'Ver más'}
-        </button>
-      )}
+      {isLong && <button onClick={() => onToggle(id)} style={{ fontSize: 11, color: 'var(--rmg-blue)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: 2 }}>{expanded ? 'Ver menos' : 'Ver más'}</button>}
     </div>
   )
 }
 
-// ─── skeleton rows ──────────────────────────────────────────────────────────
-
 function SkeletonRow() {
   return (
-    <tr>
-      {Array.from({ length: 8 }).map((_, i) => (
-        <td key={i} style={{ padding: '12px 12px' }}>
-          <div style={{
-            height: 14, borderRadius: 6,
-            background: 'rgba(255,255,255,0.05)',
-            width: i === 0 ? '80%' : i === 6 ? '50%' : '70%',
-            animation: 'pulse 1.5s ease-in-out infinite',
-          }} />
-        </td>
-      ))}
-    </tr>
+    <tr>{Array.from({ length: 9 }).map((_, i) => (
+      <td key={i} style={{ padding: '12px 12px' }}>
+        <div style={{ height: 14, borderRadius: 6, background: 'rgba(255,255,255,0.05)', width: i === 0 ? '80%' : '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      </td>
+    ))}</tr>
   )
 }
 
-// ─── filter select ──────────────────────────────────────────────────────────
-
-function FilterSelect({ value, onChange, options, placeholder }) {
+function FilterSelect({ value, onChange, options }) {
   return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: '0.5px solid rgba(56,182,255,0.15)',
-        borderRadius: 8,
-        padding: '7px 12px',
-        fontSize: 13,
-        color: value === options[0] ? 'rgba(90,143,168,0.7)' : 'rgba(255,255,255,0.8)',
-        outline: 'none',
-        cursor: 'pointer',
-        minWidth: 140,
-      }}
-    >
-      {options.map(o => (
-        <option key={o} value={o} style={{ background: '#0a1a2e' }}>{o}</option>
-      ))}
+    <select value={value} onChange={e => onChange(e.target.value)} style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(56,182,255,0.15)', borderRadius: 8, padding: '7px 12px', fontSize: 13, color: value === options[0] ? 'rgba(90,143,168,0.7)' : 'rgba(255,255,255,0.8)', outline: 'none', cursor: 'pointer', minWidth: 130 }}>
+      {options.map(o => <option key={o} value={o} style={{ background: '#0a1a2e' }}>{o}</option>)}
     </select>
   )
 }
 
+// ─── plantilla Excel ────────────────────────────────────────────────────────
+
+function descargarPlantilla() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Empresa', 'Contacto', 'Telefono', 'Rubro', 'Region', 'Comuna', 'Segmento', 'Prioridad', 'Origen', 'Notas'],
+    ['Ejemplo Taller SA', 'Juan Pérez', '+56 9 1234 5678', 'Mecánica general', 'RM', 'Santiago', 'taller', 'alta', 'Manual', 'Notas opcionales'],
+  ])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Prospectos')
+  XLSX.writeFile(wb, 'plantilla_prospectos_rmg.xlsx')
+}
+
+// ─── parse Excel file ────────────────────────────────────────────────────────
+
+function parseExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'binary' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const raw = XLSX.utils.sheet_to_json(ws, { defval: '' })
+        const registros = raw.map(row => {
+          const mapped = {}
+          for (const [key, val] of Object.entries(row)) {
+            const fieldKey = EXCEL_MAP[(key || '').toLowerCase().trim()]
+            if (fieldKey) mapped[fieldKey] = String(val).trim()
+          }
+          // defaults
+          if (!mapped.prioridad || !PRIORIDADES.includes(mapped.prioridad.toLowerCase())) {
+            mapped.prioridad = 'alta'
+          } else {
+            mapped.prioridad = mapped.prioridad.toLowerCase()
+          }
+          if (!mapped.origen || !ORIGENES.includes(mapped.origen)) mapped.origen = 'Excel'
+          if (!mapped.segmento || !SEGMENTOS.includes(mapped.segmento)) mapped.segmento = 'taller'
+          if (!mapped.region) mapped.region = 'RM'
+          // telefono → ambos campos
+          if (mapped.telefono) {
+            mapped.telefono_contacto = mapped.telefono
+            mapped.telefono_empresa = mapped.telefono
+            delete mapped.telefono
+          }
+          return mapped
+        }).filter(r => r.empresa)
+        resolve(registros)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = reject
+    reader.readAsBinaryString(file)
+  })
+}
+
 // ─── main component ─────────────────────────────────────────────────────────
 
-const TABLE_HEADERS = [
-  'Empresa / Segmento',
-  'Rubro',
-  'Contacto',
-  'Región / Comuna',
-  'Teléfono',
-  'Notas',
-  'Prioridad',
-  'Acciones',
-]
+const TABLE_HEADERS = ['Empresa / Segmento', 'Rubro', 'Contacto', 'Región / Comuna', 'Teléfono', 'Notas', 'Origen', 'Prioridad', 'Acciones']
 
 export default function ProspeccionPage() {
   const [busqueda, setBusqueda]           = useState('')
@@ -146,7 +179,11 @@ export default function ProspeccionPage() {
   const [prioridadFiltro, setPrioridadFiltro] = useState('Todas')
   const [regionFiltro, setRegionFiltro]   = useState('Todas')
   const [expandedNotas, setExpandedNotas] = useState({})
-
+  const [showForm, setShowForm]           = useState(false)
+  const [editando, setEditando]           = useState(null)
+  const [form, setForm]                   = useState(FORM_INIT)
+  const [preview, setPreview]             = useState(null) // { registros: [] }
+  const fileRef                           = useRef(null)
   const qc = useQueryClient()
 
   const { data = [], isLoading } = useQuery({
@@ -159,16 +196,36 @@ export default function ProspeccionPage() {
     queryFn: () => api.get('/prospeccion/stats').then(r => r.data),
   })
 
-  // derive unique filter options from data
-  const segmentos = useMemo(() => {
-    const vals = [...new Set(data.map(p => p.segmento).filter(Boolean))]
-    return ['Todos', ...vals.sort()]
-  }, [data])
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['prospeccion'] })
+    qc.invalidateQueries({ queryKey: ['prospeccion-stats'] })
+  }
 
-  const regiones = useMemo(() => {
-    const vals = [...new Set(data.map(p => p.region).filter(Boolean))]
-    return ['Todas', ...vals.sort()]
-  }, [data])
+  const crearMut = useMutation({
+    mutationFn: (d) => api.post('/prospeccion', d).then(r => r.data),
+    onSuccess: () => { invalidate(); toast.success('Prospecto creado'); setShowForm(false); setForm(FORM_INIT) },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al crear prospecto'),
+  })
+
+  const editarMut = useMutation({
+    mutationFn: ({ id, data: d }) => api.put(`/prospeccion/${id}`, d).then(r => r.data),
+    onSuccess: () => { invalidate(); toast.success('Prospecto actualizado'); setEditando(null) },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar'),
+  })
+
+  const importarMut = useMutation({
+    mutationFn: (registros) => api.post('/prospeccion/bulk', registros).then(r => r.data),
+    onSuccess: (res) => {
+      invalidate()
+      toast.success(`${res.importados} prospectos importados${res.errores?.length ? ` · ${res.errores.length} errores` : ''}`)
+      setPreview(null)
+      if (fileRef.current) fileRef.current.value = ''
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error en importación'),
+  })
+
+  const segmentos = useMemo(() => ['Todos', ...new Set(data.map(p => p.segmento).filter(Boolean))].sort((a, b) => a === 'Todos' ? -1 : a.localeCompare(b)), [data])
+  const regiones  = useMemo(() => ['Todas', ...new Set(data.map(p => p.region).filter(Boolean))].sort((a, b) => a === 'Todas' ? -1 : a.localeCompare(b)), [data])
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim()
@@ -177,7 +234,7 @@ export default function ProspeccionPage() {
       if (prioridadFiltro !== 'Todas' && p.prioridad !== prioridadFiltro) return false
       if (regionFiltro !== 'Todas' && p.region !== regionFiltro) return false
       if (q) {
-        const hay = [p.empresa, p.nombre_contacto, p.notas].join(' ').toLowerCase()
+        const hay = [p.empresa, p.nombre_contacto, p.notas, p.origen].join(' ').toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
@@ -188,8 +245,7 @@ export default function ProspeccionPage() {
     try {
       await api.post(`/prospeccion/${id}/mover-a-contacto`)
       toast.success('Movido al Pipeline CRM → Contactado')
-      qc.invalidateQueries({ queryKey: ['prospeccion'] })
-      qc.invalidateQueries({ queryKey: ['prospeccion-stats'] })
+      invalidate()
     } catch (e) {
       toast.error(e.response?.data?.error || 'Error al mover el prospecto')
     }
@@ -200,17 +256,99 @@ export default function ProspeccionPage() {
     try {
       await api.patch(`/prospeccion/${id}/descartar`)
       toast.success('Prospecto descartado')
-      qc.invalidateQueries({ queryKey: ['prospeccion'] })
-      qc.invalidateQueries({ queryKey: ['prospeccion-stats'] })
+      invalidate()
     } catch (e) {
       toast.error(e.response?.data?.error || 'Error al descartar')
     }
   }
 
-  const toggleNota = (id) =>
-    setExpandedNotas(prev => ({ ...prev, [id]: !prev[id] }))
-
+  const toggleNota = (id) => setExpandedNotas(prev => ({ ...prev, [id]: !prev[id] }))
   const totalActivos = stats?.total_activos ?? data.length
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    try {
+      const registros = await parseExcel(file)
+      if (!registros.length) { toast.error('No se detectaron filas válidas en el Excel'); return }
+      setPreview({ registros })
+    } catch {
+      toast.error('Error al leer el archivo Excel')
+    }
+  }
+
+  const FormularioProspecto = ({ titulo, datos, setDatos, onSubmit, isPending, onCancelar }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)' }}>
+      <div className="rmg-card p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-bold text-lg">{titulo}</h2>
+          <button onClick={onCancelar} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+        </div>
+        <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Empresa *</label>
+            <input className="rmg-input" required value={datos.empresa || ''} onChange={e => setDatos(p => ({ ...p, empresa: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Segmento</label>
+            <select className="rmg-input" value={datos.segmento || 'taller'} onChange={e => setDatos(p => ({ ...p, segmento: e.target.value }))}>
+              {SEGMENTOS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Rubro / Especialidad</label>
+            <input className="rmg-input" value={datos.rubro_especialidad || ''} onChange={e => setDatos(p => ({ ...p, rubro_especialidad: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Nombre contacto</label>
+            <input className="rmg-input" value={datos.nombre_contacto || ''} onChange={e => setDatos(p => ({ ...p, nombre_contacto: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cargo</label>
+            <input className="rmg-input" value={datos.cargo || ''} onChange={e => setDatos(p => ({ ...p, cargo: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Teléfono</label>
+            <input className="rmg-input" value={datos.telefono_contacto || ''} onChange={e => setDatos(p => ({ ...p, telefono_contacto: e.target.value, telefono_empresa: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Email</label>
+            <input type="email" className="rmg-input" value={datos.email || ''} onChange={e => setDatos(p => ({ ...p, email: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Región</label>
+            <input className="rmg-input" value={datos.region || 'RM'} onChange={e => setDatos(p => ({ ...p, region: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Comuna</label>
+            <input className="rmg-input" value={datos.comuna || ''} onChange={e => setDatos(p => ({ ...p, comuna: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Prioridad</label>
+            <select className="rmg-input" value={datos.prioridad || 'media'} onChange={e => setDatos(p => ({ ...p, prioridad: e.target.value }))}>
+              {PRIORIDADES.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Origen</label>
+            <select className="rmg-input" value={datos.origen || 'Manual'} onChange={e => setDatos(p => ({ ...p, origen: e.target.value }))}>
+              {ORIGENES.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
+            <textarea className="rmg-input" rows={3} value={datos.notas || ''} onChange={e => setDatos(p => ({ ...p, notas: e.target.value }))} />
+          </div>
+          <div className="col-span-2 flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onCancelar} className="btn-secondary">Cancelar</button>
+            <button type="submit" disabled={isPending} className="btn-primary disabled:opacity-50">
+              {isPending ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -218,91 +356,41 @@ export default function ProspeccionPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1
-            className="text-2xl font-black"
-            style={{ fontFamily: 'Inter Tight, sans-serif' }}
-          >
-            Prospección
-          </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
-            Pipeline de prospectos activos
-          </p>
+          <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Prospección</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Pipeline de prospectos activos</p>
         </div>
-        {!isLoading && (
-          <span style={{
-            fontSize: 13, fontWeight: 700,
-            padding: '5px 14px', borderRadius: 20,
-            background: 'rgba(27,143,212,0.15)', color: 'var(--rmg-blue)',
-            alignSelf: 'center',
-          }}>
-            {totalActivos} activos
-          </span>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!isLoading && (
+            <span style={{ fontSize: 13, fontWeight: 700, padding: '5px 14px', borderRadius: 20, background: 'rgba(27,143,212,0.15)', color: 'var(--rmg-blue)', alignSelf: 'center' }}>
+              {totalActivos} activos
+            </span>
+          )}
+          <button onClick={() => descargarPlantilla()} className="btn-secondary flex items-center gap-1.5 text-sm">
+            <Download size={13}/> Plantilla
+          </button>
+          <button onClick={() => fileRef.current?.click()} className="btn-secondary flex items-center gap-1.5 text-sm">
+            <Upload size={13}/> Importar Excel
+          </button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
+          <button onClick={() => { setForm(FORM_INIT); setShowForm(true) }} className="btn-primary flex items-center gap-1.5 text-sm">
+            <Plus size={13}/> Nuevo prospecto
+          </button>
+        </div>
       </div>
 
       {/* ── Filters ── */}
-      <div
-        className="rmg-card p-3"
-        style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}
-      >
-        {/* search */}
+      <div className="rmg-card p-3" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: '1 1 220px' }}>
-          <Search
-            size={14}
-            style={{
-              position: 'absolute', left: 10, top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'rgba(90,143,168,0.6)',
-              pointerEvents: 'none',
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Buscar empresa, contacto, notas…"
-            value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
-            style={{
-              width: '100%',
-              paddingLeft: 30, paddingRight: 10, paddingTop: 7, paddingBottom: 7,
-              background: 'rgba(255,255,255,0.04)',
-              border: '0.5px solid rgba(56,182,255,0.15)',
-              borderRadius: 8,
-              fontSize: 13,
-              color: 'rgba(255,255,255,0.8)',
-              outline: 'none',
-            }}
-          />
+          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(90,143,168,0.6)', pointerEvents: 'none' }} />
+          <input type="text" placeholder="Buscar empresa, contacto, notas…" value={busqueda} onChange={e => setBusqueda(e.target.value)}
+            style={{ width: '100%', paddingLeft: 30, paddingRight: 10, paddingTop: 7, paddingBottom: 7, background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(56,182,255,0.15)', borderRadius: 8, fontSize: 13, color: 'rgba(255,255,255,0.8)', outline: 'none' }} />
         </div>
-
-        <FilterSelect
-          value={segmentoFiltro}
-          onChange={setSegmentoFiltro}
-          options={segmentos}
-        />
-        <FilterSelect
-          value={prioridadFiltro}
-          onChange={setPrioridadFiltro}
-          options={['Todas', 'alta', 'media', 'baja']}
-        />
-        <FilterSelect
-          value={regionFiltro}
-          onChange={setRegionFiltro}
-          options={regiones}
-        />
-
+        <FilterSelect value={segmentoFiltro} onChange={setSegmentoFiltro} options={segmentos} />
+        <FilterSelect value={prioridadFiltro} onChange={setPrioridadFiltro} options={['Todas', 'alta', 'media', 'baja']} />
+        <FilterSelect value={regionFiltro} onChange={setRegionFiltro} options={regiones} />
         {(busqueda || segmentoFiltro !== 'Todos' || prioridadFiltro !== 'Todas' || regionFiltro !== 'Todas') && (
-          <button
-            onClick={() => {
-              setBusqueda('')
-              setSegmentoFiltro('Todos')
-              setPrioridadFiltro('Todas')
-              setRegionFiltro('Todas')
-            }}
-            style={{
-              fontSize: 12, color: 'rgba(90,143,168,0.7)',
-              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
-            }}
-          >
+          <button onClick={() => { setBusqueda(''); setSegmentoFiltro('Todos'); setPrioridadFiltro('Todas'); setRegionFiltro('Todas') }}
+            style={{ fontSize: 12, color: 'rgba(90,143,168,0.7)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px' }}>
             Limpiar filtros
           </button>
         )}
@@ -310,189 +398,98 @@ export default function ProspeccionPage() {
 
       {/* ── Table ── */}
       <div style={{ overflowX: 'auto', borderRadius: 8, border: '0.5px solid rgba(56,182,255,0.15)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
           <thead>
             <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
               {TABLE_HEADERS.map(h => (
-                <th
-                  key={h}
-                  style={{
-                    padding: '9px 12px',
-                    fontSize: 11,
-                    fontWeight: 500,
-                    color: 'rgba(90,143,168,0.7)',
-                    textAlign: 'left',
-                    borderBottom: '0.5px solid rgba(56,182,255,0.1)',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {h}
-                </th>
+                <th key={h} style={{ padding: '9px 12px', fontSize: 11, fontWeight: 500, color: 'rgba(90,143,168,0.7)', textAlign: 'left', borderBottom: '0.5px solid rgba(56,182,255,0.1)', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
-
           <tbody>
             {isLoading
               ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
               : filtrados.length === 0
                 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '56px 24px', textAlign: 'center' }}>
-                      <div style={{ color: 'rgba(90,143,168,0.5)', fontSize: 14 }}>
-                        Sin prospectos activos
-                      </div>
+                    <td colSpan={9} style={{ padding: '56px 24px', textAlign: 'center' }}>
+                      <div style={{ color: 'rgba(90,143,168,0.5)', fontSize: 14 }}>Sin prospectos activos</div>
                       <div style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12, marginTop: 6 }}>
                         {busqueda || segmentoFiltro !== 'Todos' || prioridadFiltro !== 'Todas' || regionFiltro !== 'Todas'
                           ? 'Intenta ajustar los filtros de búsqueda.'
-                          : 'Agrega prospectos para comenzar a llenar el pipeline.'}
+                          : 'Agrega prospectos o importa desde Excel.'}
                       </div>
                     </td>
                   </tr>
                 )
                 : filtrados.map(p => (
-                  <tr
-                    key={p.id}
-                    style={{ borderBottom: '0.5px solid rgba(56,182,255,0.07)' }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.025)'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'transparent'
-                    }}
-                  >
+                  <tr key={p.id} style={{ borderBottom: '0.5px solid rgba(56,182,255,0.07)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     {/* Empresa + segmento */}
                     <td style={{ padding: '11px 12px', minWidth: 160 }}>
-                      <div
-                        style={{
-                          fontWeight: 600, fontSize: 13,
-                          color: 'rgba(255,255,255,0.85)',
-                          marginBottom: 4,
-                        }}
-                      >
-                        {p.empresa || '—'}
-                      </div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>{p.empresa || '—'}</div>
                       <SegmentoBadge segmento={p.segmento} />
                     </td>
-
                     {/* Rubro */}
-                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.55)', minWidth: 120 }}>
-                      {p.rubro_especialidad || '—'}
-                    </td>
-
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.55)', minWidth: 120 }}>{p.rubro_especialidad || '—'}</td>
                     {/* Contacto */}
                     <td style={{ padding: '11px 12px', minWidth: 140 }}>
                       {p.nombre_contacto
-                        ? (
-                          <>
-                            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>
-                              {p.nombre_contacto}
-                            </div>
-                            {p.cargo && (
-                              <div style={{ fontSize: 11, color: 'rgba(90,143,168,0.7)', marginTop: 2 }}>
-                                {p.cargo}
-                              </div>
-                            )}
-                          </>
-                        )
-                        : <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>
-                      }
+                        ? (<><div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{p.nombre_contacto}</div>{p.cargo && <div style={{ fontSize: 11, color: 'rgba(90,143,168,0.7)', marginTop: 2 }}>{p.cargo}</div>}</>)
+                        : <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>}
                     </td>
-
                     {/* Región / Comuna */}
                     <td style={{ padding: '11px 12px', minWidth: 130 }}>
                       {p.region
-                        ? (
-                          <>
-                            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{p.region}</div>
-                            {p.comuna && (
-                              <div style={{ fontSize: 11, color: 'rgba(90,143,168,0.6)', marginTop: 2 }}>{p.comuna}</div>
-                            )}
-                          </>
-                        )
-                        : <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>
-                      }
+                        ? (<><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{p.region}</div>{p.comuna && <div style={{ fontSize: 11, color: 'rgba(90,143,168,0.6)', marginTop: 2 }}>{p.comuna}</div>}</>)
+                        : <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>}
                     </td>
-
                     {/* Teléfono + WA */}
                     <td style={{ padding: '11px 12px', minWidth: 130 }}>
                       {(() => {
                         const phone = p.telefono_contacto || p.telefono_empresa
-                        const waUrl  = toWaLink(phone)
+                        const waUrl = toWaLink(phone)
                         if (!phone) return <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{phone}</span>
-                            {waUrl && (
-                              <a
-                                href={waUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Abrir en WhatsApp"
-                                style={{
-                                  display: 'flex', alignItems: 'center',
-                                  color: '#2dc98a', flexShrink: 0,
-                                }}
-                              >
-                                <MessageCircle size={14} />
-                              </a>
-                            )}
+                            {waUrl && <a href={waUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', color: '#2dc98a', flexShrink: 0 }}><MessageCircle size={14} /></a>}
                           </div>
                         )
                       })()}
                     </td>
-
                     {/* Notas */}
-                    <td style={{ padding: '11px 12px', minWidth: 160, maxWidth: 240 }}>
-                      <NotasCell
-                        id={p.id}
-                        text={p.notas}
-                        expanded={!!expandedNotas[p.id]}
-                        onToggle={toggleNota}
-                      />
+                    <td style={{ padding: '11px 12px', minWidth: 160, maxWidth: 220 }}>
+                      <NotasCell id={p.id} text={p.notas} expanded={!!expandedNotas[p.id]} onToggle={toggleNota} />
                     </td>
-
+                    {/* Origen */}
+                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
+                      <OrigenBadge value={p.origen || 'Manual'} />
+                    </td>
                     {/* Prioridad */}
                     <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
                       <PrioridadBadge value={p.prioridad} />
                     </td>
-
                     {/* Acciones */}
                     <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          title="Mover a Contacto"
-                          onClick={() => handleMoverAContacto(p.id)}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: 30, height: 30, borderRadius: 7,
-                            background: 'rgba(27,143,212,0.12)',
-                            border: '0.5px solid rgba(27,143,212,0.25)',
-                            color: 'var(--rmg-blue)',
-                            cursor: 'pointer',
-                            transition: 'background 0.15s',
-                          }}
+                      <div style={{ display: 'flex', gap: 5 }}>
+                        <button title="Editar" onClick={() => setEditando({ ...p })}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', transition: 'background 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}>
+                          <Pencil size={13} />
+                        </button>
+                        <button title="Mover a Contacto" onClick={() => handleMoverAContacto(p.id)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(27,143,212,0.12)', border: '0.5px solid rgba(27,143,212,0.25)', color: 'var(--rmg-blue)', cursor: 'pointer', transition: 'background 0.15s' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(27,143,212,0.22)'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(27,143,212,0.12)'}
-                        >
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(27,143,212,0.12)'}>
                           <UserCheck size={14} />
                         </button>
-
-                        <button
-                          title="Descartar prospecto"
-                          onClick={() => handleDescartar(p.id, p.empresa)}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: 30, height: 30, borderRadius: 7,
-                            background: 'rgba(224,90,78,0.1)',
-                            border: '0.5px solid rgba(224,90,78,0.2)',
-                            color: '#e05a4e',
-                            cursor: 'pointer',
-                            transition: 'background 0.15s',
-                          }}
+                        <button title="Descartar" onClick={() => handleDescartar(p.id, p.empresa)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(224,90,78,0.1)', border: '0.5px solid rgba(224,90,78,0.2)', color: '#e05a4e', cursor: 'pointer', transition: 'background 0.15s' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(224,90,78,0.2)'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(224,90,78,0.1)'}
-                        >
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(224,90,78,0.1)'}>
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -504,11 +501,85 @@ export default function ProspeccionPage() {
         </table>
       </div>
 
-      {/* row count footer */}
       {!isLoading && filtrados.length > 0 && (
         <div style={{ fontSize: 12, color: 'rgba(90,143,168,0.5)', textAlign: 'right' }}>
-          {filtrados.length} prospecto{filtrados.length !== 1 ? 's' : ''}
-          {filtrados.length !== data.length && ` de ${data.length}`}
+          {filtrados.length} prospecto{filtrados.length !== 1 ? 's' : ''}{filtrados.length !== data.length && ` de ${data.length}`}
+        </div>
+      )}
+
+      {/* ── Modal: crear prospecto ── */}
+      {showForm && (
+        <FormularioProspecto
+          titulo="Nuevo prospecto"
+          datos={form}
+          setDatos={setForm}
+          onSubmit={e => { e.preventDefault(); crearMut.mutate(form) }}
+          isPending={crearMut.isPending}
+          onCancelar={() => { setShowForm(false); setForm(FORM_INIT) }}
+        />
+      )}
+
+      {/* ── Modal: editar prospecto ── */}
+      {editando && (
+        <FormularioProspecto
+          titulo={`Editar · ${editando.empresa}`}
+          datos={editando}
+          setDatos={setEditando}
+          onSubmit={e => { e.preventDefault(); editarMut.mutate({ id: editando.id, data: editando }) }}
+          isPending={editarMut.isPending}
+          onCancelar={() => setEditando(null)}
+        />
+      )}
+
+      {/* ── Modal: preview Excel ── */}
+      {preview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
+          <div className="rmg-card p-6 w-full max-w-4xl max-h-[85vh] flex flex-col animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-bold text-lg">Preview de importación</h2>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                  <span className="font-bold" style={{ color: 'var(--rmg-teal)' }}>{preview.registros.length}</span> prospectos detectados — revisa antes de confirmar
+                </p>
+              </div>
+              <button onClick={() => { setPreview(null); if (fileRef.current) fileRef.current.value = '' }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <div className="overflow-auto flex-1 mb-4">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
+                    {['Empresa', 'Contacto', 'Teléfono', 'Rubro', 'Región', 'Comuna', 'Prioridad', 'Origen'].map(h => (
+                      <th key={h} className="text-left px-3 py-2 uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.registros.map((r, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/[0.02]">
+                      <td className="px-3 py-2 font-semibold" style={{ color: 'var(--rmg-off)' }}>{r.empresa}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.nombre_contacto || '—'}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.telefono_contacto || '—'}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.rubro_especialidad || '—'}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.region || 'RM'}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.comuna || '—'}</td>
+                      <td className="px-3 py-2"><PrioridadBadge value={r.prioridad} /></td>
+                      <td className="px-3 py-2"><OrigenBadge value={r.origen} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setPreview(null); if (fileRef.current) fileRef.current.value = '' }} className="btn-secondary">Cancelar</button>
+              <button
+                onClick={() => importarMut.mutate(preview.registros)}
+                disabled={importarMut.isPending}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                <Check size={14}/>
+                {importarMut.isPending ? 'Importando...' : `Confirmar importación (${preview.registros.length})`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
