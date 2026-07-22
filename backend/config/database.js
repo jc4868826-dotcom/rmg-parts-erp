@@ -1463,6 +1463,14 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('erp_financiero_v1')
     console.log('✅ Migración erp_financiero_v1 — ventas, venta_items, compras, compra_items + gastos extended')
   }
+
+  // Migration 24: stock_reset_v1 — reset stock_actual = 0 en todos los productos
+  const m24 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('stock_reset_v1')
+  if (!m24) {
+    db.prepare('UPDATE productos SET stock_actual = 0').run()
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('stock_reset_v1')
+    console.log('✅ Migración stock_reset_v1 — stock_actual = 0 en todos los productos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
