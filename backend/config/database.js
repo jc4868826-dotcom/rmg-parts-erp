@@ -1479,6 +1479,14 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('gastos_reset_v1')
     console.log('✅ Migración gastos_reset_v1 — todos los registros de gastos eliminados')
   }
+
+  // Migration 26: flujo_reset_v1 — borrar caja_movimientos (tabla real del flujo de caja)
+  const m26 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('flujo_reset_v1')
+  if (!m26) {
+    db.prepare('DELETE FROM caja_movimientos').run()
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('flujo_reset_v1')
+    console.log('✅ Migración flujo_reset_v1 — todos los movimientos de caja eliminados')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
