@@ -404,10 +404,40 @@ const deleteOrden = (req, res) => {
   try {
     const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!o) return res.status(404).json({ error: 'OC no encontrada' })
-    if (!['borrador', 'enviada'].includes(o.estado) || o.pagada) {
-      return res.status(400).json({ error: 'Solo se pueden eliminar OCs en estado Creada o Enviada' })
-    }
-    db.prepare('DELETE FROM ordenes_compra WHERE id = ?').run(req.params.id)
+
+    const ejecutar = db.transaction(() => {
+      // Recibida (not paid) — reverse stock
+      if (o.estado === 'recibida' && !o.pagada) {
+        const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(o.id)
+        for (const item of items) {
+          if (!item.codigo) continue
+          db.prepare('UPDATE productos SET stock_actual = MAX(0, stock_actual - ?) WHERE codigo = ?')
+            .run(Math.round(Number(item.cantidad)), item.codigo)
+        }
+      }
+
+      // Pagada — reverse stock + payment records
+      if (o.pagada) {
+        const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(o.id)
+        for (const item of items) {
+          if (!item.codigo) continue
+          db.prepare('UPDATE productos SET stock_actual = MAX(0, stock_actual - ?) WHERE codigo = ?')
+            .run(Math.round(Number(item.cantidad)), item.codigo)
+        }
+        db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla='ordenes_compra' AND origen_id=?").run(o.id)
+        const comprasRecs = db.prepare('SELECT id FROM compras WHERE numero_oc = ?').all(o.numero)
+        for (const c of comprasRecs) {
+          db.prepare('DELETE FROM compra_items WHERE compra_id = ?').run(c.id)
+        }
+        db.prepare('DELETE FROM compras WHERE numero_oc = ?').run(o.numero)
+        try { db.prepare('DELETE FROM facturas_cxp WHERE oc_id = ?').run(o.id) } catch (_) {}
+      }
+
+      db.prepare('DELETE FROM oc_items WHERE oc_id = ?').run(o.id)
+      db.prepare('DELETE FROM ordenes_compra WHERE id = ?').run(o.id)
+    })
+
+    ejecutar()
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: err.message })

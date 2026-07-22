@@ -395,7 +395,6 @@ export default function ComprasPage() {
                     const estDisplay = getEstadoDisplay(oc)
                     const est = ESTADO_STYLE[estDisplay] || ESTADO_STYLE.Creada
                     const isExp = expandida === oc.id
-                    const canDelete = ['borrador', 'enviada'].includes(oc.estado) && !oc.pagada
                     return (
                       <>
                         <tr key={oc.id}
@@ -433,9 +432,14 @@ export default function ComprasPage() {
                                 </button>
                               )}
                               <button onClick={() => setEditando({ ...oc })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }} title="Editar"><Pencil size={13}/></button>
-                              {canDelete && (
-                                <button onClick={() => { if (confirm('¿Eliminar esta OC?')) eliminarMut.mutate(oc.id) }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }} title="Eliminar"><Trash2 size={13}/></button>
-                              )}
+                              <button onClick={() => {
+                                const msg = oc.pagada
+                                  ? `¿Eliminar OC ${oc.numero}?\nSe revertirá el stock y el egreso registrado en caja.`
+                                  : oc.estado === 'recibida'
+                                  ? `¿Eliminar OC ${oc.numero}?\nSe revertirá el stock agregado al inventario.`
+                                  : `¿Eliminar OC ${oc.numero}?`
+                                if (confirm(msg)) eliminarMut.mutate(oc.id)
+                              }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }} title="Eliminar"><Trash2 size={13}/></button>
                             </div>
                           </td>
                           <td className="px-4 py-3">
