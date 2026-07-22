@@ -57,7 +57,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/catalogo',     icon: Package,         label: 'Catálogo',        badge: null },
       { to: '/proveedores',  icon: Building2,       label: 'Proveedores',     badge: null },
-      { to: '/compras',      icon: ShoppingBag,     label: 'Compras',         badge: null },
+      { to: '/compras',      icon: Truck,           label: 'OC',              badge: null },
       { to: '/bodegas',      icon: Warehouse,       label: 'Bodegas',         badge: null },
     ],
   },

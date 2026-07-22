@@ -14,6 +14,8 @@ router.post('/ordenes',            c.createOrden)
 router.put('/ordenes/:id',         c.updateOrden)
 router.post('/ordenes/:id/enviar', c.enviarOrden)
 router.post('/ordenes/:id/recibir',c.recibirOrden)
+router.post('/ordenes/:id/pagar',  c.pagarOrden)
+router.delete('/ordenes/:id',      c.deleteOrden)
 
 // CxP
 router.get('/cxp',                 c.getCxP)

@@ -1498,6 +1498,18 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('prospeccion_origen_v1')
     console.log('✅ Migración prospeccion_origen_v1 — columna origen en pipeline_contactos')
   }
+
+  // Migration 28: oc_extra_cols_v1 — add missing columns to ordenes_compra
+  const m28 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('oc_extra_cols_v1')
+  if (!m28) {
+    const ocCols = db.prepare('PRAGMA table_info(ordenes_compra)').all().map(c => c.name)
+    if (!ocCols.includes('medio_pago'))        db.exec("ALTER TABLE ordenes_compra ADD COLUMN medio_pago TEXT DEFAULT 'Contado'")
+    if (!ocCols.includes('numero_factura'))    db.exec('ALTER TABLE ordenes_compra ADD COLUMN numero_factura TEXT')
+    if (!ocCols.includes('fecha_vencimiento')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN fecha_vencimiento TEXT')
+    if (!ocCols.includes('notas'))             db.exec('ALTER TABLE ordenes_compra ADD COLUMN notas TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_extra_cols_v1')
+    console.log('✅ Migración oc_extra_cols_v1 — medio_pago, numero_factura, fecha_vencimiento, notas añadidos a ordenes_compra')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

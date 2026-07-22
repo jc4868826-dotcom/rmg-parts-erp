@@ -112,20 +112,21 @@ const createOrden = (req, res) => {
     const count = db.prepare('SELECT COUNT(*) as n FROM ordenes_compra').get().n
     const numero = `OC-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`
     const id = uuidv4()
-    const { proveedor_id, proveedor, items } = req.body
+    const { proveedor_id, proveedor, items, fecha, medio_pago, numero_factura, fecha_vencimiento, notas } = req.body
     const itemsArr = items || []
-    const neto = itemsArr.reduce((s, i) => s + i.cantidad * i.precio_unitario, 0)
+    const neto = itemsArr.reduce((s, i) => s + (Number(i.cantidad) || 0) * (Number(i.precio_unitario) || 0), 0)
     const iva = Math.round(neto * 0.19)
 
     db.prepare(`INSERT INTO ordenes_compra
-      (id,numero,proveedor_id,proveedor,estado,fecha_emision,neto,iva,total,pagada)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`
+      (id,numero,proveedor_id,proveedor,estado,fecha_emision,neto,iva,total,pagada,medio_pago,numero_factura,fecha_vencimiento,notas)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(id, numero, proveedor_id || null, proveedor || null, 'borrador',
-      new Date().toISOString().split('T')[0], neto, iva, neto + iva, 0)
+      fecha || new Date().toISOString().split('T')[0], neto, iva, neto + iva, 0,
+      medio_pago || 'Contado', numero_factura || null, fecha_vencimiento || null, notas || null)
 
     const ins = db.prepare('INSERT INTO oc_items (id,oc_id,codigo,descripcion,cantidad,precio_unitario,subtotal) VALUES (?,?,?,?,?,?,?)')
     for (const item of itemsArr) {
-      ins.run(uuidv4(), id, item.codigo, item.descripcion || null, item.cantidad, item.precio_unitario, item.cantidad * item.precio_unitario)
+      ins.run(uuidv4(), id, item.codigo, item.descripcion || null, Number(item.cantidad) || 0, Number(item.precio_unitario) || 0, (Number(item.cantidad) || 0) * (Number(item.precio_unitario) || 0))
     }
     res.status(201).json(withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(id)))
   } catch (err) {
@@ -153,9 +154,29 @@ const recibirOrden = (req, res) => {
   try {
     const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!o) return res.status(404).json({ error: 'Orden no encontrada' })
-    db.prepare("UPDATE ordenes_compra SET estado = 'recibida', fecha_entrega = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(new Date().toISOString().split('T')[0], req.params.id)
-    res.json(withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)))
+    if (['recibida', 'anulada'].includes(o.estado)) {
+      return res.status(400).json({ error: `La OC ya está en estado ${o.estado}` })
+    }
+    const advertencias = []
+    const ejecutar = db.transaction(() => {
+      db.prepare("UPDATE ordenes_compra SET estado = 'recibida', fecha_entrega = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(new Date().toISOString().split('T')[0], req.params.id)
+      const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(req.params.id)
+      for (const item of items) {
+        if (!item.codigo) continue
+        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ? AND activo = 1').get(item.codigo)
+        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado — stock no actualizado`); continue }
+        const stockAnterior = prod.stock_actual
+        const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
+        db.prepare('UPDATE productos SET stock_actual = ? WHERE codigo = ?').run(stockNuevo, item.codigo)
+        try {
+          db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo) VALUES (?,?,?,?,?,?,?,?)')
+            .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo)
+        } catch (_) {}
+      }
+    })
+    ejecutar()
+    res.json({ ...withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)), advertencias })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -341,4 +362,56 @@ const cambiarEstadoCompra = (req, res) => {
   }
 }
 
-module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra }
+const pagarOrden = (req, res) => {
+  try {
+    const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
+    if (oc.pagada) return res.status(400).json({ error: 'La OC ya está pagada' })
+    const hoy = new Date().toISOString().split('T')[0]
+    const ejecutar = db.transaction(() => {
+      db.prepare("UPDATE ordenes_compra SET pagada = 1, updated_at = datetime('now') WHERE id = ?").run(req.params.id)
+      // Create compra record (feeds flujo de caja / ComprasErpPage)
+      db.prepare('INSERT INTO compras (fecha, proveedor, numero_oc, numero_factura, total, estado, fecha_vencimiento, notas) VALUES (?,?,?,?,?,?,?,?)')
+        .run(hoy, oc.proveedor, oc.numero, oc.numero_factura || null, oc.total, 'Pagada', oc.fecha_vencimiento || null, oc.notas || null)
+      const compraId = db.prepare('SELECT last_insert_rowid() as id').get().id
+      const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(req.params.id)
+      for (const item of items) {
+        db.prepare('INSERT INTO compra_items (compra_id, sku, descripcion, cantidad, costo_unitario, subtotal) VALUES (?,?,?,?,?,?)')
+          .run(compraId, item.codigo, item.descripcion, item.cantidad, item.precio_unitario, item.subtotal)
+      }
+      // Register egreso in caja_movimientos
+      try {
+        db.prepare('INSERT INTO caja_movimientos (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id) VALUES (?,?,?,?,?,?,?,?,?)')
+          .run('egreso', 'Compra', `OC ${oc.numero} · ${oc.proveedor}`, oc.total, hoy, oc.fecha_vencimiento || hoy, 'confirmado', 'ordenes_compra', oc.id)
+      } catch (_) {}
+      // If Crédito, also insert CxP
+      if (oc.medio_pago && oc.medio_pago.includes('Crédito')) {
+        try {
+          db.prepare(`INSERT INTO facturas_cxp (id, numero, proveedor_id, proveedor, oc_id, oc_numero, monto, fecha_emision, fecha_vencimiento, estado)
+            VALUES (?,?,?,?,?,?,?,?,?,?)`)
+            .run(uuidv4(), `CXP-${oc.numero}`, oc.proveedor_id || null, oc.proveedor, oc.id, oc.numero, oc.total, hoy, oc.fecha_vencimiento || null, 'pendiente')
+        } catch (_) {}
+      }
+    })
+    ejecutar()
+    res.json({ ...withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)), ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const deleteOrden = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    if (!['borrador', 'enviada'].includes(o.estado) || o.pagada) {
+      return res.status(400).json({ error: 'Solo se pueden eliminar OCs en estado Creada o Enviada' })
+    }
+    db.prepare('DELETE FROM ordenes_compra WHERE id = ?').run(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra }
