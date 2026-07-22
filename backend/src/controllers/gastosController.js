@@ -29,7 +29,7 @@ const getAll = (req, res) => {
 
 const create = (req, res) => {
   try {
-    const { fecha, categoria, descripcion, monto, comprobante, fecha_pago, cuenta_bancaria } = req.body
+    const { fecha, categoria, descripcion, monto, comprobante, fecha_pago, cuenta_bancaria, subcategoria, forma_pago, proveedor, notas, categoria_erp } = req.body
     if (!fecha || !categoria || !descripcion || !monto) {
       return res.status(400).json({ error: 'fecha, categoria, descripcion y monto son requeridos' })
     }
@@ -38,9 +38,9 @@ const create = (req, res) => {
     const estadoGasto = fechaPago > hoy() ? 'pendiente' : 'pagado'
 
     db.prepare(`
-      INSERT INTO gastos (id, fecha, categoria, descripcion, monto, comprobante, fecha_pago, estado)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, fecha, categoria, descripcion, Number(monto), comprobante || null, fechaPago, estadoGasto)
+      INSERT INTO gastos (id, fecha, categoria, descripcion, monto, comprobante, fecha_pago, estado, subcategoria, forma_pago, proveedor, notas, categoria_erp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, fecha, categoria, descripcion, Number(monto), comprobante || null, fechaPago, estadoGasto, subcategoria || null, forma_pago || 'Efectivo', proveedor || null, notas || null, categoria_erp || 'Variable')
 
     const estadoCaja = fechaPago > hoy() ? 'proyectado' : 'confirmado'
     insertCaja('egreso', categoria, descripcion, Number(monto), fechaPago, 'gastos', id, estadoCaja, cuenta_bancaria)
