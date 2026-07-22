@@ -15,10 +15,11 @@ function insertCaja(tipo, categoria, descripcion, monto, fecha_pago, origen_tabl
 
 const getAll = (req, res) => {
   try {
-    const { categoria } = req.query
-    let sql = 'SELECT * FROM gastos'
+    const { categoria, mes } = req.query
+    let sql = 'SELECT * FROM gastos WHERE 1=1'
     const params = []
-    if (categoria) { sql += ' WHERE categoria = ?'; params.push(categoria) }
+    if (categoria) { sql += ' AND categoria = ?'; params.push(categoria) }
+    if (mes)       { sql += ' AND fecha LIKE ?';  params.push(`${mes}%`) }
     sql += ' ORDER BY fecha DESC, created_at DESC'
     res.json(db.prepare(sql).all(...params))
   } catch (err) {
@@ -50,4 +51,30 @@ const create = (req, res) => {
   }
 }
 
-module.exports = { getAll, create }
+const update = (req, res) => {
+  try {
+    const g = db.prepare('SELECT * FROM gastos WHERE id = ?').get(req.params.id)
+    if (!g) return res.status(404).json({ error: 'Gasto no encontrado' })
+    const allowed = ['fecha', 'categoria', 'descripcion', 'monto', 'comprobante', 'fecha_pago', 'estado', 'subcategoria', 'forma_pago', 'proveedor', 'notas', 'categoria_erp']
+    const toUpdate = allowed.filter(f => req.body[f] !== undefined)
+    if (!toUpdate.length) return res.json(g)
+    const set = toUpdate.map(f => `${f} = ?`).join(', ')
+    db.prepare(`UPDATE gastos SET ${set} WHERE id = ?`).run(...toUpdate.map(f => req.body[f]), req.params.id)
+    res.json(db.prepare('SELECT * FROM gastos WHERE id = ?').get(req.params.id))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const remove = (req, res) => {
+  try {
+    const g = db.prepare('SELECT * FROM gastos WHERE id = ?').get(req.params.id)
+    if (!g) return res.status(404).json({ error: 'Gasto no encontrado' })
+    db.prepare('DELETE FROM gastos WHERE id = ?').run(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getAll, create, update, remove }

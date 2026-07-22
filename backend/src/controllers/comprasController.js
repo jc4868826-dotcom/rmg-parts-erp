@@ -204,4 +204,75 @@ const pagarFactura = (req, res) => {
   }
 }
 
-module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, getCxP, pagarFactura }
+// ── Compras ERP (tabla simple, distinta de ordenes_compra) ─────────────────
+const getComprasList = (req, res) => {
+  try {
+    const { mes } = req.query
+    let sql = `
+      SELECT c.*,
+        (SELECT json_group_array(json_object(
+          'id', i.id, 'sku', i.sku, 'descripcion', i.descripcion,
+          'cantidad', i.cantidad, 'costo_unitario', i.costo_unitario, 'subtotal', i.subtotal
+        )) FROM compra_items i WHERE i.compra_id = c.id) as items
+      FROM compras c`
+    const params = []
+    if (mes) { sql += ' WHERE c.fecha LIKE ?'; params.push(`${mes}%`) }
+    sql += ' ORDER BY c.fecha DESC, c.created_at DESC'
+    const rows = db.prepare(sql).all(...params)
+    res.json(rows.map(r => ({ ...r, items: r.items ? JSON.parse(r.items) : [] })))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const createCompra = (req, res) => {
+  try {
+    const { fecha, proveedor, numero_oc, numero_factura, estado, fecha_vencimiento, notas, items = [] } = req.body
+    if (!fecha || !proveedor) return res.status(400).json({ error: 'fecha y proveedor son requeridos' })
+    const total = items.reduce((s, i) => s + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
+    const doCreate = db.transaction(() => {
+      db.prepare('INSERT INTO compras (fecha, proveedor, numero_oc, numero_factura, total, estado, fecha_vencimiento, notas) VALUES (?,?,?,?,?,?,?,?)')
+        .run(fecha, proveedor, numero_oc || null, numero_factura || null, total, estado || 'Pendiente', fecha_vencimiento || null, notas || null)
+      const newId = db.prepare('SELECT last_insert_rowid() as id').get().id
+      for (const item of items) {
+        const sub = Number(item.costo_unitario || 0) * Number(item.cantidad || 0)
+        db.prepare('INSERT INTO compra_items (compra_id, sku, descripcion, cantidad, costo_unitario, subtotal) VALUES (?,?,?,?,?,?)')
+          .run(newId, item.sku || '', item.descripcion || '', Number(item.cantidad || 0), Number(item.costo_unitario || 0), sub)
+      }
+      return newId
+    })
+    const newId = doCreate()
+    const nueva = db.prepare('SELECT * FROM compras WHERE id = ?').get(newId)
+    const itemsResult = db.prepare('SELECT * FROM compra_items WHERE compra_id = ?').all(newId)
+    res.status(201).json({ ...nueva, items: itemsResult })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const updateCompra = (req, res) => {
+  try {
+    const c = db.prepare('SELECT * FROM compras WHERE id = ?').get(req.params.id)
+    if (!c) return res.status(404).json({ error: 'Compra no encontrada' })
+    const { fecha, proveedor, numero_oc, numero_factura, estado, fecha_vencimiento, notas } = req.body
+    db.prepare('UPDATE compras SET fecha=?, proveedor=?, numero_oc=?, numero_factura=?, estado=?, fecha_vencimiento=?, notas=? WHERE id=?')
+      .run(fecha ?? c.fecha, proveedor ?? c.proveedor, numero_oc ?? c.numero_oc, numero_factura ?? c.numero_factura,
+           estado ?? c.estado, fecha_vencimiento ?? c.fecha_vencimiento, notas ?? c.notas, req.params.id)
+    res.json(db.prepare('SELECT * FROM compras WHERE id = ?').get(req.params.id))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const deleteCompra = (req, res) => {
+  try {
+    const c = db.prepare('SELECT * FROM compras WHERE id = ?').get(req.params.id)
+    if (!c) return res.status(404).json({ error: 'Compra no encontrada' })
+    db.prepare('DELETE FROM compras WHERE id = ?').run(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra }

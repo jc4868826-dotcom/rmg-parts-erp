@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -34,14 +34,22 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    label: 'ERP',
+    label: 'Financiero ERP',
+    items: [
+      { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: null },
+      { to: '/gastos',       icon: Receipt,         label: 'Gastos',          badge: null },
+      { to: '/compras-erp',  icon: PackagePlus,     label: 'Compras',         badge: null },
+      { to: '/flujo-caja',   icon: LineChart,       label: 'Flujo de Caja',   badge: null },
+      { to: '/edr',          icon: BarChart2,       label: 'EDR',             badge: null },
+    ],
+  },
+  {
+    label: 'ERP Operacional',
     items: [
       { to: '/pedidos',      icon: ShoppingCart,    label: 'Pedidos',         badge: null },
       { to: '/cxc',          icon: DollarSign,      label: 'CxC · Cobrar',    badge: null },
       { to: '/cxp',          icon: CreditCard,      label: 'CxP · Pagar',     badge: null },
       { to: '/facturas',     icon: BookOpen,        label: 'Notas de Venta',  badge: null },
-      { to: '/gastos',       icon: Receipt,         label: 'Gastos',          badge: null },
-      { to: '/flujo-caja',   icon: LineChart,       label: 'Flujo de Caja',   badge: null },
     ],
   },
   {

@@ -5,6 +5,19 @@ const hoy = () => new Date().toISOString().split('T')[0]
 
 const getMovimientos = (req, res) => {
   try {
+    // Si se pasa ?mes=YYYY-MM devuelve resumen ERP (ventas + gastos + compras)
+    if (req.query.mes) {
+      const filtro = `${req.query.mes}%`
+      const entradas = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM ventas WHERE fecha LIKE ? AND estado='Pagado'").get(filtro).v
+      const salidas_gastos = db.prepare("SELECT COALESCE(SUM(monto),0) as v FROM gastos WHERE fecha LIKE ?").get(filtro).v
+      const salidas_compras = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM compras WHERE fecha LIKE ? AND estado='Pagado'").get(filtro).v
+      return res.json({
+        mes: req.query.mes,
+        entradas, salidas_gastos, salidas_compras,
+        saldo_final: entradas - salidas_gastos - salidas_compras,
+      })
+    }
+
     const { modo = 'proyectado', desde, hasta, tipo, categoria, cuenta_bancaria, estado } = req.query
     let sql = 'SELECT * FROM caja_movimientos WHERE 1=1'
     const params = []

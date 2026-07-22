@@ -40,6 +40,44 @@ function semanaKey(dateStr) {
 const TT = { background: '#0a1a2e', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, color: '#fff', fontSize: 12 }
 const AX = { fill: 'rgba(90,143,168,0.7)', fontSize: 11 }
 
+const mesActualStr = () => new Date().toISOString().slice(0, 7)
+
+function FlujoCajaErpPanel() {
+  const [mes, setMes] = useState(mesActualStr())
+  const { data: erp, isLoading } = useQuery({
+    queryKey: ['flujo-caja-erp', mes],
+    queryFn: () => api.get('/flujo-caja', { params: { mes } }).then(r => r.data),
+  })
+
+  return (
+    <div className="rmg-card p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-sm">Resumen ERP · Flujo del Mes</h2>
+        <input type="month" className="rmg-input text-xs py-1.5 w-36" value={mes} onChange={e => setMes(e.target.value)} />
+      </div>
+      {isLoading ? (
+        <div className="grid grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />)}
+        </div>
+      ) : erp ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Entradas (Ventas Pagadas)', value: erp.entradas, color: 'var(--rmg-teal)' },
+            { label: 'Salidas Gastos', value: erp.salidas_gastos, color: 'var(--rmg-gold)' },
+            { label: 'Salidas Compras (Pagadas)', value: erp.salidas_compras, color: 'var(--rmg-red)' },
+            { label: 'Saldo Final', value: erp.saldo_final, color: erp.saldo_final >= 0 ? 'var(--rmg-blt)' : 'var(--rmg-red)' },
+          ].map(c => (
+            <div key={c.label} className="p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="text-xs mb-1 leading-tight" style={{ color: 'var(--rmg-muted)' }}>{c.label}</div>
+              <div className="font-black text-lg" style={{ color: c.color, fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(c.value)}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function FlujoCajaPage() {
   const [desde, setDesde]       = useState(mesInicio())
   const [hasta, setHasta]       = useState(hoyStr())
@@ -212,6 +250,9 @@ export default function FlujoCajaPage() {
           {showForm ? <><X size={15}/> Cerrar</> : <><Plus size={15}/> Nuevo</>}
         </button>
       </div>
+
+      {/* Panel ERP */}
+      <FlujoCajaErpPanel />
 
       {/* Filtro fecha */}
       <div className="rmg-card p-4 flex items-center gap-4 flex-wrap">

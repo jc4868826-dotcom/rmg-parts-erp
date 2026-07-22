@@ -37,6 +37,9 @@ import ListaPreciosPage from '@pages/ListaPreciosPage'
 import FlujoCajaPage   from '@pages/FlujoCajaPage'
 import AsistenteIAPage from '@pages/AsistenteIAPage'
 import ConfigurarLandingPage from '@pages/ConfigurarLandingPage'
+import VentasPage from '@pages/VentasPage'
+import ComprasErpPage from '@pages/ComprasErpPage'
+import EDRPage from '@pages/EDRPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -108,6 +111,9 @@ export default function App() {
               <Route path="flujo-caja"        element={<FlujoCajaPage />} />
               <Route path="asistente"         element={<AsistenteIAPage />} />
               <Route path="configurar-landing" element={<ConfigurarLandingPage />} />
+              <Route path="ventas"            element={<VentasPage />} />
+              <Route path="compras-erp"       element={<ComprasErpPage />} />
+              <Route path="edr"               element={<EDRPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

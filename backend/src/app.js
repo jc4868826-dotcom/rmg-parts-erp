@@ -98,6 +98,8 @@ app.use('/api/gastos',                 require('./routes/gastos'));        // Ga
 app.use('/api/flujo-caja',             require('./routes/flujoCaja'));     // Flujo de caja
 app.use('/api/configuracion',          require('./routes/configuracion')); // Configuración mensual
 app.use('/api/notas-venta',            require('./routes/notasVenta'));    // Notas de venta
+app.use('/api/ventas',                 require('./routes/ventas'));          // ERP Ventas
+app.use('/api/edr',                    require('./routes/edr'));             // Estado de Resultados
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {

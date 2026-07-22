@@ -1352,6 +1352,117 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('landing_productos_ficha_v1')
     console.log('✅ Migración landing_productos_ficha_v1 — sae, tipo, aplicaciones, beneficios, presentaciones, ficha_tecnica_url, compatibilidad añadidos a landing_productos')
   }
+
+  // Migration 23: erp_financiero_v1 — ventas, compras, compra_items + extend gastos
+  const m23 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('erp_financiero_v1')
+  if (!m23) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ventas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha TEXT NOT NULL,
+        cliente_nombre TEXT,
+        numero_documento TEXT,
+        tipo_documento TEXT DEFAULT 'Nota de Venta',
+        total REAL NOT NULL DEFAULT 0,
+        costo_total REAL DEFAULT 0,
+        estado TEXT DEFAULT 'Pendiente',
+        forma_pago TEXT DEFAULT 'Contado',
+        notas TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS venta_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        venta_id INTEGER REFERENCES ventas(id) ON DELETE CASCADE,
+        sku TEXT,
+        descripcion TEXT,
+        cantidad REAL,
+        precio_unitario REAL,
+        costo_unitario REAL DEFAULT 0,
+        subtotal REAL
+      );
+      CREATE TABLE IF NOT EXISTS compras (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha TEXT NOT NULL,
+        proveedor TEXT NOT NULL,
+        numero_oc TEXT,
+        numero_factura TEXT,
+        total REAL NOT NULL DEFAULT 0,
+        estado TEXT DEFAULT 'Pendiente',
+        fecha_vencimiento TEXT,
+        notas TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS compra_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        compra_id INTEGER REFERENCES compras(id) ON DELETE CASCADE,
+        sku TEXT,
+        descripcion TEXT,
+        cantidad REAL,
+        costo_unitario REAL,
+        subtotal REAL
+      );
+      CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha);
+      CREATE INDEX IF NOT EXISTS idx_compras_fecha ON compras(fecha);
+    `)
+
+    // Extend gastos with ERP columns (safe ALTER IF NOT EXISTS via pragma check)
+    const gastosColsErp = db.prepare('PRAGMA table_info(gastos)').all().map(c => c.name)
+    if (!gastosColsErp.includes('subcategoria'))  db.exec('ALTER TABLE gastos ADD COLUMN subcategoria TEXT')
+    if (!gastosColsErp.includes('forma_pago'))    db.exec("ALTER TABLE gastos ADD COLUMN forma_pago TEXT DEFAULT 'Efectivo'")
+    if (!gastosColsErp.includes('proveedor'))     db.exec('ALTER TABLE gastos ADD COLUMN proveedor TEXT')
+    if (!gastosColsErp.includes('notas'))         db.exec('ALTER TABLE gastos ADD COLUMN notas TEXT')
+    if (!gastosColsErp.includes('categoria_erp')) db.exec("ALTER TABLE gastos ADD COLUMN categoria_erp TEXT DEFAULT 'Variable'")
+
+    // Seed datos de prueba julio 2026 si las tablas están vacías
+    const nVentas = db.prepare('SELECT COUNT(*) as n FROM ventas').get().n
+    if (nVentas === 0) {
+      db.exec(`
+        INSERT INTO ventas (fecha, cliente_nombre, numero_documento, tipo_documento, total, costo_total, estado, forma_pago, notas)
+        VALUES
+          ('2026-07-05', 'Taller Mecánico KENO', 'NV-001', 'Nota de Venta', 450000, 310000, 'Pagado', 'Transferencia', 'Venta lubricantes 5W30'),
+          ('2026-07-12', 'SOTRASER S.A.', 'NV-002', 'Nota de Venta', 1200000, 850000, 'Pagado', 'Transferencia', 'Lote neumáticos camión'),
+          ('2026-07-20', 'Constructora Gardilcic', 'NV-003', 'Factura', 680000, 480000, 'Pendiente', 'Crédito 30 días', 'Baterías y lubricantes')
+      `)
+      db.exec(`
+        INSERT INTO venta_items (venta_id, sku, descripcion, cantidad, precio_unitario, costo_unitario, subtotal)
+        VALUES
+          (1, '240079', 'Lubricante KUMHO 5W30 1L', 10, 45000, 31000, 450000),
+          (2, '240272', 'Neumático KUMHO 31X10.5 R15', 8, 150000, 106250, 1200000),
+          (3, '244243', 'Batería NS40ZL', 4, 85000, 60000, 340000),
+          (3, '240331', 'Lubricante 15W40 5L', 2, 170000, 120000, 340000)
+      `)
+    }
+
+    const nCompras = db.prepare('SELECT COUNT(*) as n FROM compras').get().n
+    if (nCompras === 0) {
+      db.exec(`
+        INSERT INTO compras (fecha, proveedor, numero_oc, numero_factura, total, estado, fecha_vencimiento, notas)
+        VALUES
+          ('2026-07-03', 'Cristian Hughes', 'OC-001', 'F-12345', 850000, 'Pagado', '2026-07-20', 'Lubricantes y filtros'),
+          ('2026-07-10', 'Vistony', 'OC-002', 'F-56789', 1500000, 'Pendiente', '2026-08-09', 'Lote neumáticos KUMHO'),
+          ('2026-07-18', 'SalfaSur', 'OC-003', null, 320000, 'Recibido', '2026-08-17', 'Baterías NS40ZL')
+      `)
+      db.exec(`
+        INSERT INTO compra_items (compra_id, sku, descripcion, cantidad, costo_unitario, subtotal)
+        VALUES
+          (1, '240079', 'Lubricante 5W30 1L', 25, 31000, 775000),
+          (1, '244248', 'Lubricante 15W40', 5, 15000, 75000),
+          (2, '240272', 'Neumático 31X10.5 R15', 10, 115417, 1154170),
+          (3, '244243', 'Batería NS40ZL', 4, 80000, 320000)
+      `)
+    }
+
+    // Seed gastos ERP julio 2026 si no hay registros del mes
+    const nGastosJul = db.prepare("SELECT COUNT(*) as n FROM gastos WHERE fecha LIKE '2026-07%'").get().n
+    if (nGastosJul === 0) {
+      db.prepare("INSERT INTO gastos (id, fecha, categoria, descripcion, monto, categoria_erp, subcategoria) VALUES (?,?,?,?,?,?,?)").run('erp-g1', '2026-07-01', 'administrativo', 'Arriendo bodega mensual', 350000, 'Fijo', 'Arriendo')
+      db.prepare("INSERT INTO gastos (id, fecha, categoria, descripcion, monto, categoria_erp, subcategoria) VALUES (?,?,?,?,?,?,?)").run('erp-g2', '2026-07-05', 'marketing', 'Publicidad Facebook Ads julio', 120000, 'Variable', 'Marketing Digital')
+      db.prepare("INSERT INTO gastos (id, fecha, categoria, descripcion, monto, categoria_erp, subcategoria) VALUES (?,?,?,?,?,?,?)").run('erp-g3', '2026-07-10', 'combustible', 'Combustible vehículo reparto', 85000, 'Variable', 'Transporte')
+    }
+
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('erp_financiero_v1')
+    console.log('✅ Migración erp_financiero_v1 — ventas, venta_items, compras, compra_items + gastos extended')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
