@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, X, Pencil, Trash2, ShoppingBag, Send, PackageCheck, CreditCard, ChevronRight } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ShoppingBag, Send, PackageCheck, CreditCard, ChevronRight, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const MES_ACTUAL = new Date().toISOString().slice(0, 7)
@@ -42,85 +42,98 @@ const FORM_INIT = {
   estado: 'Borrador', fecha_vencimiento: '', notas: '', items: [{ ...ITEM_INIT }],
 }
 
-// ── SKU Autocomplete item row ────────────────────────────────────────────────
+// ── SKU item row — same search pattern as CotizacionForm ────────────────────
 function SkuItemRow({ item, idx, onUpdate, onRemove, showRemove }) {
   const [query, setQuery]   = useState(item.sku || '')
-  const [results, setResults] = useState([])
   const [open, setOpen]     = useState(false)
-  const timer               = useRef(null)
-  const dropRef             = useRef(null)
+  const [debouncedQ, setDQ] = useState('')
+  const wrapRef             = useRef(null)
 
-  // Close dropdown when clicking outside
   useEffect(() => {
-    const handler = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false) }
+    const t = setTimeout(() => setDQ(query), 300)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const { data: resultados = [], isFetching } = useQuery({
+    queryKey: ['lp-buscar-oc', debouncedQ],
+    queryFn: () => api.get('/lista-precios/buscar', { params: { q: debouncedQ } }).then(r => r.data),
+    enabled: debouncedQ.length >= 2,
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const handleSkuChange = (val) => {
-    setQuery(val)
-    onUpdate(idx, 'sku', val)
-    if (val.length < 3) { setResults([]); setOpen(false); return }
-    clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
-      try {
-        const res = await api.get('/productos/search', { params: { q: val } })
-        setResults(res.data.slice(0, 8))
-        setOpen(res.data.length > 0)
-      } catch { setResults([]); setOpen(false) }
-    }, 300)
+  const handleSelect = (p) => {
+    setQuery(p.codigo_sku)
+    setOpen(false)
+    onUpdate(idx, 'sku', p.codigo_sku)
+    onUpdate(idx, 'descripcion', p.descripcion)
+    onUpdate(idx, 'costo_unitario', p.costo_unidad_neto)
   }
 
-  const selectProducto = (prod) => {
-    setQuery(prod.codigo)
+  const handleClear = () => {
+    setQuery('')
     setOpen(false)
-    setResults([])
-    onUpdate(idx, 'sku', prod.codigo)
-    onUpdate(idx, 'descripcion', prod.descripcion)
-    onUpdate(idx, 'costo_unitario', prod.precio_costo)
+    onUpdate(idx, 'sku', '')
+    onUpdate(idx, 'descripcion', '')
+    onUpdate(idx, 'costo_unitario', 0)
   }
 
   const sub = Number(item.costo_unitario || 0) * Number(item.cantidad || 0)
 
   return (
     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      {/* SKU con autocomplete */}
-      <td className="px-3 py-2 w-28" ref={dropRef} style={{ position: 'relative' }}>
-        <input
-          className="rmg-input text-xs font-mono"
-          placeholder="SKU"
-          value={query}
-          onChange={e => handleSkuChange(e.target.value)}
-          onFocus={() => results.length > 0 && setOpen(true)}
-        />
-        {open && results.length > 0 && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, zIndex: 100, minWidth: 280,
-            background: 'rgba(7,21,40,0.98)', border: '1px solid rgba(56,182,255,0.25)',
-            borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', overflow: 'hidden',
-          }}>
-            {results.map(p => (
-              <button
-                key={p.id || p.codigo}
-                type="button"
-                onMouseDown={() => selectProducto(p)}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left',
-                  padding: '8px 12px', background: 'none', border: 'none',
-                  borderBottom: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(56,182,255,0.08)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'none'}
-              >
-                <div className="text-xs font-mono font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo}</div>
-                <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>{p.descripcion}</div>
-                <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-gold)' }}>Costo: {p.precio_costo?.toLocaleString('es-CL', { style: 'currency', currency: 'CLP' })} · Stock: {p.stock_actual}</div>
+      {/* Buscar producto */}
+      <td className="px-3 py-2 min-w-52" ref={wrapRef} style={{ position: 'relative' }}>
+        <div className="relative">
+          <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--rmg-muted)' }} />
+          <input
+            className="rmg-input text-xs pl-6 pr-6"
+            placeholder="Buscar SKU, producto…"
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true) }}
+            onFocus={() => query.length >= 2 && setOpen(true)}
+            autoComplete="off"
+          />
+          {query && (
+            <button type="button" onClick={handleClear} className="absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--rmg-muted)' }}>
+              <X size={11}/>
+            </button>
+          )}
+        </div>
+        {open && debouncedQ.length >= 2 && (
+          <div className="absolute z-50 left-0 mt-1 rounded-lg border overflow-hidden shadow-xl"
+            style={{ background: 'var(--rmg-surface)', borderColor: 'rgba(56,182,255,0.25)', maxHeight: 260, overflowY: 'auto', minWidth: 300 }}>
+            {isFetching && (
+              <div className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>Buscando…</div>
+            )}
+            {!isFetching && resultados.length === 0 && (
+              <div className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>Sin resultados</div>
+            )}
+            {resultados.map(p => (
+              <button key={p.codigo_sku} type="button" onMouseDown={() => handleSelect(p)}
+                className="w-full text-left px-3 py-2.5 hover:bg-white/5 transition-colors border-b"
+                style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo_sku}</span>
+                  <span className="font-bold text-xs" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(p.costo_unidad_neto)}</span>
+                </div>
+                <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--rmg-off)' }}>{p.descripcion}</div>
+                <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{p.marca} · {p.presentacion}</div>
               </button>
             ))}
           </div>
         )}
       </td>
-      {/* Descripción (read-only si viene del catálogo) */}
+      {/* SKU (editable, prefilled from búsqueda) */}
+      <td className="px-3 py-2 w-28">
+        <input className="rmg-input text-xs font-mono" placeholder="SKU" value={item.sku} onChange={e => onUpdate(idx, 'sku', e.target.value)} />
+      </td>
+      {/* Descripción (editable, prefilled from búsqueda) */}
       <td className="px-3 py-2 min-w-40">
         <input className="rmg-input text-xs" placeholder="Descripción" value={item.descripcion} onChange={e => onUpdate(idx, 'descripcion', e.target.value)} />
       </td>
@@ -128,7 +141,7 @@ function SkuItemRow({ item, idx, onUpdate, onRemove, showRemove }) {
       <td className="px-3 py-2 w-20">
         <input type="number" min="0.01" step="any" className="rmg-input text-xs text-center" value={item.cantidad} onChange={e => onUpdate(idx, 'cantidad', e.target.value)} />
       </td>
-      {/* Costo unit (editable, prefilled from catalogo) */}
+      {/* Costo unit (editable, prefilled from búsqueda) */}
       <td className="px-3 py-2 w-32">
         <input type="number" min="0" className="rmg-input text-xs text-right" value={item.costo_unitario} onChange={e => onUpdate(idx, 'costo_unitario', e.target.value)} />
       </td>
@@ -287,7 +300,7 @@ export default function ComprasErpPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-                    {['SKU', 'Descripción', 'Cant.', 'Costo Unit.', 'Subtotal', ''].map(h => (
+                    {['Buscar producto', 'SKU', 'Descripción', 'Cant.', 'Costo Unit.', 'Subtotal', ''].map(h => (
                       <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
                   </tr>
