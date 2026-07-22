@@ -275,4 +275,70 @@ const deleteCompra = (req, res) => {
   }
 }
 
-module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra }
+const { uuidv4: _uuidv4 } = require('../../config/database')
+
+const ESTADOS_OC = ['Borrador', 'Enviada', 'Recibida', 'Pagada', 'Anulada']
+
+const cambiarEstadoCompra = (req, res) => {
+  try {
+    const { estado } = req.body
+    if (!ESTADOS_OC.includes(estado)) {
+      return res.status(400).json({ error: `Estado inválido. Valores: ${ESTADOS_OC.join(', ')}` })
+    }
+
+    const compra = db.prepare('SELECT * FROM compras WHERE id = ?').get(req.params.id)
+    if (!compra) return res.status(404).json({ error: 'Compra no encontrada' })
+    if (compra.estado === 'Pagada') {
+      return res.status(400).json({ error: 'La compra ya está Pagada y no puede cambiarse de estado' })
+    }
+    if (estado === 'Recibida' && compra.estado === 'Pagada') {
+      return res.status(400).json({ error: 'No se puede retroceder a Recibida una compra Pagada' })
+    }
+
+    const hoy = new Date().toISOString().split('T')[0]
+    const advertencias = []
+
+    const ejecutar = db.transaction(() => {
+      db.prepare('UPDATE compras SET estado = ? WHERE id = ?').run(estado, req.params.id)
+
+      if (estado === 'Recibida') {
+        const items = db.prepare('SELECT * FROM compra_items WHERE compra_id = ?').all(req.params.id)
+        for (const item of items) {
+          if (!item.sku) continue
+          const prod = db.prepare('SELECT * FROM productos WHERE codigo = ? AND activo = 1').get(item.sku)
+          if (!prod) {
+            advertencias.push(`SKU ${item.sku} no encontrado en catálogo — stock no actualizado`)
+            continue
+          }
+          const stockAnterior = prod.stock_actual
+          const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
+          db.prepare('UPDATE productos SET stock_actual = ? WHERE codigo = ?').run(stockNuevo, item.sku)
+          try {
+            db.prepare(
+              'INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo) VALUES (?,?,?,?,?,?,?,?)'
+            ).run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo)
+          } catch (_) {}
+        }
+      }
+
+      if (estado === 'Pagada') {
+        const desc = `OC ${compra.numero_oc || `#${compra.id}`} · ${compra.proveedor}`
+        try {
+          db.prepare(
+            'INSERT INTO caja_movimientos (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id) VALUES (?,?,?,?,?,?,?,?,?)'
+          ).run('egreso', 'Compra', desc, compra.total, hoy, hoy, 'confirmado', 'compras', String(compra.id))
+        } catch (_) {}
+      }
+    })
+
+    ejecutar()
+
+    const updated = db.prepare('SELECT * FROM compras WHERE id = ?').get(req.params.id)
+    const items = db.prepare('SELECT * FROM compra_items WHERE compra_id = ?').all(req.params.id)
+    res.json({ ...updated, items, advertencias })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra }

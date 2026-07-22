@@ -1,29 +1,153 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, X, Pencil, Trash2, ShoppingBag } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ShoppingBag, Send, PackageCheck, CreditCard, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const MES_ACTUAL = new Date().toISOString().slice(0, 7)
 const HOY = new Date().toISOString().split('T')[0]
 const PROVEEDORES = ['Cristian Hughes', 'Vistony', 'SalfaSur', 'Otro']
-const ESTADOS = ['Pendiente', 'Recibido', 'Pagado', 'Anulado']
-const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, costo_unitario: 0 }
-const FORM_INIT = { fecha: HOY, proveedor: 'Cristian Hughes', numero_oc: '', numero_factura: '', estado: 'Pendiente', fecha_vencimiento: '', notas: '', items: [{ ...ITEM_INIT }] }
 
-const ESTADO_STYLE = {
-  Pagado:   { color: 'var(--rmg-teal)',   bg: 'rgba(45,201,138,0.12)' },
-  Pendiente:{ color: 'var(--rmg-gold)',   bg: 'rgba(244,162,60,0.12)' },
-  Recibido: { color: 'var(--rmg-blt)',    bg: 'rgba(56,182,255,0.12)' },
-  Anulado:  { color: 'var(--rmg-red)',    bg: 'rgba(224,90,78,0.12)'  },
+// Estado machine del spec
+const ESTADO_NEXT = {
+  Borrador:  { label: 'Enviar',          next: 'Enviada',  icon: Send,         color: 'var(--rmg-blue)' },
+  Enviada:   { label: 'Marcar Recibida', next: 'Recibida', icon: PackageCheck,  color: 'var(--rmg-teal)' },
+  Recibida:  { label: 'Marcar Pagada',   next: 'Pagada',   icon: CreditCard,    color: 'var(--rmg-gold)' },
+  Pagada:    null,
+  Anulada:   null,
+  // legacy compat
+  Pendiente: { label: 'Enviar',          next: 'Enviada',  icon: Send,         color: 'var(--rmg-blue)' },
+  Recibido:  { label: 'Marcar Pagada',   next: 'Pagada',   icon: CreditCard,    color: 'var(--rmg-gold)' },
+  Pagado:    null,
+  Anulado:   null,
 }
 
+const ESTADO_STYLE = {
+  Borrador:  { color: 'rgba(90,143,168,0.9)', bg: 'rgba(90,143,168,0.12)' },
+  Enviada:   { color: 'var(--rmg-blue)',      bg: 'rgba(56,182,255,0.12)' },
+  Recibida:  { color: 'var(--rmg-blt)',       bg: 'rgba(56,182,255,0.15)' },
+  Pagada:    { color: 'var(--rmg-teal)',      bg: 'rgba(45,201,138,0.12)' },
+  Anulada:   { color: 'var(--rmg-red)',       bg: 'rgba(224,90,78,0.12)'  },
+  Pendiente: { color: 'var(--rmg-gold)',      bg: 'rgba(244,162,60,0.12)' },
+  Recibido:  { color: 'var(--rmg-blt)',       bg: 'rgba(56,182,255,0.12)' },
+  Pagado:    { color: 'var(--rmg-teal)',      bg: 'rgba(45,201,138,0.12)' },
+  Anulado:   { color: 'var(--rmg-red)',       bg: 'rgba(224,90,78,0.12)'  },
+}
+
+const ESTADOS_EDIT = ['Borrador', 'Enviada', 'Recibida', 'Pagada', 'Anulada']
+const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, costo_unitario: 0 }
+const FORM_INIT = {
+  fecha: HOY, proveedor: 'Cristian Hughes', numero_oc: '', numero_factura: '',
+  estado: 'Borrador', fecha_vencimiento: '', notas: '', items: [{ ...ITEM_INIT }],
+}
+
+// ── SKU Autocomplete item row ────────────────────────────────────────────────
+function SkuItemRow({ item, idx, onUpdate, onRemove, showRemove }) {
+  const [query, setQuery]   = useState(item.sku || '')
+  const [results, setResults] = useState([])
+  const [open, setOpen]     = useState(false)
+  const timer               = useRef(null)
+  const dropRef             = useRef(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleSkuChange = (val) => {
+    setQuery(val)
+    onUpdate(idx, 'sku', val)
+    if (val.length < 3) { setResults([]); setOpen(false); return }
+    clearTimeout(timer.current)
+    timer.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/productos/search', { params: { q: val } })
+        setResults(res.data.slice(0, 8))
+        setOpen(res.data.length > 0)
+      } catch { setResults([]); setOpen(false) }
+    }, 300)
+  }
+
+  const selectProducto = (prod) => {
+    setQuery(prod.codigo)
+    setOpen(false)
+    setResults([])
+    onUpdate(idx, 'sku', prod.codigo)
+    onUpdate(idx, 'descripcion', prod.descripcion)
+    onUpdate(idx, 'costo_unitario', prod.precio_costo)
+  }
+
+  const sub = Number(item.costo_unitario || 0) * Number(item.cantidad || 0)
+
+  return (
+    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+      {/* SKU con autocomplete */}
+      <td className="px-3 py-2 w-28" ref={dropRef} style={{ position: 'relative' }}>
+        <input
+          className="rmg-input text-xs font-mono"
+          placeholder="SKU"
+          value={query}
+          onChange={e => handleSkuChange(e.target.value)}
+          onFocus={() => results.length > 0 && setOpen(true)}
+        />
+        {open && results.length > 0 && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, zIndex: 100, minWidth: 280,
+            background: 'rgba(7,21,40,0.98)', border: '1px solid rgba(56,182,255,0.25)',
+            borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', overflow: 'hidden',
+          }}>
+            {results.map(p => (
+              <button
+                key={p.id || p.codigo}
+                type="button"
+                onMouseDown={() => selectProducto(p)}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '8px 12px', background: 'none', border: 'none',
+                  borderBottom: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(56,182,255,0.08)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >
+                <div className="text-xs font-mono font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>{p.descripcion}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-gold)' }}>Costo: {p.precio_costo?.toLocaleString('es-CL', { style: 'currency', currency: 'CLP' })} · Stock: {p.stock_actual}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </td>
+      {/* Descripción (read-only si viene del catálogo) */}
+      <td className="px-3 py-2 min-w-40">
+        <input className="rmg-input text-xs" placeholder="Descripción" value={item.descripcion} onChange={e => onUpdate(idx, 'descripcion', e.target.value)} />
+      </td>
+      {/* Cantidad */}
+      <td className="px-3 py-2 w-20">
+        <input type="number" min="0.01" step="any" className="rmg-input text-xs text-center" value={item.cantidad} onChange={e => onUpdate(idx, 'cantidad', e.target.value)} />
+      </td>
+      {/* Costo unit (editable, prefilled from catalogo) */}
+      <td className="px-3 py-2 w-32">
+        <input type="number" min="0" className="rmg-input text-xs text-right" value={item.costo_unitario} onChange={e => onUpdate(idx, 'costo_unitario', e.target.value)} />
+      </td>
+      {/* Subtotal */}
+      <td className="px-3 py-2 font-bold text-right text-sm" style={{ color: 'var(--rmg-off)', whiteSpace: 'nowrap' }}>{formatCLP(sub)}</td>
+      {/* Remove */}
+      <td className="px-3 py-2">
+        {showRemove && <button type="button" onClick={() => onRemove(idx)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><X size={13}/></button>}
+      </td>
+    </tr>
+  )
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
 export default function ComprasErpPage() {
-  const [mes, setMes]             = useState(MES_ACTUAL)
-  const [showForm, setShowForm]   = useState(false)
-  const [editando, setEditando]   = useState(null)
-  const [form, setForm]           = useState(FORM_INIT)
+  const [mes, setMes]           = useState(MES_ACTUAL)
+  const [showForm, setShowForm] = useState(false)
+  const [editando, setEditando] = useState(null)
+  const [form, setForm]         = useState(FORM_INIT)
   const qc = useQueryClient()
 
   const { data: compras = [], isLoading } = useQuery({
@@ -45,6 +169,18 @@ export default function ComprasErpPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error'),
   })
 
+  const estadoMut = useMutation({
+    mutationFn: ({ id, estado }) => api.put(`/compras/${id}/estado`, { estado }).then(r => r.data),
+    onSuccess: (res) => {
+      invalidate()
+      if (res.advertencias?.length) {
+        res.advertencias.forEach(w => toast(w, { icon: '⚠️' }))
+      }
+      toast.success(`Estado actualizado → ${res.estado}`)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al cambiar estado'),
+  })
+
   const eliminarMut = useMutation({
     mutationFn: (id) => api.delete(`/compras/${id}`).then(r => r.data),
     onSuccess: () => { invalidate(); toast.success('Compra eliminada') },
@@ -53,7 +189,9 @@ export default function ComprasErpPage() {
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { ...ITEM_INIT }] }))
   const removeItem = (idx) => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))
   const updateItem = (idx, field, val) => setForm(f => {
-    const items = [...f.items]; items[idx] = { ...items[idx], [field]: val }; return { ...f, items }
+    const items = [...f.items]
+    items[idx] = { ...items[idx], [field]: val }
+    return { ...f, items }
   })
 
   const calcTotal = (items) => items.reduce((s, i) => s + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
@@ -61,14 +199,17 @@ export default function ComprasErpPage() {
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!form.proveedor) { toast.error('Proveedor requerido'); return }
-    crearMut.mutate(form)
+    const validItems = form.items.filter(i => i.sku && Number(i.cantidad) > 0)
+    if (!validItems.length) { toast.error('Agrega al menos un ítem con SKU y cantidad > 0'); return }
+    crearMut.mutate({ ...form, items: validItems })
   }
 
-  const totalMes = compras.reduce((s, c) => s + c.total, 0)
-  const pendiente = compras.filter(c => c.estado !== 'Pagado' && c.estado !== 'Anulado').reduce((s, c) => s + c.total, 0)
+  const totalMes   = compras.reduce((s, c) => s + c.total, 0)
+  const pendiente  = compras.filter(c => !['Pagada', 'Pagado', 'Anulada', 'Anulado'].includes(c.estado)).reduce((s, c) => s + c.total, 0)
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Header */}
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Compras</h1>
@@ -79,11 +220,13 @@ export default function ComprasErpPage() {
         </button>
       </div>
 
+      {/* Mes filter */}
       <div className="flex items-center gap-3">
         <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Mes</label>
         <input type="month" className="rmg-input text-xs py-1.5 w-36" value={mes} onChange={e => setMes(e.target.value)} />
       </div>
 
+      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         <div className="rmg-card p-4">
           <div className="text-xs uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--rmg-muted)' }}>Total comprado</div>
@@ -102,6 +245,7 @@ export default function ComprasErpPage() {
         </div>
       </div>
 
+      {/* ── Formulario nueva compra ── */}
       {showForm && (
         <div className="rmg-card p-5 animate-fade-in">
           <h2 className="font-bold mb-4">Registrar compra</h2>
@@ -126,23 +270,20 @@ export default function ComprasErpPage() {
                 <input className="rmg-input" placeholder="F-12345" value={form.numero_factura} onChange={e => setForm(p => ({ ...p, numero_factura: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Estado</label>
-                <select className="rmg-input" value={form.estado} onChange={e => setForm(p => ({ ...p, estado: e.target.value }))}>
-                  {ESTADOS.map(s => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Vencimiento</label>
                 <input type="date" className="rmg-input" value={form.fecha_vencimiento} onChange={e => setForm(p => ({ ...p, fecha_vencimiento: e.target.value }))} />
               </div>
-              <div className="md:col-span-2">
+              <div className="md:col-span-3">
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
                 <input className="rmg-input" placeholder="Observaciones..." value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} />
               </div>
             </div>
 
+            {/* Items con autocomplete */}
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--rmg-muted)' }}>Ítems</div>
+              <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--rmg-muted)' }}>
+                Ítems — <span style={{ color: 'var(--rmg-blue)' }}>escribe 3+ caracteres en SKU para buscar del catálogo</span>
+              </div>
               <table className="w-full text-xs">
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
@@ -152,21 +293,16 @@ export default function ComprasErpPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {form.items.map((item, i) => {
-                    const sub = Number(item.costo_unitario || 0) * Number(item.cantidad || 0)
-                    return (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <td className="px-3 py-2 w-24"><input className="rmg-input text-xs" placeholder="SKU" value={item.sku} onChange={e => updateItem(i, 'sku', e.target.value)} /></td>
-                        <td className="px-3 py-2 min-w-40"><input className="rmg-input text-xs" placeholder="Descripción" value={item.descripcion} onChange={e => updateItem(i, 'descripcion', e.target.value)} /></td>
-                        <td className="px-3 py-2 w-20"><input type="number" min="0" className="rmg-input text-xs text-center" value={item.cantidad} onChange={e => updateItem(i, 'cantidad', e.target.value)} /></td>
-                        <td className="px-3 py-2 w-32"><input type="number" min="0" className="rmg-input text-xs text-right" value={item.costo_unitario} onChange={e => updateItem(i, 'costo_unitario', e.target.value)} /></td>
-                        <td className="px-3 py-2 font-bold text-right" style={{ color: 'var(--rmg-off)' }}>{formatCLP(sub)}</td>
-                        <td className="px-3 py-2">
-                          {form.items.length > 1 && <button type="button" onClick={() => removeItem(i)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><X size={13}/></button>}
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {form.items.map((item, i) => (
+                    <SkuItemRow
+                      key={i}
+                      item={item}
+                      idx={i}
+                      onUpdate={updateItem}
+                      onRemove={removeItem}
+                      showRemove={form.items.length > 1}
+                    />
+                  ))}
                 </tbody>
               </table>
               <div className="flex justify-between items-center mt-2">
@@ -177,12 +313,15 @@ export default function ComprasErpPage() {
 
             <div className="flex gap-3 justify-end pt-1">
               <button type="button" onClick={() => { setShowForm(false); setForm(FORM_INIT) }} className="btn-secondary">Cancelar</button>
-              <button type="submit" disabled={crearMut.isPending} className="btn-primary disabled:opacity-50">{crearMut.isPending ? 'Guardando...' : 'Guardar compra'}</button>
+              <button type="submit" disabled={crearMut.isPending} className="btn-primary disabled:opacity-50">
+                {crearMut.isPending ? 'Guardando...' : 'Guardar como Borrador'}
+              </button>
             </div>
           </form>
         </div>
       )}
 
+      {/* ── Modal editar ── */}
       {editando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
           <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
@@ -192,7 +331,7 @@ export default function ComprasErpPage() {
                 <input type="date" className="rmg-input" value={editando.fecha} onChange={e => setEditando(p => ({ ...p, fecha: e.target.value }))} /></div>
               <div><label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Estado</label>
                 <select className="rmg-input" value={editando.estado} onChange={e => setEditando(p => ({ ...p, estado: e.target.value }))}>
-                  {ESTADOS.map(s => <option key={s}>{s}</option>)}
+                  {ESTADOS_EDIT.map(s => <option key={s}>{s}</option>)}
                 </select></div>
               <div><label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Proveedor</label>
                 <select className="rmg-input" value={editando.proveedor} onChange={e => setEditando(p => ({ ...p, proveedor: e.target.value }))}>
@@ -213,9 +352,11 @@ export default function ComprasErpPage() {
         </div>
       )}
 
+      {/* ── Tabla de compras ── */}
       <div className="rmg-card overflow-hidden">
         <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
           <span className="font-bold text-sm">{compras.length} compras · {mes}</span>
+          <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Borrador → Enviada → Recibida → Pagada</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -236,7 +377,9 @@ export default function ComprasErpPage() {
                     </tr>
                   ))
                 : compras.map((c, i) => {
-                    const est = ESTADO_STYLE[c.estado] || ESTADO_STYLE.Pendiente
+                    const est = ESTADO_STYLE[c.estado] || ESTADO_STYLE.Borrador
+                    const nextInfo = ESTADO_NEXT[c.estado]
+                    const NextIcon = nextInfo?.icon
                     return (
                       <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
                         className="hover:bg-white/[0.02] transition-colors">
@@ -250,9 +393,21 @@ export default function ComprasErpPage() {
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{c.fecha_vencimiento ? formatFecha(c.fecha_vencimiento) : '—'}</td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-1">
-                            <button onClick={() => setEditando({ ...c })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>
-                            <button onClick={() => { if (confirm('¿Eliminar esta compra?')) eliminarMut.mutate(c.id) }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><Trash2 size={13}/></button>
+                          <div className="flex gap-1 items-center flex-wrap">
+                            {nextInfo && (
+                              <button
+                                onClick={() => estadoMut.mutate({ id: c.id, estado: nextInfo.next })}
+                                disabled={estadoMut.isPending}
+                                className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50 transition-colors"
+                                style={{ background: `${nextInfo.color}1a`, color: nextInfo.color, border: `1px solid ${nextInfo.color}40` }}
+                                title={nextInfo.label}>
+                                <NextIcon size={11}/>
+                                <span className="hidden md:inline">{nextInfo.label}</span>
+                                <ChevronRight size={10}/>
+                              </button>
+                            )}
+                            <button onClick={() => setEditando({ ...c })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }} title="Editar"><Pencil size={13}/></button>
+                            <button onClick={() => { if (confirm('¿Eliminar esta compra?')) eliminarMut.mutate(c.id) }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }} title="Eliminar"><Trash2 size={13}/></button>
                           </div>
                         </td>
                       </tr>

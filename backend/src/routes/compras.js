@@ -21,9 +21,10 @@ router.post('/cxp/:id/pagar',      c.pagarFactura)
 
 // Compras ERP (tabla simple, separada de ordenes_compra)
 const { authenticate } = require('../middleware/auth')
-router.get('/',      authenticate, c.getComprasList)
-router.post('/',     authenticate, c.createCompra)
-router.put('/:id',   authenticate, c.updateCompra)
-router.delete('/:id',authenticate, c.deleteCompra)
+router.get('/',           authenticate, c.getComprasList)
+router.post('/',          authenticate, c.createCompra)
+router.put('/:id/estado', authenticate, c.cambiarEstadoCompra)
+router.put('/:id',        authenticate, c.updateCompra)
+router.delete('/:id',     authenticate, c.deleteCompra)
 
 module.exports = router
