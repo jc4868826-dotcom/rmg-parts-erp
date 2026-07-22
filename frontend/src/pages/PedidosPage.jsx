@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { ShoppingCart, Plus, X, ChevronDown, ChevronRight, CreditCard, FileText } from 'lucide-react'
+import { ShoppingCart, Plus, X, ChevronDown, ChevronRight, CreditCard, FileText, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const CUENTAS = ['1781310106 Banco de Chile', '000-0-00000 Banco BCI', '000-0-00000 Banco Santander', 'Caja chica']
@@ -30,10 +30,11 @@ const PAGO_INIT = { metodo_pago: 'transferencia', cuenta_bancaria: CUENTAS[0], f
 export default function PedidosPage() {
   const [estadoFiltro, setFiltro] = useState('')
   const [showCotModal, setShowCotModal] = useState(false)
-  const [clienteModal, setClienteModal] = useState(null)   // { id, razon_social }
+  const [clienteModal, setClienteModal] = useState(null)
   const [expandido, setExpandido] = useState({})
   const [pagoModal, setPagoModal] = useState(null)
   const [pago, setPago] = useState(PAGO_INIT)
+  const [editando, setEditando] = useState(null)
   const qc = useQueryClient()
 
   const { data: pedidos = [], isLoading } = useQuery({
@@ -97,9 +98,27 @@ export default function PedidosPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar pago'),
   })
 
+  const editarMut = useMutation({
+    mutationFn: ({ id, data }) => api.put(`/pedidos/${id}`, data).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pedidos'] })
+      toast.success('Pedido actualizado')
+      setEditando(null)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar pedido'),
+  })
+
+  const eliminarMut = useMutation({
+    mutationFn: (id) => api.delete(`/pedidos/${id}`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pedidos'] })
+      toast.success('Pedido eliminado')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar pedido'),
+  })
+
   const totalPedidos = pedidos.reduce((s, p) => s + p.total, 0)
 
-  // Cotizaciones para el cliente seleccionado, excluyendo rechazadas y ya convertidas en pedido
   const availableCots = clienteModal
     ? todasCots.filter(c =>
         c.cliente_id === clienteModal.id &&
@@ -152,7 +171,7 @@ export default function PedidosPage() {
             {isLoading
               ? Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} /></td>
                     ))}
                   </tr>
@@ -189,7 +208,7 @@ export default function PedidosPage() {
                         {p.fecha_entrega_programada ? formatFecha(p.fecha_entrega_programada) : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
+                        <div className="flex gap-1.5 items-center">
                           {p.estado !== 'entregado' && (
                             <button
                               onClick={() => crearNVMut.mutate(p.id)}
@@ -199,6 +218,20 @@ export default function PedidosPage() {
                               <FileText size={11}/> NV + Pago
                             </button>
                           )}
+                          <button
+                            onClick={() => setEditando({ ...p })}
+                            className="p-1.5 rounded hover:bg-white/5 transition-colors"
+                            style={{ color: 'var(--rmg-muted)' }}
+                            title="Editar pedido">
+                            <Pencil size={13}/>
+                          </button>
+                          <button
+                            onClick={() => { if (confirm('¿Eliminar pedido?')) eliminarMut.mutate(p.id) }}
+                            className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
+                            style={{ color: 'var(--rmg-red)' }}
+                            title="Eliminar pedido">
+                            <Trash2 size={13}/>
+                          </button>
                         </div>
                       </td>
                     </tr>,
@@ -225,6 +258,52 @@ export default function PedidosPage() {
         )}
       </div>
 
+      {/* Modal: editar pedido */}
+      {editando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-bold">Editar pedido</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{editando.numero}</p>
+              </div>
+              <button onClick={() => setEditando(null)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <form onSubmit={e => { e.preventDefault(); editarMut.mutate({ id: editando.id, data: { cliente: editando.cliente, estado: editando.estado, condicion_pago: editando.condicion_pago, fecha_entrega_programada: editando.fecha_entrega_programada, notas: editando.notas } }) }}
+              className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cliente</label>
+                <input className="rmg-input" value={editando.cliente || ''} onChange={e => setEditando(p => ({ ...p, cliente: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Estado</label>
+                <select className="rmg-input" value={editando.estado} onChange={e => setEditando(p => ({ ...p, estado: e.target.value }))}>
+                  {Object.keys(ESTADO_STYLES).map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Condición de pago</label>
+                <input className="rmg-input" value={editando.condicion_pago || ''} onChange={e => setEditando(p => ({ ...p, condicion_pago: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Fecha entrega programada</label>
+                <input type="date" className="rmg-input" value={editando.fecha_entrega_programada || ''} onChange={e => setEditando(p => ({ ...p, fecha_entrega_programada: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
+                <input className="rmg-input" value={editando.notas || ''} onChange={e => setEditando(p => ({ ...p, notas: e.target.value }))} />
+              </div>
+              <div className="flex gap-3 justify-end pt-2">
+                <button type="button" onClick={() => setEditando(null)} className="btn-secondary">Cancelar</button>
+                <button type="submit" disabled={editarMut.isPending} className="btn-primary disabled:opacity-50">
+                  {editarMut.isPending ? 'Guardando...' : 'Actualizar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal: crear desde cotización — 2 pasos: cliente → cotizaciones */}
       {showCotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
@@ -236,7 +315,6 @@ export default function PedidosPage() {
               <button onClick={() => { setShowCotModal(false); setClienteModal(null) }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
             </div>
 
-            {/* Paso 1: seleccionar cliente */}
             {!clienteModal ? (
               <div className="space-y-3">
                 <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>Selecciona el cliente para ver sus cotizaciones activas:</p>
@@ -255,7 +333,6 @@ export default function PedidosPage() {
                 )}
               </div>
             ) : (
-              /* Paso 2: cotizaciones del cliente */
               <div className="flex flex-col flex-1 min-h-0">
                 <button onClick={() => setClienteModal(null)}
                   className="text-xs mb-3 flex items-center gap-1 w-fit"

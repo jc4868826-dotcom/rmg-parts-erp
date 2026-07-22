@@ -9,5 +9,6 @@ router.post('/',                              authenticate, ctrl.create)
 router.post('/from-cotizacion/:cotizacionId', authenticate, ctrl.createFromCotizacion)
 router.put('/:id',                            authenticate, ctrl.update)
 router.patch('/:id/estado',                   authenticate, ctrl.cambiarEstado)
+router.delete('/:id',                         authenticate, ctrl.remove)
 
 module.exports = router

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, FileText, Send, Check, X, Clock, Printer, MessageCircle } from 'lucide-react'
+import { Plus, FileText, Send, Check, X, Clock, Printer, MessageCircle, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ESTADOS = [
@@ -21,6 +21,8 @@ const ESTADO_STYLES = {
   rechazada: { label: 'Rechazada', icon: X,      bg: 'rgba(224,90,78,0.12)',  color: 'var(--rmg-red)' },
   vencida:   { label: 'Vencida',   icon: Clock,   bg: 'rgba(244,162,60,0.12)', color: 'var(--rmg-gold)' },
 }
+
+const ESTADOS_COTIZACION = ['borrador', 'enviada', 'aprobada', 'rechazada', 'vencida']
 
 function imprimirCotizacion(c) {
   const win = window.open('', '_blank', 'width=800,height=600')
@@ -78,8 +80,14 @@ function waLink(c) {
 
 export default function CotizacionesPage() {
   const [estadoFiltro, setFiltro] = useState('')
+  const [editando, setEditando] = useState(null)
   const navigate = useNavigate()
   const qc = useQueryClient()
+
+  const { data: cotizaciones = [], isLoading } = useQuery({
+    queryKey: ['cotizaciones', estadoFiltro],
+    queryFn: () => api.get('/cotizaciones', { params: { estado: estadoFiltro || undefined } }).then(r => r.data),
+  })
 
   const aprobarMut = useMutation({
     mutationFn: (id) => api.post(`/cotizaciones/${id}/aprobar`).then(r => r.data),
@@ -87,9 +95,23 @@ export default function CotizacionesPage() {
     onError: () => toast.error('Error al aprobar'),
   })
 
-  const { data: cotizaciones = [], isLoading } = useQuery({
-    queryKey: ['cotizaciones', estadoFiltro],
-    queryFn: () => api.get('/cotizaciones', { params: { estado: estadoFiltro || undefined } }).then(r => r.data),
+  const editarMut = useMutation({
+    mutationFn: ({ id, data }) => api.put(`/cotizaciones/${id}`, data).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cotizaciones'] })
+      toast.success('Cotización actualizada')
+      setEditando(null)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar cotización'),
+  })
+
+  const eliminarMut = useMutation({
+    mutationFn: (id) => api.delete(`/cotizaciones/${id}`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cotizaciones'] })
+      toast.success('Cotización eliminada')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar cotización'),
   })
 
   const total = cotizaciones.reduce((s, c) => s + c.total, 0)
@@ -148,7 +170,7 @@ export default function CotizacionesPage() {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-              {['N° Cotización', 'Cliente', 'Estado', 'Neto', 'IVA', 'Total', 'Fecha', ''].map(h => (
+              {['N° Cotización', 'Cliente', 'Estado', 'Neto', 'IVA', 'Total', 'Fecha', 'Acciones'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
             </tr>
@@ -157,7 +179,7 @@ export default function CotizacionesPage() {
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} /></td>
                     ))}
                   </tr>
@@ -184,7 +206,7 @@ export default function CotizacionesPage() {
                       <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(c.created_at)}</td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5 items-center" onClick={e => e.stopPropagation()}>
                           <button className="btn-secondary text-xs px-2 py-1 flex items-center gap-1" onClick={async e => {
                             e.stopPropagation()
                             const full = await api.get(`/cotizaciones/${c.id}`).then(r => r.data)
@@ -197,6 +219,20 @@ export default function CotizacionesPage() {
                             onClick={e => e.stopPropagation()}>
                             <MessageCircle size={11}/> WA
                           </a>
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditando({ ...c }) }}
+                            className="p-1.5 rounded hover:bg-white/5 transition-colors"
+                            style={{ color: 'var(--rmg-muted)' }}
+                            title="Editar cotización">
+                            <Pencil size={13}/>
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); if (confirm('¿Eliminar cotización?')) eliminarMut.mutate(c.id) }}
+                            className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
+                            style={{ color: 'var(--rmg-red)' }}
+                            title="Eliminar cotización">
+                            <Trash2 size={13}/>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -205,7 +241,62 @@ export default function CotizacionesPage() {
             }
           </tbody>
         </table>
+        {!isLoading && cotizaciones.length === 0 && (
+          <div className="py-12 text-center" style={{ color: 'var(--rmg-muted)' }}>
+            <FileText size={28} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Sin cotizaciones{estadoFiltro ? ` en estado ${estadoFiltro}` : ''}</p>
+          </div>
+        )}
       </div>
+
+      {/* Modal: editar cotización */}
+      {editando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-bold">Editar cotización</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{editando.numero} · {editando.cliente}</p>
+              </div>
+              <button onClick={() => setEditando(null)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <form onSubmit={e => {
+              e.preventDefault()
+              editarMut.mutate({ id: editando.id, data: {
+                estado: editando.estado,
+                condicion_pago: editando.condicion_pago,
+                plazo_entrega: editando.plazo_entrega,
+                notas: editando.notas,
+              }})
+            }} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Estado</label>
+                <select className="rmg-input" value={editando.estado || 'borrador'} onChange={e => setEditando(p => ({ ...p, estado: e.target.value }))}>
+                  {ESTADOS_COTIZACION.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Condición de pago</label>
+                <input className="rmg-input" value={editando.condicion_pago || ''} onChange={e => setEditando(p => ({ ...p, condicion_pago: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Plazo de entrega</label>
+                <input className="rmg-input" placeholder="4-24 horas RM" value={editando.plazo_entrega || ''} onChange={e => setEditando(p => ({ ...p, plazo_entrega: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
+                <input className="rmg-input" value={editando.notas || ''} onChange={e => setEditando(p => ({ ...p, notas: e.target.value }))} />
+              </div>
+              <div className="flex gap-3 justify-end pt-2">
+                <button type="button" onClick={() => setEditando(null)} className="btn-secondary">Cancelar</button>
+                <button type="submit" disabled={editarMut.isPending} className="btn-primary disabled:opacity-50">
+                  {editarMut.isPending ? 'Guardando...' : 'Actualizar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

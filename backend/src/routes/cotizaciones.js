@@ -24,6 +24,9 @@ router.post('/publica', cotizacionesController.createPublica);
 // PUT /api/cotizaciones/:id — Actualizar cotización
 router.put('/:id', authenticate, cotizacionesController.update);
 
+// DELETE /api/cotizaciones/:id — Eliminar cotización y sus items
+router.delete('/:id', authenticate, cotizacionesController.remove);
+
 // POST /api/cotizaciones/:id/aprobar — Aprobar → generar pedido
 router.post('/:id/aprobar', authenticate, cotizacionesController.aprobar);
 

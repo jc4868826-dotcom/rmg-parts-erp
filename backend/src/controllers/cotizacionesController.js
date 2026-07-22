@@ -185,4 +185,16 @@ const createDesdeLanding = (req, res) => {
   }
 }
 
-module.exports = { getAll, getOne, create, createPublica, createDesdeLanding, update, aprobar, generarPDF, enviarWhatsApp, enviarEmail }
+const remove = (req, res) => {
+  try {
+    const c = db.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(req.params.id)
+    if (!c) return res.status(404).json({ error: 'Cotización no encontrada' })
+    db.prepare('DELETE FROM cotizacion_items WHERE cotizacion_id = ?').run(req.params.id)
+    db.prepare('DELETE FROM cotizaciones WHERE id = ?').run(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getAll, getOne, create, createPublica, createDesdeLanding, update, aprobar, generarPDF, enviarWhatsApp, enviarEmail, remove }

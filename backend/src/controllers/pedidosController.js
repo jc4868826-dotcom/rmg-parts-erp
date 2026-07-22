@@ -204,4 +204,16 @@ const createDesdeLanding = (req, res) => {
   }
 }
 
-module.exports = { getAll, getOne, create, createFromCotizacion, update, cambiarEstado, createDesdeLanding }
+const remove = (req, res) => {
+  try {
+    const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
+    if (!p) return res.status(404).json({ error: 'Pedido no encontrado' })
+    db.prepare('DELETE FROM pedido_items WHERE pedido_id = ?').run(req.params.id)
+    db.prepare('DELETE FROM pedidos WHERE id = ?').run(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getAll, getOne, create, createFromCotizacion, update, cambiarEstado, createDesdeLanding, remove }
