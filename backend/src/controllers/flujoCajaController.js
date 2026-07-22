@@ -5,16 +5,110 @@ const hoy = () => new Date().toISOString().split('T')[0]
 
 const getMovimientos = (req, res) => {
   try {
-    // Si se pasa ?mes=YYYY-MM devuelve resumen ERP (ventas + gastos + compras)
     if (req.query.mes) {
       const filtro = `${req.query.mes}%`
-      const entradas = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM ventas WHERE fecha LIKE ? AND estado='Pagado'").get(filtro).v
-      const salidas_gastos = db.prepare("SELECT COALESCE(SUM(monto),0) as v FROM gastos WHERE fecha LIKE ?").get(filtro).v
-      const salidas_compras = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM compras WHERE fecha LIKE ? AND estado='Pagado'").get(filtro).v
+      const movs = []
+
+      // 1. Ventas — fecha_pago calculada según forma_pago
+      try {
+        const vDate = `CASE forma_pago
+          WHEN 'Crédito 30 días' THEN date(fecha,'+30 days')
+          WHEN 'Crédito 60 días' THEN date(fecha,'+60 days')
+          WHEN 'Crédito 90 días' THEN date(fecha,'+90 days')
+          ELSE fecha END`
+        movs.push(...db.prepare(`
+          SELECT id AS origen_id, id,
+            'ventas' AS origen_tabla, 'Venta' AS origen_label,
+            'ingreso' AS tipo, 'Venta' AS categoria,
+            COALESCE(cliente,'Cliente') || ' · ' || COALESCE(numero,'') AS descripcion,
+            total AS monto,
+            (${vDate}) AS fecha_pago,
+            CASE WHEN estado='Pagado' THEN 'confirmado' ELSE 'proyectado' END AS estado,
+            NULL AS cuenta_bancaria
+          FROM ventas WHERE (${vDate}) LIKE ?
+        `).all(filtro))
+      } catch (_) {}
+
+      // 2. Gastos
+      try {
+        const gcols = db.prepare('PRAGMA table_info(gastos)').all().map(c => c.name)
+        const gDate = gcols.includes('fecha_vencimiento') ? 'COALESCE(fecha_vencimiento,fecha)' : 'fecha'
+        const gDesc = gcols.includes('descripcion') ? 'descripcion' : gcols.includes('concepto') ? 'concepto' : "'Gasto'"
+        movs.push(...db.prepare(`
+          SELECT id AS origen_id, id,
+            'gastos' AS origen_tabla, 'Gasto' AS origen_label,
+            'egreso' AS tipo, COALESCE(categoria,'Gasto') AS categoria,
+            ${gDesc} AS descripcion, monto,
+            ${gDate} AS fecha_pago,
+            CASE WHEN estado='pagado' THEN 'confirmado' ELSE 'proyectado' END AS estado,
+            NULL AS cuenta_bancaria
+          FROM gastos WHERE ${gDate} LIKE ?
+        `).all(filtro))
+      } catch (_) {}
+
+      // 3. Compras ERP (incluye las pagadas vía OC)
+      try {
+        const ccols = db.prepare('PRAGMA table_info(compras)').all().map(c => c.name)
+        const cDate = ccols.includes('fecha_vencimiento') ? 'COALESCE(fecha_vencimiento,fecha)' : 'fecha'
+        const cFac  = ccols.includes('numero_factura') ? "COALESCE(' · Fac.'||numero_factura,'')" : "''"
+        movs.push(...db.prepare(`
+          SELECT id AS origen_id, id,
+            'compras' AS origen_tabla, 'Compra' AS origen_label,
+            'egreso' AS tipo, 'Compra' AS categoria,
+            COALESCE(proveedor,'Proveedor') || ${cFac} AS descripcion,
+            total AS monto,
+            ${cDate} AS fecha_pago,
+            CASE WHEN estado IN ('Pagada','Pagado') THEN 'confirmado' ELSE 'proyectado' END AS estado,
+            NULL AS cuenta_bancaria
+          FROM compras WHERE ${cDate} LIKE ?
+        `).all(filtro))
+      } catch (_) {}
+
+      // 4. Órdenes de compra pendientes (pagada=0)
+      try {
+        const occols = db.prepare('PRAGMA table_info(ordenes_compra)').all().map(c => c.name)
+        const ocDate = occols.includes('fecha_vencimiento') ? 'COALESCE(fecha_vencimiento,fecha_emision)' : 'fecha_emision'
+        movs.push(...db.prepare(`
+          SELECT id AS origen_id, id,
+            'ordenes_compra' AS origen_tabla, 'OC' AS origen_label,
+            'egreso' AS tipo, 'Compra' AS categoria,
+            'OC '||numero||' · '||COALESCE(proveedor,'') AS descripcion,
+            total AS monto,
+            ${ocDate} AS fecha_pago,
+            'proyectado' AS estado,
+            NULL AS cuenta_bancaria
+          FROM ordenes_compra
+          WHERE pagada=0 AND estado!='anulada' AND ${ocDate} LIKE ?
+        `).all(filtro))
+      } catch (_) {}
+
+      // 5. Movimientos manuales de caja
+      try {
+        movs.push(...db.prepare(`
+          SELECT id AS origen_id, id,
+            'manual' AS origen_tabla, 'Manual' AS origen_label,
+            tipo, categoria, descripcion, monto, fecha_pago, estado, cuenta_bancaria
+          FROM caja_movimientos
+          WHERE origen_tabla='manual' AND fecha_pago LIKE ?
+        `).all(filtro))
+      } catch (_) {}
+
+      movs.sort((a, b) => (a.fecha_pago || '').localeCompare(b.fecha_pago || ''))
+
+      const sum = (fn) => movs.filter(fn).reduce((s, m) => s + (m.monto || 0), 0)
+      const ic = sum(m => m.tipo === 'ingreso' && m.estado === 'confirmado')
+      const ip = sum(m => m.tipo === 'ingreso' && m.estado === 'proyectado')
+      const ec = sum(m => m.tipo === 'egreso'  && m.estado === 'confirmado')
+      const ep = sum(m => m.tipo === 'egreso'  && m.estado === 'proyectado')
+
       return res.json({
-        mes: req.query.mes,
-        entradas, salidas_gastos, salidas_compras,
-        saldo_final: entradas - salidas_gastos - salidas_compras,
+        movimientos: movs,
+        resumen: {
+          ingresos_confirmados: ic, ingresos_proyectados: ip,
+          egresos_confirmados:  ec, egresos_proyectados:  ep,
+          saldo_real:       ic - ec,
+          saldo_proyectado: (ic - ec) + ip - ep,
+        },
       })
     }
 

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP } from '@utils/format'
 import { Wallet, Plus, X, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import toast from 'react-hot-toast'
 
 const CUENTAS = [
@@ -19,8 +19,15 @@ const FORM_INIT = {
   cuenta_bancaria: '',
 }
 
-const hoyStr = () => new Date().toISOString().split('T')[0]
-const mesInicio = () => `${new Date().toISOString().slice(0, 7)}-01`
+const ORIGEN_STYLE = {
+  Venta:  { background: 'rgba(45,201,138,0.12)',  color: 'var(--rmg-teal)'   },
+  Gasto:  { background: 'rgba(255,185,0,0.12)',   color: 'var(--rmg-gold)'   },
+  Compra: { background: 'rgba(224,90,78,0.12)',   color: 'var(--rmg-red)'    },
+  OC:     { background: 'rgba(130,90,224,0.12)',  color: 'var(--rmg-purple)' },
+  Manual: { background: 'rgba(56,182,255,0.1)',   color: 'var(--rmg-blt)'    },
+}
+
+const mesActualStr = () => new Date().toISOString().slice(0, 7)
 
 function formatFecha(str) {
   if (!str) return '—'
@@ -40,47 +47,8 @@ function semanaKey(dateStr) {
 const TT = { background: '#0a1a2e', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, color: '#fff', fontSize: 12 }
 const AX = { fill: 'rgba(90,143,168,0.7)', fontSize: 11 }
 
-const mesActualStr = () => new Date().toISOString().slice(0, 7)
-
-function FlujoCajaErpPanel() {
-  const [mes, setMes] = useState(mesActualStr())
-  const { data: erp, isLoading } = useQuery({
-    queryKey: ['flujo-caja-erp', mes],
-    queryFn: () => api.get('/flujo-caja', { params: { mes } }).then(r => r.data),
-  })
-
-  return (
-    <div className="rmg-card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-sm">Resumen ERP · Flujo del Mes</h2>
-        <input type="month" className="rmg-input text-xs py-1.5 w-36" value={mes} onChange={e => setMes(e.target.value)} />
-      </div>
-      {isLoading ? (
-        <div className="grid grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />)}
-        </div>
-      ) : erp ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'Entradas (Ventas Pagadas)', value: erp.entradas, color: 'var(--rmg-teal)' },
-            { label: 'Salidas Gastos', value: erp.salidas_gastos, color: 'var(--rmg-gold)' },
-            { label: 'Salidas Compras (Pagadas)', value: erp.salidas_compras, color: 'var(--rmg-red)' },
-            { label: 'Saldo Final', value: erp.saldo_final, color: erp.saldo_final >= 0 ? 'var(--rmg-blt)' : 'var(--rmg-red)' },
-          ].map(c => (
-            <div key={c.label} className="p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div className="text-xs mb-1 leading-tight" style={{ color: 'var(--rmg-muted)' }}>{c.label}</div>
-              <div className="font-black text-lg" style={{ color: c.color, fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(c.value)}</div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 export default function FlujoCajaPage() {
-  const [desde, setDesde]       = useState(mesInicio())
-  const [hasta, setHasta]       = useState(hoyStr())
+  const [mes, setMes]           = useState(mesActualStr())
   const [showForm, setShowForm] = useState(false)
   const [form, setForm]         = useState(FORM_INIT)
   const [editando, setEditando] = useState(null)
@@ -89,20 +57,15 @@ export default function FlujoCajaPage() {
   const [openCat, setOpenCat]   = useState({})
   const qc = useQueryClient()
 
-  const { data: movimientos = [], isLoading } = useQuery({
-    queryKey: ['flujo-caja', desde, hasta],
-    queryFn: () => api.get('/flujo-caja', { params: { desde: desde || undefined, hasta: hasta || undefined } }).then(r => r.data),
+  const { data: fcData = {}, isLoading } = useQuery({
+    queryKey: ['flujo-caja', mes],
+    queryFn: () => api.get('/flujo-caja', { params: { mes } }).then(r => r.data),
   })
 
-  const { data: resumen = {} } = useQuery({
-    queryKey: ['flujo-caja-resumen'],
-    queryFn: () => api.get('/flujo-caja/resumen').then(r => r.data),
-  })
+  const movimientos = fcData.movimientos ?? []
+  const resumen     = fcData.resumen     ?? {}
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['flujo-caja'] })
-    qc.invalidateQueries({ queryKey: ['flujo-caja-resumen'] })
-  }
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['flujo-caja'] })
 
   const crearMut = useMutation({
     mutationFn: (data) => api.post('/flujo-caja/manual', data).then(r => r.data),
@@ -133,63 +96,49 @@ export default function FlujoCajaPage() {
     editarMut.mutate({ id: editando.id, data: editando })
   }
 
-  // ── Cálculo de 5 cards ──────────────────────────────────────────────────
-  const ingConf  = movimientos.filter(m => m.tipo === 'ingreso' && m.estado === 'confirmado').reduce((s, m) => s + m.monto, 0)
-  const egConf   = movimientos.filter(m => m.tipo === 'egreso'  && m.estado === 'confirmado').reduce((s, m) => s + m.monto, 0)
-  const ingProy  = movimientos.filter(m => m.tipo === 'ingreso' && m.estado === 'proyectado').reduce((s, m) => s + m.monto, 0)
-  const gastProy = movimientos.filter(m => m.tipo === 'egreso'  && m.estado === 'proyectado').reduce((s, m) => s + m.monto, 0)
-  const saldoActualGlobal = resumen.saldo_actual ?? 0
-  const saldoInicial      = saldoActualGlobal - ingConf + egConf
-  const saldoPeriodo      = saldoActualGlobal
-  const saldoProyectado   = saldoActualGlobal + ingProy - gastProy
-
+  // ── 4 KPI cards ────────────────────────────────────────────────────────────
   const CARDS = [
     {
-      key: 'saldo_inicial', label: 'Saldo Inicial',
-      value: saldoInicial,
-      sub: 'Confirmados antes del período',
-      color: saldoInicial >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
+      key: 'saldo_real',
+      label: 'Saldo Real',
+      value: resumen.saldo_real ?? 0,
+      sub: `+${formatCLP(resumen.ingresos_confirmados ?? 0)} · -${formatCLP(resumen.egresos_confirmados ?? 0)}`,
+      color: (resumen.saldo_real ?? 0) >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
       filter: (m) => m.estado === 'confirmado',
     },
     {
-      key: 'saldo_periodo', label: 'Saldo Período Real',
-      value: saldoPeriodo,
-      sub: `+${formatCLP(ingConf)} ingresos · -${formatCLP(egConf)} egresos conf.`,
-      color: saldoPeriodo >= 0 ? 'var(--rmg-blt)' : 'var(--rmg-red)',
-      filter: (m) => m.estado === 'confirmado',
-    },
-    {
-      key: 'ing_proy', label: 'Ingresos Proyectados',
-      value: ingProy,
-      sub: `${movimientos.filter(m => m.tipo==='ingreso' && m.estado==='proyectado').length} movimientos`,
+      key: 'ing_proy',
+      label: 'Ingresos Proyectados',
+      value: resumen.ingresos_proyectados ?? 0,
+      sub: `${movimientos.filter(m => m.tipo === 'ingreso' && m.estado === 'proyectado').length} mov. pendientes`,
       color: 'var(--rmg-teal)',
       filter: (m) => m.tipo === 'ingreso' && m.estado === 'proyectado',
     },
     {
-      key: 'gast_proy', label: 'Gastos Proyectados',
-      value: gastProy,
-      sub: `${movimientos.filter(m => m.tipo==='egreso' && m.estado==='proyectado').length} movimientos`,
+      key: 'egr_proy',
+      label: 'Egresos Proyectados',
+      value: resumen.egresos_proyectados ?? 0,
+      sub: `${movimientos.filter(m => m.tipo === 'egreso' && m.estado === 'proyectado').length} mov. pendientes`,
       color: 'var(--rmg-red)',
       filter: (m) => m.tipo === 'egreso' && m.estado === 'proyectado',
     },
     {
-      key: 'saldo_proy', label: 'Saldo Proyectado',
-      value: saldoProyectado,
-      sub: `Real + ${formatCLP(ingProy)} ingresos − ${formatCLP(gastProy)} gastos`,
-      color: saldoProyectado >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
-      filter: (m) => m.estado === 'proyectado',
+      key: 'saldo_proy',
+      label: 'Saldo Proyectado',
+      value: resumen.saldo_proyectado ?? 0,
+      sub: 'Real + proyectados del período',
+      color: (resumen.saldo_proyectado ?? 0) >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
+      filter: () => true,
     },
   ]
 
   const activeCard = CARDS.find(c => c.key === cardFilter)
 
-  // ── Movimientos filtrados por card activa ────────────────────────────────
   const movsVisible = useMemo(() => {
     if (!activeCard) return movimientos
     return movimientos.filter(activeCard.filter)
   }, [movimientos, activeCard])
 
-  // ── Accordion: semana → categoria ───────────────────────────────────────
   const porSemana = useMemo(() => {
     const map = {}
     for (const m of movsVisible) {
@@ -208,7 +157,7 @@ export default function FlujoCajaPage() {
     if (!sem) return []
     const map = {}
     for (const m of sem.items) {
-      const cat = m.categoria || m.origen_tabla || 'sin categoría'
+      const cat = m.categoria || m.origen_label || 'sin categoría'
       if (!map[cat]) map[cat] = { cat, items: [], ingresos: 0, egresos: 0 }
       map[cat].items.push(m)
       if (m.tipo === 'ingreso') map[cat].ingresos += m.monto
@@ -217,7 +166,6 @@ export default function FlujoCajaPage() {
     return Object.values(map)
   }
 
-  // ── Chart data ───────────────────────────────────────────────────────────
   const chartData = useMemo(() => {
     const map = {}
     for (const m of movimientos) {
@@ -230,7 +178,6 @@ export default function FlujoCajaPage() {
     return Object.values(map).sort((a, b) => a.key.localeCompare(b.key))
   }, [movimientos])
 
-  // Saldo acumulado para tabla plana
   let saldoCorrido = 0
   const movsConSaldo = movsVisible.map(m => {
     saldoCorrido += m.tipo === 'ingreso' ? m.monto : -m.monto
@@ -244,37 +191,48 @@ export default function FlujoCajaPage() {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Flujo de Caja</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Ingresos y egresos · saldos confirmados y proyectados</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Consolidado ERP · ventas, gastos, compras y movimientos manuales</p>
         </div>
         <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2">
           {showForm ? <><X size={15}/> Cerrar</> : <><Plus size={15}/> Nuevo</>}
         </button>
       </div>
 
-      {/* Panel ERP */}
-      <FlujoCajaErpPanel />
-
-      {/* Filtro fecha */}
+      {/* Filtro mes */}
       <div className="rmg-card p-4 flex items-center gap-4 flex-wrap">
         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Período</span>
-        <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Desde</span>
-          <input type="date" className="rmg-input text-xs w-36 py-1.5" value={desde}
-            onChange={e => setDesde(e.target.value)} />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Hasta</span>
-          <input type="date" className="rmg-input text-xs w-36 py-1.5" value={hasta}
-            onChange={e => setHasta(e.target.value)} />
-        </div>
-        <button onClick={() => { setDesde(mesInicio()); setHasta(hoyStr()) }}
+        <input type="month" className="rmg-input text-xs py-1.5 w-40" value={mes}
+          onChange={e => { setMes(e.target.value); setCardFilter(null) }} />
+        <button onClick={() => { setMes(mesActualStr()); setCardFilter(null) }}
           className="text-xs px-3 py-1.5 rounded-lg"
           style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
           Mes actual
         </button>
+        {isLoading && <span className="text-xs animate-pulse" style={{ color: 'var(--rmg-muted)' }}>Cargando…</span>}
       </div>
 
-      {/* ── GRÁFICO DE BARRAS (primero) ─────────────────────────────────── */}
+      {/* 4 KPI cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {CARDS.map(c => {
+          const isActive = cardFilter === c.key
+          return (
+            <button key={c.key} onClick={() => setCardFilter(isActive ? null : c.key)}
+              className="rmg-card p-4 text-left transition-all"
+              style={isActive ? { outline: `2px solid ${c.color}`, outlineOffset: 2 } : {}}>
+              <div className="text-xs uppercase tracking-wider font-semibold mb-2 leading-tight" style={{ color: 'var(--rmg-muted)' }}>
+                {c.label}
+              </div>
+              <div className="font-black text-xl leading-none" style={{ fontFamily: 'Inter Tight, sans-serif', color: c.color }}>
+                {formatCLP(c.value)}
+              </div>
+              <div className="text-xs mt-1.5 leading-snug" style={{ color: 'var(--rmg-muted)' }}>{c.sub}</div>
+              {isActive && <div className="mt-2 text-xs font-semibold" style={{ color: c.color }}>▼ filtrado</div>}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Gráfico */}
       <div className="rmg-card p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-sm">Ingresos vs Egresos por semana</h2>
@@ -301,30 +259,7 @@ export default function FlujoCajaPage() {
         )}
       </div>
 
-      {/* ── 5 CARDS (clickables) ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {CARDS.map(c => {
-          const isActive = cardFilter === c.key
-          return (
-            <button key={c.key} onClick={() => setCardFilter(isActive ? null : c.key)}
-              className="rmg-card p-4 text-left transition-all"
-              style={isActive ? { outline: `2px solid ${c.color}`, outlineOffset: 2 } : {}}>
-              <div className="text-xs uppercase tracking-wider font-semibold mb-2 leading-tight" style={{ color: 'var(--rmg-muted)' }}>
-                {c.label}
-              </div>
-              <div className="font-black text-xl leading-none" style={{ fontFamily: 'Inter Tight, sans-serif', color: c.color }}>
-                {formatCLP(c.value)}
-              </div>
-              <div className="text-xs mt-1.5 leading-snug" style={{ color: 'var(--rmg-muted)' }}>{c.sub}</div>
-              {isActive && (
-                <div className="mt-2 text-xs font-semibold" style={{ color: c.color }}>▼ filtrado</div>
-              )}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Formulario nuevo movimiento */}
+      {/* Formulario nuevo movimiento manual */}
       {showForm && (
         <div className="rmg-card p-5 animate-fade-in">
           <h2 className="font-bold mb-4">Nuevo movimiento manual</h2>
@@ -438,7 +373,7 @@ export default function FlujoCajaPage() {
         </div>
       )}
 
-      {/* ── Accordion semana → categoria → detalle ──────────────────────── */}
+      {/* Accordion semana → categoría → detalle */}
       {porSemana.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between px-1">
@@ -491,16 +426,15 @@ export default function FlujoCajaPage() {
                             </div>
                           </button>
                           {catOpen && catObj.items.map(m => (
-                            <div key={m.id} className="flex items-center justify-between px-10 py-2 text-xs border-t"
+                            <div key={`${m.origen_tabla}_${m.origen_id}`}
+                              className="flex items-center justify-between px-10 py-2 text-xs border-t"
                               style={{ borderColor: 'rgba(255,255,255,0.03)' }}>
                               <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <span style={{ color: 'var(--rmg-muted)', flexShrink: 0 }}>{formatFecha(m.fecha_pago)}</span>
+                                <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={ORIGEN_STYLE[m.origen_label] ?? {}}>
+                                  {m.origen_label}
+                                </span>
                                 <span className="truncate" style={{ color: 'var(--rmg-off)' }}>{m.descripcion}</span>
-                                {m.cuenta_bancaria && (
-                                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)', flexShrink: 0 }}>
-                                    {m.cuenta_bancaria.split(' ')[0]}
-                                  </span>
-                                )}
                               </div>
                               <div className="flex items-center gap-3 flex-shrink-0 ml-4">
                                 <span className="font-semibold" style={{ color: m.tipo === 'ingreso' ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>
@@ -536,7 +470,7 @@ export default function FlujoCajaPage() {
         </div>
       )}
 
-      {/* ── Tabla plana ────────────────────────────────────────────────────── */}
+      {/* Tabla plana */}
       <div className="rmg-card overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(56,182,255,0.08)' }}>
           <span className="font-bold text-sm">Tabla de movimientos</span>
@@ -546,7 +480,7 @@ export default function FlujoCajaPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-                {['Fecha pago', 'Tipo', 'Categoría', 'Descripción', 'Cuenta', 'Monto', 'Estado', 'Saldo acum.', ''].map(h => (
+                {['Fecha pago','Tipo','Origen','Categoría','Descripción','Cuenta','Monto','Estado','Saldo acum.',''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold whitespace-nowrap"
                     style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
@@ -556,7 +490,7 @@ export default function FlujoCajaPage() {
               {isLoading
                 ? Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 10 }).map((_, j) => (
                         <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/></td>
                       ))}
                     </tr>
@@ -564,7 +498,8 @@ export default function FlujoCajaPage() {
                 : movsConSaldo.map((m, i) => {
                     const isIng = m.tipo === 'ingreso'
                     return (
-                      <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                      <tr key={`${m.origen_tabla}_${m.origen_id}`}
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
                         className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(m.fecha_pago)}</td>
                         <td className="px-4 py-2.5">
@@ -573,7 +508,12 @@ export default function FlujoCajaPage() {
                             {isIng ? '↑ Ingreso' : '↓ Egreso'}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{m.categoria || m.origen_tabla || '—'}</td>
+                        <td className="px-4 py-2.5">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={ORIGEN_STYLE[m.origen_label] ?? {}}>
+                            {m.origen_label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{m.categoria || '—'}</td>
                         <td className="px-4 py-2.5 text-xs max-w-[200px] truncate" style={{ color: 'var(--rmg-off)' }} title={m.descripcion}>{m.descripcion}</td>
                         <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>
                           {m.cuenta_bancaria ? m.cuenta_bancaria.split(' ')[0] : '—'}
@@ -616,7 +556,7 @@ export default function FlujoCajaPage() {
         {!isLoading && movsVisible.length === 0 && (
           <div className="py-12 text-center" style={{ color: 'var(--rmg-muted)' }}>
             <Wallet size={28} className="mx-auto mb-2 opacity-20"/>
-            <p className="text-sm">Sin movimientos para este filtro</p>
+            <p className="text-sm">Sin movimientos para este período</p>
           </div>
         )}
       </div>
