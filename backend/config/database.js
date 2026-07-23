@@ -1510,6 +1510,18 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_extra_cols_v1')
     console.log('✅ Migración oc_extra_cols_v1 — medio_pago, numero_factura, fecha_vencimiento, notas añadidos a ordenes_compra')
   }
+
+  // Migration 29: compras_pago_v1 — oc_id, forma_pago, cuenta_bancaria, fecha_pago en compras
+  const m29 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('compras_pago_v1')
+  if (!m29) {
+    const comprasCols = db.prepare('PRAGMA table_info(compras)').all().map(c => c.name)
+    if (!comprasCols.includes('oc_id'))           db.exec('ALTER TABLE compras ADD COLUMN oc_id INTEGER')
+    if (!comprasCols.includes('forma_pago'))      db.exec("ALTER TABLE compras ADD COLUMN forma_pago TEXT DEFAULT 'Transferencia'")
+    if (!comprasCols.includes('cuenta_bancaria')) db.exec('ALTER TABLE compras ADD COLUMN cuenta_bancaria TEXT')
+    if (!comprasCols.includes('fecha_pago'))      db.exec('ALTER TABLE compras ADD COLUMN fecha_pago TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('compras_pago_v1')
+    console.log('✅ Migración compras_pago_v1 — oc_id, forma_pago, cuenta_bancaria, fecha_pago añadidos a compras')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

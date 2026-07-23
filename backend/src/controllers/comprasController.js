@@ -83,12 +83,13 @@ const updateProveedor = (req, res) => {
 // ── Órdenes de compra ──────────────────────────────────────────
 const getOrdenes = (req, res) => {
   try {
-    const { estado, proveedor_id } = req.query
+    const { estado, proveedor_id, proveedor } = req.query
     let sql = 'SELECT * FROM ordenes_compra'
     const params = []
     const where = []
     if (estado) { where.push('estado = ?'); params.push(estado) }
     if (proveedor_id) { where.push('proveedor_id = ?'); params.push(proveedor_id) }
+    if (proveedor) { where.push('proveedor = ?'); params.push(proveedor) }
     if (where.length) sql += ' WHERE ' + where.join(' AND ')
     sql += ' ORDER BY created_at DESC'
     res.json(db.prepare(sql).all(...params).map(withItems))
@@ -248,24 +249,47 @@ const getComprasList = (req, res) => {
 
 const createCompra = (req, res) => {
   try {
-    const { fecha, proveedor, numero_oc, numero_factura, estado, fecha_vencimiento, notas, items = [] } = req.body
+    const { fecha, proveedor, numero_oc, numero_factura, estado, fecha_vencimiento, notas, items = [],
+            oc_id, forma_pago, cuenta_bancaria, fecha_pago } = req.body
     if (!fecha || !proveedor) return res.status(400).json({ error: 'fecha y proveedor son requeridos' })
+
+    let oc = null
+    if (oc_id) {
+      oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(oc_id)
+      if (!oc) return res.status(400).json({ error: 'OC no encontrada' })
+      if (oc.pagada) return res.status(400).json({ error: 'La OC ya está pagada' })
+    }
+
     const total = items.reduce((s, i) => s + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
+    const hoy = new Date().toISOString().split('T')[0]
+
     const doCreate = db.transaction(() => {
-      db.prepare('INSERT INTO compras (fecha, proveedor, numero_oc, numero_factura, total, estado, fecha_vencimiento, notas) VALUES (?,?,?,?,?,?,?,?)')
-        .run(fecha, proveedor, numero_oc || null, numero_factura || null, total, estado || 'Pendiente', fecha_vencimiento || null, notas || null)
+      db.prepare('INSERT INTO compras (fecha, proveedor, numero_oc, numero_factura, total, estado, fecha_vencimiento, notas, oc_id, forma_pago, cuenta_bancaria, fecha_pago) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+        .run(fecha, proveedor, numero_oc || null, numero_factura || null, total, estado || 'Borrador',
+             fecha_vencimiento || null, notas || null, oc_id || null,
+             forma_pago || 'Transferencia', cuenta_bancaria || null, fecha_pago || null)
       const newId = db.prepare('SELECT last_insert_rowid() as id').get().id
       for (const item of items) {
         const sub = Number(item.costo_unitario || 0) * Number(item.cantidad || 0)
         db.prepare('INSERT INTO compra_items (compra_id, sku, descripcion, cantidad, costo_unitario, subtotal) VALUES (?,?,?,?,?,?)')
           .run(newId, item.sku || '', item.descripcion || '', Number(item.cantidad || 0), Number(item.costo_unitario || 0), sub)
       }
+      if (oc) {
+        db.prepare("UPDATE ordenes_compra SET pagada = 1, estado = 'pagada', updated_at = datetime('now') WHERE id = ?").run(oc_id)
+        db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla = 'ordenes_compra' AND origen_id = ?").run(oc_id)
+        try {
+          db.prepare('INSERT INTO caja_movimientos (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            .run('egreso', 'Compra', `OC ${oc.numero} · ${oc.proveedor}`, total || oc.total,
+                 hoy, fecha_pago || hoy, 'confirmado', 'ordenes_compra', oc_id, cuenta_bancaria || null)
+        } catch (_) {}
+      }
       return newId
     })
+
     const newId = doCreate()
     const nueva = db.prepare('SELECT * FROM compras WHERE id = ?').get(newId)
     const itemsResult = db.prepare('SELECT * FROM compra_items WHERE compra_id = ?').all(newId)
-    res.status(201).json({ ...nueva, items: itemsResult })
+    res.status(201).json({ ...nueva, items: itemsResult, oc_numero: oc ? oc.numero : null })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -275,10 +299,12 @@ const updateCompra = (req, res) => {
   try {
     const c = db.prepare('SELECT * FROM compras WHERE id = ?').get(req.params.id)
     if (!c) return res.status(404).json({ error: 'Compra no encontrada' })
-    const { fecha, proveedor, numero_oc, numero_factura, estado, fecha_vencimiento, notas } = req.body
-    db.prepare('UPDATE compras SET fecha=?, proveedor=?, numero_oc=?, numero_factura=?, estado=?, fecha_vencimiento=?, notas=? WHERE id=?')
+    const { fecha, proveedor, numero_oc, numero_factura, estado, fecha_vencimiento, notas,
+            forma_pago, cuenta_bancaria, fecha_pago } = req.body
+    db.prepare('UPDATE compras SET fecha=?, proveedor=?, numero_oc=?, numero_factura=?, estado=?, fecha_vencimiento=?, notas=?, forma_pago=?, cuenta_bancaria=?, fecha_pago=? WHERE id=?')
       .run(fecha ?? c.fecha, proveedor ?? c.proveedor, numero_oc ?? c.numero_oc, numero_factura ?? c.numero_factura,
-           estado ?? c.estado, fecha_vencimiento ?? c.fecha_vencimiento, notas ?? c.notas, req.params.id)
+           estado ?? c.estado, fecha_vencimiento ?? c.fecha_vencimiento, notas ?? c.notas,
+           forma_pago ?? c.forma_pago, cuenta_bancaria ?? c.cuenta_bancaria, fecha_pago ?? c.fecha_pago, req.params.id)
     res.json(db.prepare('SELECT * FROM compras WHERE id = ?').get(req.params.id))
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -311,6 +337,9 @@ const cambiarEstadoCompra = (req, res) => {
     if (!compra) return res.status(404).json({ error: 'Compra no encontrada' })
     if (compra.estado === 'Pagada') {
       return res.status(400).json({ error: 'La compra ya está Pagada y no puede cambiarse de estado' })
+    }
+    if (estado === 'Recibida' && compra.estado === 'Recibida') {
+      return res.status(400).json({ error: 'La compra ya está en estado Recibida — stock ya fue actualizado' })
     }
     if (estado === 'Recibida' && compra.estado === 'Pagada') {
       return res.status(400).json({ error: 'No se puede retroceder a Recibida una compra Pagada' })

@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 const MES_ACTUAL = new Date().toISOString().slice(0, 7)
 const HOY = new Date().toISOString().split('T')[0]
 const PROVEEDORES = ['Cristian Hughes', 'Vistony', 'SalfaSur', 'Otro']
+const FORMA_PAGO_OPTIONS = ['Transferencia', 'Efectivo', 'Crédito 30 días', 'Crédito 60 días', 'Cheque']
 
 // Estado machine del spec
 const ESTADO_NEXT = {
@@ -40,6 +41,7 @@ const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, costo_unitario: 0 }
 const FORM_INIT = {
   fecha: HOY, proveedor: 'Cristian Hughes', numero_oc: '', numero_factura: '',
   estado: 'Borrador', fecha_vencimiento: '', notas: '', items: [{ ...ITEM_INIT }],
+  oc_id: null, forma_pago: 'Transferencia', cuenta_bancaria: '', fecha_pago: HOY,
 }
 
 // ── SKU item row — same search pattern as CotizacionForm ────────────────────
@@ -168,11 +170,46 @@ export default function ComprasErpPage() {
     queryFn: () => api.get('/compras', { params: { mes } }).then(r => r.data),
   })
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['compras-erp'] })
+  const { data: ocsDisponibles = [] } = useQuery({
+    queryKey: ['oc-por-proveedor', form.proveedor],
+    queryFn: () => api.get('/compras/ordenes', { params: { proveedor: form.proveedor } })
+      .then(r => r.data.filter(o => !['pagada', 'anulada'].includes((o.estado || '').toLowerCase()))),
+    enabled: showForm && !!form.proveedor && form.proveedor !== 'Otro',
+    staleTime: 30_000,
+  })
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['compras-erp'] })
+    qc.invalidateQueries({ queryKey: ['oc-por-proveedor'] })
+  }
+
+  const handleSelectOC = (oc) => {
+    const ocItems = (oc.items || []).map(item => ({
+      sku: item.codigo || '',
+      descripcion: item.descripcion || '',
+      cantidad: item.cantidad || 1,
+      costo_unitario: item.precio_unitario || 0,
+    }))
+    setForm(f => ({
+      ...f,
+      oc_id: oc.id,
+      numero_oc: oc.numero,
+      items: ocItems.length ? ocItems : [{ ...ITEM_INIT }],
+    }))
+  }
 
   const crearMut = useMutation({
     mutationFn: (d) => api.post('/compras', d).then(r => r.data),
-    onSuccess: () => { invalidate(); toast.success('Compra registrada'); setForm(FORM_INIT); setShowForm(false) },
+    onSuccess: (data) => {
+      invalidate()
+      if (data.oc_numero) {
+        toast.success(`OC ${data.oc_numero} marcada como Pagada. Stock actualizado.`)
+      } else {
+        toast.success('Compra registrada')
+      }
+      setForm(FORM_INIT)
+      setShowForm(false)
+    },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al crear compra'),
   })
 
@@ -270,8 +307,28 @@ export default function ComprasErpPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Proveedor *</label>
-                <select className="rmg-input" value={form.proveedor} onChange={e => setForm(p => ({ ...p, proveedor: e.target.value }))}>
+                <select className="rmg-input" value={form.proveedor} onChange={e => setForm(p => ({ ...p, proveedor: e.target.value, oc_id: null }))}>
                   {PROVEEDORES.map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>
+                  Vincular OC
+                  {form.oc_id && <span className="ml-1 font-bold" style={{ color: 'var(--rmg-teal)' }}>✓ vinculada</span>}
+                </label>
+                <select
+                  className="rmg-input"
+                  value={form.oc_id || ''}
+                  onChange={e => {
+                    if (!e.target.value) { setForm(p => ({ ...p, oc_id: null })); return }
+                    const oc = ocsDisponibles.find(o => o.id === e.target.value)
+                    if (oc) handleSelectOC(oc)
+                  }}
+                >
+                  <option value="">— Sin vincular —</option>
+                  {ocsDisponibles.map(o => (
+                    <option key={o.id} value={o.id}>{o.numero} · {o.estado} · {formatCLP(o.total)}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -283,10 +340,24 @@ export default function ComprasErpPage() {
                 <input className="rmg-input" placeholder="F-12345" value={form.numero_factura} onChange={e => setForm(p => ({ ...p, numero_factura: e.target.value }))} />
               </div>
               <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Forma de pago</label>
+                <select className="rmg-input" value={form.forma_pago} onChange={e => setForm(p => ({ ...p, forma_pago: e.target.value }))}>
+                  {FORMA_PAGO_OPTIONS.map(f => <option key={f}>{f}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Fecha de pago</label>
+                <input type="date" className="rmg-input" value={form.fecha_pago} onChange={e => setForm(p => ({ ...p, fecha_pago: e.target.value }))} />
+              </div>
+              <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Vencimiento</label>
                 <input type="date" className="rmg-input" value={form.fecha_vencimiento} onChange={e => setForm(p => ({ ...p, fecha_vencimiento: e.target.value }))} />
               </div>
-              <div className="md:col-span-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cuenta bancaria</label>
+                <input className="rmg-input" placeholder="1234567 Banco Chile" value={form.cuenta_bancaria} onChange={e => setForm(p => ({ ...p, cuenta_bancaria: e.target.value }))} />
+              </div>
+              <div className="md:col-span-2">
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
                 <input className="rmg-input" placeholder="Observaciones..." value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} />
               </div>
