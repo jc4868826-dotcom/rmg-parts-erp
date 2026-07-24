@@ -98,7 +98,7 @@ function initSchema() {
       password_hash TEXT NOT NULL,
       nombre TEXT NOT NULL,
       telefono TEXT,
-      rol TEXT DEFAULT 'ventas' CHECK(rol IN ('admin','ventas','bodega','cliente')),
+      rol TEXT DEFAULT 'ventas' CHECK(rol IN ('admin','ventas','bodega','cliente','gerente')),
       activo INTEGER DEFAULT 1,
       ultimo_acceso TEXT,
       created_at TEXT DEFAULT (datetime('now')),
@@ -1570,16 +1570,35 @@ function runMigrations() {
     console.log('✅ Migración oc_workflow_v1 — ordenes_compra reconstruida con estados extendidos y columnas workflow')
   }
 
-  // Migration 31: gerente_user_v1 — crear usuario gerente si no existe
+  // Migration 31: gerente_user_v1 — extender CHECK rol + crear usuario gerente
   const m31 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('gerente_user_v1')
   if (!m31) {
+    // Recrear tabla usuarios con CHECK extendido (SQLite no soporta ALTER CHECK)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS usuarios_new (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        nombre TEXT NOT NULL,
+        telefono TEXT,
+        rol TEXT DEFAULT 'ventas' CHECK(rol IN ('admin','ventas','bodega','cliente','gerente')),
+        activo INTEGER DEFAULT 1,
+        ultimo_acceso TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      INSERT OR IGNORE INTO usuarios_new SELECT * FROM usuarios;
+      DROP TABLE usuarios;
+      ALTER TABLE usuarios_new RENAME TO usuarios;
+    `)
+    // Crear usuario gerente si no existe ninguno
     const hasGerente = db.prepare("SELECT COUNT(*) as n FROM usuarios WHERE rol = 'gerente'").get().n
     if (!hasGerente) {
       db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
         .run(uuidv4(), 'gerente@rmgautoparts.cl', bcrypt.hashSync('gerente2026', 10), 'Gerente RMG', '+56 9 0000 0002', 'gerente')
       console.log('✅ Migración gerente_user_v1 — usuario gerente creado (gerente@rmgautoparts.cl / gerente2026)')
     }
-    // Safety net: ensure ordenes_compra has workflow columns (in case oc_workflow_v1 ran partially)
+    // Safety net: columnas workflow en ordenes_compra
     try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN forma_pago TEXT') } catch (_) {}
     try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN fecha_autorizacion TEXT') } catch (_) {}
     try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN autorizado_por TEXT') } catch (_) {}
@@ -1588,6 +1607,7 @@ function runMigrations() {
     try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN numero_factura TEXT') } catch (_) {}
     try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN fecha_factura TEXT') } catch (_) {}
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('gerente_user_v1')
+    console.log('✅ Migración gerente_user_v1 — tabla usuarios con rol gerente habilitado')
   }
 }
 
