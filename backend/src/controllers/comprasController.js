@@ -110,8 +110,13 @@ const getOrden = (req, res) => {
 
 const createOrden = (req, res) => {
   try {
-    const count = db.prepare('SELECT COUNT(*) as n FROM ordenes_compra').get().n
-    const numero = `OC-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`
+    const year = new Date().getFullYear()
+    const prefix = `OC-${year}-`
+    const row = db.prepare(
+      `SELECT MAX(CAST(SUBSTR(numero, ?) AS INTEGER)) as maxn FROM ordenes_compra WHERE numero LIKE ?`
+    ).get(prefix.length + 1, `${prefix}%`)
+    const seq = (row?.maxn || 0) + 1
+    const numero = `${prefix}${String(seq).padStart(3, '0')}`
     const id = uuidv4()
     const { proveedor_id, proveedor, items, fecha, medio_pago, numero_factura, fecha_vencimiento, notas } = req.body
     const itemsArr = items || []
@@ -327,7 +332,7 @@ const enviarAutorizacion = (req, res) => {
   try {
     const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!o) return res.status(404).json({ error: 'OC no encontrada' })
-    if (o.estado !== 'borrador') return res.status(400).json({ error: `Solo se puede enviar a autorización desde Borrador (estado actual: ${o.estado})` })
+    if (!['borrador', 'Rechazada'].includes(o.estado)) return res.status(400).json({ error: `Solo se puede enviar a autorización desde Borrador o Rechazada (estado actual: ${o.estado})` })
     db.prepare("UPDATE ordenes_compra SET estado = 'Pendiente_Autorizacion', updated_at = datetime('now') WHERE id = ?")
       .run(req.params.id)
     res.json(withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)))
@@ -336,6 +341,8 @@ const enviarAutorizacion = (req, res) => {
 
 const autorizarOC = (req, res) => {
   try {
+    const rolUser = req.user?.rol
+    if (!['gerente', 'admin'].includes(rolUser)) return res.status(403).json({ error: 'Se requiere rol gerente o admin para autorizar OC' })
     const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!o) return res.status(404).json({ error: 'OC no encontrada' })
     if (o.estado !== 'Pendiente_Autorizacion') return res.status(400).json({ error: `Solo se puede autorizar desde Pendiente_Autorizacion (estado actual: ${o.estado})` })
@@ -349,6 +356,8 @@ const autorizarOC = (req, res) => {
 
 const rechazarOC = (req, res) => {
   try {
+    const rolUser = req.user?.rol
+    if (!['gerente', 'admin'].includes(rolUser)) return res.status(403).json({ error: 'Se requiere rol gerente o admin para rechazar OC' })
     const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!o) return res.status(404).json({ error: 'OC no encontrada' })
     if (o.estado !== 'Pendiente_Autorizacion') return res.status(400).json({ error: `Solo se puede rechazar desde Pendiente_Autorizacion (estado actual: ${o.estado})` })
@@ -410,6 +419,8 @@ const recibirBodega = (req, res) => {
 
 const autorizarPago = (req, res) => {
   try {
+    const rolUser = req.user?.rol
+    if (!['gerente', 'admin'].includes(rolUser)) return res.status(403).json({ error: 'Se requiere rol gerente o admin para autorizar pago' })
     const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!o) return res.status(404).json({ error: 'OC no encontrada' })
     if (o.estado !== 'Recibida_Bodega') return res.status(400).json({ error: `Solo se puede autorizar pago desde Recibida_Bodega (estado actual: ${o.estado})` })

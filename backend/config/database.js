@@ -1569,6 +1569,26 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_workflow_v1')
     console.log('✅ Migración oc_workflow_v1 — ordenes_compra reconstruida con estados extendidos y columnas workflow')
   }
+
+  // Migration 31: gerente_user_v1 — crear usuario gerente si no existe
+  const m31 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('gerente_user_v1')
+  if (!m31) {
+    const hasGerente = db.prepare("SELECT COUNT(*) as n FROM usuarios WHERE rol = 'gerente'").get().n
+    if (!hasGerente) {
+      db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
+        .run(uuidv4(), 'gerente@rmgautoparts.cl', bcrypt.hashSync('gerente2026', 10), 'Gerente RMG', '+56 9 0000 0002', 'gerente')
+      console.log('✅ Migración gerente_user_v1 — usuario gerente creado (gerente@rmgautoparts.cl / gerente2026)')
+    }
+    // Safety net: ensure ordenes_compra has workflow columns (in case oc_workflow_v1 ran partially)
+    try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN forma_pago TEXT') } catch (_) {}
+    try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN fecha_autorizacion TEXT') } catch (_) {}
+    try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN autorizado_por TEXT') } catch (_) {}
+    try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN motivo_rechazo TEXT') } catch (_) {}
+    try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN fecha_pago TEXT') } catch (_) {}
+    try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN numero_factura TEXT') } catch (_) {}
+    try { db.exec('ALTER TABLE ordenes_compra ADD COLUMN fecha_factura TEXT') } catch (_) {}
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('gerente_user_v1')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
@@ -1577,19 +1597,12 @@ function seedData() {
   if (row && row.n > 0) return
 
   db.transaction(() => {
-    db.prepare(`
-      INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol)
-      VALUES (?,?,?,?,?,?)
-    `).run(
-      'a1b2c3d4-0000-0000-0000-000000000001',
-      'admin@rmgautoparts.cl',
-      bcrypt.hashSync('rmg2026', 10),
-      'Gerente RMG',
-      '+56 9 1234 5678',
-      'admin'
-    )
+    db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
+      .run('a1b2c3d4-0000-0000-0000-000000000001', 'admin@rmgautoparts.cl', bcrypt.hashSync('rmg2026', 10), 'Administrador RMG', '+56 9 1234 5678', 'admin')
+    db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
+      .run('a1b2c3d4-0000-0000-0000-000000000002', 'gerente@rmgautoparts.cl', bcrypt.hashSync('gerente2026', 10), 'Gerente RMG', '+56 9 0000 0002', 'gerente')
   })()
-  console.log('✅ Usuario admin creado (base de datos nueva)')
+  console.log('✅ Usuarios iniciales creados: admin@rmgautoparts.cl / gerente@rmgautoparts.cl')
 }
 
 // ─── Init async (sql.js requiere carga WASM) ──────────────────────────────────

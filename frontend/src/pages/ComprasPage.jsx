@@ -274,7 +274,7 @@ export default function ComprasPage() {
   const renderAcciones = (oc) => {
     const botones = []
     const esAdmin   = rol === 'admin'
-    const esGerente = rol === 'admin' // admin hace todo en este sistema
+    const esGerente = rol === 'admin' || rol === 'gerente'
 
     // Flujo NUEVO
     if (oc.estado === 'borrador' && !oc.pagada) {
@@ -599,6 +599,56 @@ export default function ComprasPage() {
           onConfirm={(vals) => autPagoMut.mutate({ id: modal.oc.id, ...vals })}
           onClose={() => setModal(null)} isPending={autPagoMut.isPending}
         />
+      )}
+
+      {/* Panel de alertas role-based */}
+      {pendientes && (rol === 'gerente' || rol === 'admin') && (
+        <div className="flex gap-3 flex-wrap">
+          {(rol === 'gerente' || rol === 'admin') && pendientes.pendAuth > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-lg flex-1 min-w-48"
+              style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.35)' }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm"
+                style={{ background: 'rgba(234,179,8,0.25)', color: '#92400e' }}>{pendientes.pendAuth}</div>
+              <div>
+                <div className="text-xs font-bold" style={{ color: '#92400e' }}>OC esperando autorización</div>
+                <div className="text-xs" style={{ color: '#a16207' }}>Requieren revisión y aprobación del gerente</div>
+              </div>
+            </div>
+          )}
+          {(rol === 'gerente' || rol === 'admin') && pendientes.recibidasBodega > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-lg flex-1 min-w-48"
+              style={{ background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.35)' }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm"
+                style={{ background: 'rgba(249,115,22,0.25)', color: '#9a3412' }}>{pendientes.recibidasBodega}</div>
+              <div>
+                <div className="text-xs font-bold" style={{ color: '#9a3412' }}>OC esperando aprobación de pago</div>
+                <div className="text-xs" style={{ color: '#c2410c' }}>Recibidas en bodega — pendientes de pago</div>
+              </div>
+            </div>
+          )}
+          {rol === 'admin' && pendientes.autorizadas > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-lg flex-1 min-w-48"
+              style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.35)' }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm"
+                style={{ background: 'rgba(59,130,246,0.25)', color: '#1e3a8a' }}>{pendientes.autorizadas}</div>
+              <div>
+                <div className="text-xs font-bold" style={{ color: '#1e3a8a' }}>OC autorizadas listas para enviar</div>
+                <div className="text-xs" style={{ color: '#1d4ed8' }}>Listas para enviar al proveedor</div>
+              </div>
+            </div>
+          )}
+          {rol === 'admin' && pendientes.enviadasProv > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-lg flex-1 min-w-48"
+              style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.35)' }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm"
+                style={{ background: 'rgba(6,182,212,0.25)', color: '#164e63' }}>{pendientes.enviadasProv}</div>
+              <div>
+                <div className="text-xs font-bold" style={{ color: '#164e63' }}>OC enviadas sin recibir</div>
+                <div className="text-xs" style={{ color: '#0e7490' }}>Pendientes de recepción en bodega</div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       <div className="rmg-card overflow-hidden">
