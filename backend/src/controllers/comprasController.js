@@ -386,11 +386,11 @@ const recibirBodega = (req, res) => {
       const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(req.params.id)
       for (const item of items) {
         if (!item.codigo) continue
-        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ? AND activo = 1').get(item.codigo)
-        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado — stock no actualizado`); continue }
-        const stockAnterior = prod.stock_actual
+        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.codigo)
+        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en catálogo — stock no actualizado`); continue }
+        const stockAnterior = prod.stock_actual ?? 0
         const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
-        db.prepare('UPDATE productos SET stock_actual = ? WHERE codigo = ?').run(stockNuevo, item.codigo)
+        db.prepare("UPDATE productos SET stock_actual = ?, updated_at = datetime('now') WHERE codigo = ?").run(stockNuevo, item.codigo)
         try {
           db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia) VALUES (?,?,?,?,?,?,?,?,?,?)')
             .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_oc', o.numero)
@@ -479,18 +479,18 @@ const cambiarEstadoCompra = (req, res) => {
         const items = db.prepare('SELECT * FROM compra_items WHERE compra_id = ?').all(req.params.id)
         for (const item of items) {
           if (!item.sku) continue
-          const prod = db.prepare('SELECT * FROM productos WHERE codigo = ? AND activo = 1').get(item.sku)
+          const prod = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.sku)
           if (!prod) {
             advertencias.push(`SKU ${item.sku} no encontrado en catálogo — stock no actualizado`)
             continue
           }
-          const stockAnterior = prod.stock_actual
+          const stockAnterior = prod.stock_actual ?? 0
           const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
-          db.prepare('UPDATE productos SET stock_actual = ? WHERE codigo = ?').run(stockNuevo, item.sku)
+          db.prepare("UPDATE productos SET stock_actual = ?, updated_at = datetime('now') WHERE codigo = ?").run(stockNuevo, item.sku)
           try {
             db.prepare(
-              'INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo) VALUES (?,?,?,?,?,?,?,?)'
-            ).run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo)
+              'INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo) VALUES (?,?,?,?,?,?,?,?,?)'
+            ).run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_compra')
           } catch (_) {}
         }
       }
