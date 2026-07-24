@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP } from '@utils/format'
@@ -47,8 +47,26 @@ function semanaKey(dateStr) {
 const TT = { background: '#0a1a2e', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, color: '#fff', fontSize: 12 }
 const AX = { fill: 'rgba(90,143,168,0.7)', fontSize: 11 }
 
+const mesPasadoStr = () => {
+  const d = new Date(); d.setMonth(d.getMonth() - 1)
+  return d.toISOString().slice(0, 7)
+}
+const mesProxStr = () => {
+  const d = new Date(); d.setMonth(d.getMonth() + 1)
+  return d.toISOString().slice(0, 7)
+}
+
+function mesToRango(mes) {
+  const [y, m] = mes.split('-').map(Number)
+  const desde = `${mes}-01`
+  const hasta = new Date(y, m, 0).toISOString().split('T')[0]
+  return { desde, hasta }
+}
+
 export default function FlujoCajaPage() {
-  const [mes, setMes]           = useState(mesActualStr())
+  const [filtroMode, setFiltroMode] = useState('mes-actual') // 'mes-actual'|'mes-pasado'|'mes-proximo'|'rango'
+  const [rangoDesde, setRangoDesde] = useState(new Date().toISOString().split('T')[0])
+  const [rangoHasta, setRangoHasta] = useState(new Date().toISOString().split('T')[0])
   const [showForm, setShowForm] = useState(false)
   const [form, setForm]         = useState(FORM_INIT)
   const [editando, setEditando] = useState(null)
@@ -57,15 +75,25 @@ export default function FlujoCajaPage() {
   const [openCat, setOpenCat]   = useState({})
   const qc = useQueryClient()
 
+  // Calcula el rango de fechas según el modo activo
+  const { fecha_inicio, fecha_fin } = useMemo(() => {
+    if (filtroMode === 'rango') return { fecha_inicio: rangoDesde, fecha_fin: rangoHasta }
+    const mesStr = filtroMode === 'mes-pasado' ? mesPasadoStr()
+      : filtroMode === 'mes-proximo' ? mesProxStr()
+      : mesActualStr()
+    const r = mesToRango(mesStr)
+    return { fecha_inicio: r.desde, fecha_fin: r.hasta }
+  }, [filtroMode, rangoDesde, rangoHasta])
+
   const { data: fcData = {}, isLoading } = useQuery({
-    queryKey: ['flujo-caja', mes],
-    queryFn: () => api.get('/flujo-caja', { params: { mes } }).then(r => r.data),
+    queryKey: ['flujo-caja', fecha_inicio, fecha_fin],
+    queryFn: () => api.get('/flujo-caja', { params: { fecha_inicio, fecha_fin } }).then(r => r.data),
   })
 
   const movimientos = fcData.movimientos ?? []
   const resumen     = fcData.resumen     ?? {}
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['flujo-caja'] })
+  const invalidate = useCallback(() => qc.invalidateQueries({ queryKey: ['flujo-caja'] }), [qc])
 
   const crearMut = useMutation({
     mutationFn: (data) => api.post('/flujo-caja/manual', data).then(r => r.data),
@@ -96,38 +124,43 @@ export default function FlujoCajaPage() {
     editarMut.mutate({ id: editando.id, data: editando })
   }
 
-  // ── 4 KPI cards ────────────────────────────────────────────────────────────
+  // ── KPI cards ────────────────────────────────────────────────────────────
+  const saldoActual   = fcData.saldo_actual   ?? resumen.saldo_real ?? 0
+  const saldoAlCorte  = fcData.saldo_al_corte ?? resumen.saldo_real ?? 0
+  const ingPeriodo    = fcData.total_ingresos_periodo ?? ((resumen.ingresos_confirmados ?? 0) + (resumen.ingresos_proyectados ?? 0))
+  const egrPeriodo    = fcData.total_egresos_periodo  ?? ((resumen.egresos_confirmados  ?? 0) + (resumen.egresos_proyectados  ?? 0))
+
   const CARDS = [
     {
-      key: 'saldo_real',
-      label: 'Saldo Real',
-      value: resumen.saldo_real ?? 0,
-      sub: `+${formatCLP(resumen.ingresos_confirmados ?? 0)} · -${formatCLP(resumen.egresos_confirmados ?? 0)}`,
-      color: (resumen.saldo_real ?? 0) >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
+      key: 'saldo_actual',
+      label: 'Saldo Actual (HOY)',
+      value: saldoActual,
+      sub: 'Acumulado hasta hoy',
+      color: saldoActual >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
       filter: (m) => m.estado === 'confirmado',
     },
     {
-      key: 'ing_proy',
-      label: 'Ingresos Proyectados',
-      value: resumen.ingresos_proyectados ?? 0,
-      sub: `${movimientos.filter(m => m.tipo === 'ingreso' && m.estado === 'proyectado').length} mov. pendientes`,
+      key: 'ing_periodo',
+      label: 'Ingresos del Período',
+      value: ingPeriodo,
+      sub: `${movimientos.filter(m => m.tipo === 'ingreso').length} movimientos`,
       color: 'var(--rmg-teal)',
-      filter: (m) => m.tipo === 'ingreso' && m.estado === 'proyectado',
+      filter: (m) => m.tipo === 'ingreso',
     },
     {
-      key: 'egr_proy',
-      label: 'Egresos Proyectados',
-      value: resumen.egresos_proyectados ?? 0,
-      sub: `${movimientos.filter(m => m.tipo === 'egreso' && m.estado === 'proyectado').length} mov. pendientes`,
+      key: 'egr_periodo',
+      label: 'Egresos del Período',
+      value: egrPeriodo,
+      sub: `${movimientos.filter(m => m.tipo === 'egreso').length} movimientos`,
       color: 'var(--rmg-red)',
-      filter: (m) => m.tipo === 'egreso' && m.estado === 'proyectado',
+      filter: (m) => m.tipo === 'egreso',
     },
     {
-      key: 'saldo_proy',
-      label: 'Saldo Proyectado',
-      value: resumen.saldo_proyectado ?? 0,
-      sub: 'Real + proyectados del período',
-      color: (resumen.saldo_proyectado ?? 0) >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
+      key: 'saldo_corte',
+      label: `Saldo al ${fecha_fin}`,
+      value: saldoAlCorte,
+      sub: 'Acumulado hasta fecha fin del filtro',
+      color: saldoAlCorte >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)',
       filter: () => true,
     },
   ]
@@ -198,17 +231,45 @@ export default function FlujoCajaPage() {
         </button>
       </div>
 
-      {/* Filtro mes */}
-      <div className="rmg-card p-4 flex items-center gap-4 flex-wrap">
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Período</span>
-        <input type="month" className="rmg-input text-xs py-1.5 w-40" value={mes}
-          onChange={e => { setMes(e.target.value); setCardFilter(null) }} />
-        <button onClick={() => { setMes(mesActualStr()); setCardFilter(null) }}
-          className="text-xs px-3 py-1.5 rounded-lg"
-          style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          Mes actual
-        </button>
-        {isLoading && <span className="text-xs animate-pulse" style={{ color: 'var(--rmg-muted)' }}>Cargando…</span>}
+      {/* Filtro de período */}
+      <div className="rmg-card p-4 flex flex-col gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Período</span>
+          {[
+            { key: 'mes-actual',  label: 'Este mes' },
+            { key: 'mes-pasado',  label: 'Mes pasado' },
+            { key: 'mes-proximo', label: 'Próximo mes' },
+            { key: 'rango',       label: 'Rango de fechas ↓' },
+          ].map(opt => (
+            <button key={opt.key}
+              onClick={() => { setFiltroMode(opt.key); setCardFilter(null) }}
+              className="text-xs px-3 py-1.5 rounded-lg transition-all"
+              style={filtroMode === opt.key
+                ? { background: 'rgba(27,143,212,0.2)', color: 'var(--rmg-blt)', border: '1px solid rgba(27,143,212,0.4)' }
+                : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
+              }>
+              {opt.label}
+            </button>
+          ))}
+          {isLoading && <span className="text-xs animate-pulse" style={{ color: 'var(--rmg-muted)' }}>Cargando…</span>}
+        </div>
+        {filtroMode === 'rango' && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Desde</span>
+              <input type="date" className="rmg-input text-xs py-1.5 w-36" value={rangoDesde}
+                onChange={e => { setRangoDesde(e.target.value); setCardFilter(null) }} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Hasta</span>
+              <input type="date" className="rmg-input text-xs py-1.5 w-36" value={rangoHasta}
+                onChange={e => { setRangoHasta(e.target.value); setCardFilter(null) }} />
+            </div>
+            <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+              {fecha_inicio} → {fecha_fin}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 4 KPI cards */}

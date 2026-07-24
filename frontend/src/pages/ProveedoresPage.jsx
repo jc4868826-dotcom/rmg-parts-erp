@@ -58,9 +58,16 @@ export default function ProveedoresPage() {
   }
 
   const ESTADO_OC = {
-    borrador: { label: 'Borrador', color: 'rgba(90,143,168,0.8)' },
-    enviada:  { label: 'Enviada',  color: 'var(--rmg-blt)' },
-    recibida: { label: 'Recibida', color: 'var(--rmg-teal)' },
+    borrador:               { label: 'Borrador',           bg: 'rgba(148,163,184,0.12)', color: 'rgba(90,143,168,0.9)' },
+    Pendiente_Autorizacion: { label: 'Pend. Autorización', bg: 'rgba(234,179,8,0.12)',   color: '#854d0e' },
+    Autorizada:             { label: 'Autorizada',          bg: 'rgba(59,130,246,0.12)',  color: '#1d4ed8' },
+    Enviada_Proveedor:      { label: 'Enviada Prov.',       bg: 'rgba(6,182,212,0.12)',   color: '#0e7490' },
+    enviada:                { label: 'Enviada',             bg: 'rgba(6,182,212,0.12)',   color: '#0e7490' },
+    Recibida_Bodega:        { label: 'Recibida Bodega',     bg: 'rgba(249,115,22,0.12)',  color: '#c2410c' },
+    recibida:               { label: 'Recibida',            bg: 'rgba(249,115,22,0.12)',  color: '#c2410c' },
+    Pagada:                 { label: 'Pagada',              bg: 'rgba(34,197,94,0.12)',   color: '#15803d' },
+    Rechazada:              { label: 'Rechazada',           bg: 'rgba(239,68,68,0.12)',   color: '#b91c1c' },
+    anulada:                { label: 'Anulada',             bg: 'rgba(239,68,68,0.12)',   color: '#b91c1c' },
   }
 
   return (
@@ -224,10 +231,11 @@ export default function ProveedoresPage() {
                 </div>
               </div>
 
-              {/* Órdenes de compra del proveedor */}
+              {/* Historial de OC del proveedor */}
               <div className="rmg-card overflow-hidden">
-                <div className="px-5 py-3 border-b text-sm font-bold" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-                  Órdenes de compra
+                <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                  <span className="text-sm font-bold">Historial de Órdenes de Compra</span>
+                  <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{(detalle.ordenes_compra || []).length} OC</span>
                 </div>
                 {(!detalle.ordenes_compra || detalle.ordenes_compra.length === 0) ? (
                   <div className="py-8 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin órdenes de compra</div>
@@ -235,28 +243,26 @@ export default function ProveedoresPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-                        {['N° OC','Estado','Total','Fecha','Pago'].map(h => (
+                        {['N° OC','Fecha','Monto total','Estado','N° Factura'].map(h => (
                           <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {detalle.ordenes_compra.map(oc => {
-                        const est = ESTADO_OC[oc.estado] || { label: oc.estado, color: 'var(--rmg-muted)' }
+                        const estKey = oc.pagada ? 'Pagada' : oc.estado
+                        const est = ESTADO_OC[estKey] || { label: estKey, bg: 'rgba(148,163,184,0.12)', color: 'var(--rmg-muted)' }
                         return (
                           <tr key={oc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                             <td className="px-4 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{oc.numero}</td>
+                            <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{oc.fecha_emision}</td>
+                            <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(oc.total)}</td>
                             <td className="px-4 py-2.5">
                               <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                                style={{ background: `${est.color}18`, color: est.color }}>{est.label}</span>
+                                style={{ background: est.bg, color: est.color }}>{est.label}</span>
                             </td>
-                            <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(oc.total)}</td>
-                            <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{oc.fecha_emision}</td>
-                            <td className="px-4 py-2.5">
-                              {oc.pagada
-                                ? <span className="text-xs font-semibold" style={{ color: 'var(--rmg-teal)' }}>✓ Pagada</span>
-                                : <span className="text-xs font-semibold" style={{ color: 'var(--rmg-gold)' }}>Pendiente</span>
-                              }
+                            <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                              {oc.numero_factura || '—'}
                             </td>
                           </tr>
                         )

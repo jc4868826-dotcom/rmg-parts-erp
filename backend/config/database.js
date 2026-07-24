@@ -1522,6 +1522,53 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('compras_pago_v1')
     console.log('✅ Migración compras_pago_v1 — oc_id, forma_pago, cuenta_bancaria, fecha_pago añadidos a compras')
   }
+
+  // Migration 30: oc_workflow_v1 — ampliar estados + columnas de flujo de autorización
+  const m30 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('oc_workflow_v1')
+  if (!m30) {
+    // Recrear ordenes_compra con CHECK extendido y nuevas columnas (preservando datos)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ordenes_compra_new (
+        id TEXT PRIMARY KEY,
+        numero TEXT UNIQUE NOT NULL,
+        proveedor_id TEXT REFERENCES proveedores(id),
+        proveedor TEXT,
+        estado TEXT DEFAULT 'borrador',
+        fecha_emision TEXT,
+        fecha_entrega TEXT,
+        neto REAL DEFAULT 0,
+        iva REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        pagada INTEGER DEFAULT 0,
+        factura_proveedor TEXT,
+        medio_pago TEXT DEFAULT 'Contado',
+        numero_factura TEXT,
+        fecha_vencimiento TEXT,
+        notas TEXT,
+        fecha_autorizacion TEXT,
+        autorizado_por TEXT,
+        fecha_rechazo TEXT,
+        motivo_rechazo TEXT,
+        fecha_pago TEXT,
+        forma_pago_oc TEXT,
+        fecha_factura TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      INSERT OR IGNORE INTO ordenes_compra_new
+        (id, numero, proveedor_id, proveedor, estado, fecha_emision, fecha_entrega,
+         neto, iva, total, pagada, factura_proveedor, medio_pago, numero_factura,
+         fecha_vencimiento, notas, created_at, updated_at)
+        SELECT id, numero, proveedor_id, proveedor, estado, fecha_emision, fecha_entrega,
+               neto, iva, total, pagada, factura_proveedor, medio_pago, numero_factura,
+               fecha_vencimiento, notas, created_at, updated_at
+        FROM ordenes_compra;
+      DROP TABLE ordenes_compra;
+      ALTER TABLE ordenes_compra_new RENAME TO ordenes_compra;
+    `)
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_workflow_v1')
+    console.log('✅ Migración oc_workflow_v1 — ordenes_compra reconstruida con estados extendidos y columnas workflow')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

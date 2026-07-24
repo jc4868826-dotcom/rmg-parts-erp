@@ -322,6 +322,130 @@ const deleteCompra = (req, res) => {
   }
 }
 
+// ── Flujo de autorización OC ──────────────────────────────────
+const enviarAutorizacion = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    if (o.estado !== 'borrador') return res.status(400).json({ error: `Solo se puede enviar a autorización desde Borrador (estado actual: ${o.estado})` })
+    db.prepare("UPDATE ordenes_compra SET estado = 'Pendiente_Autorizacion', updated_at = datetime('now') WHERE id = ?")
+      .run(req.params.id)
+    res.json(withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+}
+
+const autorizarOC = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    if (o.estado !== 'Pendiente_Autorizacion') return res.status(400).json({ error: `Solo se puede autorizar desde Pendiente_Autorizacion (estado actual: ${o.estado})` })
+    const hoy = new Date().toISOString().split('T')[0]
+    const autorizado_por = req.user?.nombre || req.user?.email || 'admin'
+    db.prepare("UPDATE ordenes_compra SET estado = 'Autorizada', fecha_autorizacion = ?, autorizado_por = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(hoy, autorizado_por, req.params.id)
+    res.json(withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+}
+
+const rechazarOC = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    if (o.estado !== 'Pendiente_Autorizacion') return res.status(400).json({ error: `Solo se puede rechazar desde Pendiente_Autorizacion (estado actual: ${o.estado})` })
+    const { motivo_rechazo } = req.body
+    if (!motivo_rechazo) return res.status(400).json({ error: 'motivo_rechazo es requerido' })
+    const hoy = new Date().toISOString().split('T')[0]
+    db.prepare("UPDATE ordenes_compra SET estado = 'Rechazada', fecha_rechazo = ?, motivo_rechazo = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(hoy, motivo_rechazo, req.params.id)
+    res.json(withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+}
+
+const enviarProveedor = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    if (o.estado !== 'Autorizada') return res.status(400).json({ error: `Solo se puede enviar al proveedor desde Autorizada (estado actual: ${o.estado})` })
+    db.prepare("UPDATE ordenes_compra SET estado = 'Enviada_Proveedor', updated_at = datetime('now') WHERE id = ?")
+      .run(req.params.id)
+    res.json(withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+}
+
+const recibirBodega = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    if (o.estado !== 'Enviada_Proveedor') return res.status(400).json({ error: `Solo se puede recibir en bodega desde Enviada_Proveedor (estado actual: ${o.estado})` })
+    const { numero_factura, fecha_factura } = req.body
+    const hoy = new Date().toISOString().split('T')[0]
+    const advertencias = []
+    const ejecutar = db.transaction(() => {
+      db.prepare("UPDATE ordenes_compra SET estado = 'Recibida_Bodega', fecha_entrega = ?, numero_factura = ?, fecha_factura = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(hoy, numero_factura || o.numero_factura || null, fecha_factura || hoy, req.params.id)
+      const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(req.params.id)
+      for (const item of items) {
+        if (!item.codigo) continue
+        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ? AND activo = 1').get(item.codigo)
+        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado — stock no actualizado`); continue }
+        const stockAnterior = prod.stock_actual
+        const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
+        db.prepare('UPDATE productos SET stock_actual = ? WHERE codigo = ?').run(stockNuevo, item.codigo)
+        try {
+          db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_oc', o.numero)
+        } catch (_) {}
+      }
+      // Crear CxP pendiente
+      try {
+        db.prepare(`INSERT OR IGNORE INTO facturas_cxp (id, numero, proveedor_id, proveedor, oc_id, oc_numero, monto, fecha_emision, fecha_vencimiento, estado)
+          VALUES (?,?,?,?,?,?,?,?,?,?)`)
+          .run(uuidv4(), `CXP-${o.numero}`, o.proveedor_id || null, o.proveedor, o.id, o.numero, o.total, hoy, o.fecha_vencimiento || null, 'pendiente')
+      } catch (_) {}
+    })
+    ejecutar()
+    res.json({ ...withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)), advertencias })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+}
+
+const autorizarPago = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    if (o.estado !== 'Recibida_Bodega') return res.status(400).json({ error: `Solo se puede autorizar pago desde Recibida_Bodega (estado actual: ${o.estado})` })
+    const { forma_pago, fecha_pago } = req.body
+    if (!forma_pago) return res.status(400).json({ error: 'forma_pago es requerido' })
+    const hoy = new Date().toISOString().split('T')[0]
+    const fechaPago = fecha_pago || hoy
+    const ejecutar = db.transaction(() => {
+      db.prepare("UPDATE ordenes_compra SET estado = 'Pagada', pagada = 1, forma_pago_oc = ?, fecha_pago = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(forma_pago, fechaPago, req.params.id)
+      // Registrar egreso en caja_movimientos
+      try {
+        db.prepare('INSERT INTO caja_movimientos (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id) VALUES (?,?,?,?,?,?,?,?,?)')
+          .run('egreso', 'Compra proveedor', `OC ${o.numero} · ${o.proveedor}`, o.total, hoy, fechaPago, 'confirmado', 'ordenes_compra', o.id)
+      } catch (_) {}
+      // Marcar CxP como pagada
+      try {
+        db.prepare("UPDATE facturas_cxp SET estado = 'pagada', fecha_pago = ? WHERE oc_id = ?")
+          .run(fechaPago, o.id)
+      } catch (_) {}
+    })
+    ejecutar()
+    res.json(withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)))
+  } catch (err) { res.status(500).json({ error: err.message }) }
+}
+
+const getPendientesWorkflow = (req, res) => {
+  try {
+    const pendAuth = db.prepare("SELECT COUNT(*) as n FROM ordenes_compra WHERE estado = 'Pendiente_Autorizacion'").get().n
+    const recibidasBodega = db.prepare("SELECT COUNT(*) as n FROM ordenes_compra WHERE estado = 'Recibida_Bodega'").get().n
+    const autorizadas = db.prepare("SELECT COUNT(*) as n FROM ordenes_compra WHERE estado = 'Autorizada'").get().n
+    const enviadasProv = db.prepare("SELECT COUNT(*) as n FROM ordenes_compra WHERE estado = 'Enviada_Proveedor'").get().n
+    res.json({ pendAuth, recibidasBodega, autorizadas, enviadasProv })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+}
+
 const { uuidv4: _uuidv4 } = require('../../config/database')
 
 const ESTADOS_OC = ['Borrador', 'Enviada', 'Recibida', 'Pagada', 'Anulada']
@@ -473,4 +597,4 @@ const deleteOrden = (req, res) => {
   }
 }
 
-module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra }
+module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra, enviarAutorizacion, autorizarOC, rechazarOC, enviarProveedor, recibirBodega, autorizarPago, getPendientesWorkflow }

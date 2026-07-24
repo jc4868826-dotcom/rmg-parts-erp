@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, X, ShoppingBag, Pencil, Trash2, Send, PackageCheck, CreditCard, Search, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, X, ShoppingBag, Pencil, Trash2, Send, PackageCheck, CreditCard, Search, ChevronDown, ChevronUp, CheckCircle, XCircle, Truck, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useAuth } from '@context/AuthContext'
 
 const HOY = new Date().toISOString().split('T')[0]
 const MEDIO_PAGO = ['Contado', 'Crédito 30 días', 'Crédito 60 días', 'Crédito 90 días']
@@ -14,24 +15,29 @@ const FORM_INIT = {
   items: [{ ...ITEM_INIT }],
 }
 
-function getEstadoDisplay(oc) {
-  if (oc.pagada) return 'Pagada'
-  if (oc.estado === 'borrador') return 'Creada'
-  if (oc.estado === 'enviada') return 'Enviada'
-  if (oc.estado === 'recibida') return 'Recibida'
-  if (oc.estado === 'anulada') return 'Anulada'
-  return oc.estado
+// Estado → display y colores
+const ESTADO_CONFIG = {
+  borrador:              { label: 'Borrador',              cls: 'bg-gray-100 text-gray-800' },
+  Pendiente_Autorizacion:{ label: 'Pend. Autorización',   cls: 'bg-yellow-100 text-yellow-800 animate-pulse' },
+  Autorizada:            { label: 'Autorizada',            cls: 'bg-blue-100 text-blue-800' },
+  Enviada_Proveedor:     { label: 'Enviada Proveedor',     cls: 'bg-cyan-100 text-cyan-800' },
+  Recibida_Bodega:       { label: 'Recibida Bodega',       cls: 'bg-orange-100 text-orange-800' },
+  Pagada:                { label: 'Pagada',                cls: 'bg-green-100 text-green-800' },
+  Rechazada:             { label: 'Rechazada',             cls: 'bg-red-100 text-red-800' },
+  // estados heredados
+  enviada:               { label: 'Enviada',               cls: 'bg-cyan-100 text-cyan-800' },
+  recibida:              { label: 'Recibida',              cls: 'bg-orange-100 text-orange-800' },
+  anulada:               { label: 'Anulada',               cls: 'bg-red-100 text-red-800' },
 }
 
-const ESTADO_STYLE = {
-  Creada:   { color: 'rgba(90,143,168,0.9)', bg: 'rgba(90,143,168,0.12)' },
-  Enviada:  { color: 'var(--rmg-blt)',       bg: 'rgba(56,182,255,0.12)' },
-  Recibida: { color: 'var(--rmg-teal)',      bg: 'rgba(45,201,138,0.12)' },
-  Pagada:   { color: 'var(--rmg-teal)',      bg: 'rgba(45,201,138,0.22)' },
-  Anulada:  { color: 'var(--rmg-red)',       bg: 'rgba(224,90,78,0.12)'  },
+function EstadoBadge({ estado, pagada }) {
+  if (pagada) {
+    return <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-800">Pagada</span>
+  }
+  const cfg = ESTADO_CONFIG[estado] || { label: estado, cls: 'bg-gray-100 text-gray-700' }
+  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.cls}`}>{cfg.label}</span>
 }
 
-// ── Exact copy of CotizacionForm ProductoSearch — costo_unidad_neto instead of precio_venta_neto
 function ProductoSearch({ onSelect, initialQuery = '' }) {
   const [query, setQuery]   = useState(initialQuery)
   const [open, setOpen]     = useState(false)
@@ -56,35 +62,17 @@ function ProductoSearch({ onSelect, initialQuery = '' }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const handleSelect = (p) => {
-    onSelect(p)
-    setQuery(p.codigo_sku)
-    setOpen(false)
-  }
-
-  const handleClear = () => {
-    setQuery('')
-    setOpen(false)
-    onSelect({ codigo_sku: '', descripcion: '', costo_unidad_neto: 0 })
-  }
+  const handleSelect = (p) => { onSelect(p); setQuery(p.codigo_sku); setOpen(false) }
+  const handleClear  = () => { setQuery(''); setOpen(false); onSelect({ codigo_sku: '', descripcion: '', costo_unidad_neto: 0 }) }
 
   return (
     <div ref={wrapRef} className="relative">
       <div className="relative">
         <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--rmg-muted)' }} />
-        <input
-          className="rmg-input text-xs pl-6 pr-6"
-          placeholder="Buscar SKU, producto…"
-          value={query}
+        <input className="rmg-input text-xs pl-6 pr-6" placeholder="Buscar SKU, producto…" value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
-          onFocus={() => query.length >= 2 && setOpen(true)}
-          autoComplete="off"
-        />
-        {query && (
-          <button type="button" onClick={handleClear} className="absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--rmg-muted)' }}>
-            <X size={11}/>
-          </button>
-        )}
+          onFocus={() => query.length >= 2 && setOpen(true)} autoComplete="off" />
+        {query && <button type="button" onClick={handleClear} className="absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--rmg-muted)' }}><X size={11}/></button>}
       </div>
       {open && debouncedQ.length >= 2 && (
         <div className="absolute z-50 left-0 right-0 mt-1 rounded-lg border overflow-hidden shadow-xl"
@@ -109,12 +97,55 @@ function ProductoSearch({ onSelect, initialQuery = '' }) {
   )
 }
 
+// Modal genérico con campos
+function Modal({ title, subtitle, fields, onConfirm, onClose, isPending }) {
+  const [vals, setVals] = useState(() => Object.fromEntries(fields.map(f => [f.key, f.default || ''])))
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-bold">{title}</h2>
+            {subtitle && <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{subtitle}</p>}
+          </div>
+          <button onClick={onClose} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+        </div>
+        <div className="space-y-3">
+          {fields.map(f => (
+            <div key={f.key}>
+              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{f.label}{f.required && ' *'}</label>
+              {f.type === 'select' ? (
+                <select className="rmg-input" value={vals[f.key]} onChange={e => setVals(p => ({ ...p, [f.key]: e.target.value }))}>
+                  {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input type={f.type || 'text'} className="rmg-input" value={vals[f.key]}
+                  onChange={e => setVals(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder || ''} />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-3 justify-end pt-4">
+          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+          <button type="button" disabled={isPending} onClick={() => onConfirm(vals)} className="btn-primary disabled:opacity-50">
+            {isPending ? 'Procesando...' : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ComprasPage() {
   const qc = useQueryClient()
+  const { user } = useAuth()
+  const rol = user?.rol || 'admin'
+
   const [showForm, setShowForm] = useState(false)
   const [editando, setEditando] = useState(null)
   const [expandida, setExpandida] = useState(null)
   const [form, setForm] = useState(FORM_INIT)
+  const [modal, setModal] = useState(null) // { type, oc }
 
   const { data: ordenes = [], isLoading } = useQuery({
     queryKey: ['ordenes-compra'],
@@ -126,7 +157,24 @@ export default function ComprasPage() {
     queryFn: () => api.get('/compras/proveedores').then(r => r.data),
   })
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['ordenes-compra'] })
+  const { data: pendientes } = useQuery({
+    queryKey: ['oc-pendientes-workflow'],
+    queryFn: () => api.get('/compras/ordenes/pendientes-workflow').then(r => r.data),
+    staleTime: 30_000,
+  })
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['ordenes-compra'] })
+    qc.invalidateQueries({ queryKey: ['oc-pendientes-workflow'] })
+  }
+
+  const onWfSuccess = (msg) => (res) => {
+    invalidate()
+    if (res?.advertencias?.length) res.advertencias.forEach(w => toast(w, { icon: '⚠️' }))
+    toast.success(msg)
+    setModal(null)
+  }
+  const onWfError = (e) => toast.error(e.response?.data?.error || 'Error')
 
   const crearMut = useMutation({
     mutationFn: (d) => api.post('/compras/ordenes', d).then(r => r.data),
@@ -140,30 +188,43 @@ export default function ComprasPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error'),
   })
 
+  const enviarAuthMut = useMutation({
+    mutationFn: (id) => api.post(`/compras/ordenes/${id}/enviar-autorizacion`).then(r => r.data),
+    onSuccess: onWfSuccess('Enviada a autorización'), onError: onWfError,
+  })
+  const autorizarMut = useMutation({
+    mutationFn: (id) => api.post(`/compras/ordenes/${id}/autorizar`).then(r => r.data),
+    onSuccess: onWfSuccess('OC autorizada'), onError: onWfError,
+  })
+  const enviarProvMut = useMutation({
+    mutationFn: (id) => api.post(`/compras/ordenes/${id}/enviar-proveedor`).then(r => r.data),
+    onSuccess: onWfSuccess('Enviada al proveedor'), onError: onWfError,
+  })
+  const rechazarMut = useMutation({
+    mutationFn: ({ id, motivo_rechazo }) => api.post(`/compras/ordenes/${id}/rechazar`, { motivo_rechazo }).then(r => r.data),
+    onSuccess: onWfSuccess('OC rechazada'), onError: onWfError,
+  })
+  const recibirBodMut = useMutation({
+    mutationFn: ({ id, ...body }) => api.post(`/compras/ordenes/${id}/recibir-bodega`, body).then(r => r.data),
+    onSuccess: onWfSuccess('Recibida en bodega — stock actualizado'), onError: onWfError,
+  })
+  const autPagoMut = useMutation({
+    mutationFn: ({ id, ...body }) => api.post(`/compras/ordenes/${id}/autorizar-pago`, body).then(r => r.data),
+    onSuccess: onWfSuccess('Pago autorizado — egreso registrado'), onError: onWfError,
+  })
+
+  // Flujo legado
   const enviarMut = useMutation({
     mutationFn: (id) => api.post(`/compras/ordenes/${id}/enviar`).then(r => r.data),
-    onSuccess: () => { invalidate(); toast.success('OC enviada al proveedor') },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error'),
+    onSuccess: onWfSuccess('OC enviada al proveedor'), onError: onWfError,
   })
-
   const recibirMut = useMutation({
     mutationFn: (id) => api.post(`/compras/ordenes/${id}/recibir`).then(r => r.data),
-    onSuccess: (res) => {
-      invalidate()
-      if (res.advertencias?.length) res.advertencias.forEach(w => toast(w, { icon: '⚠️' }))
-      toast.success('OC recibida — stock actualizado')
-    },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error'),
+    onSuccess: onWfSuccess('OC recibida — stock actualizado'), onError: onWfError,
   })
-
   const pagarMut = useMutation({
     mutationFn: (id) => api.post(`/compras/ordenes/${id}/pagar`).then(r => r.data),
-    onSuccess: () => {
-      invalidate()
-      qc.invalidateQueries({ queryKey: ['compras-erp'] })
-      toast.success('Pago registrado — egreso en flujo de caja')
-    },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar pago'),
+    onSuccess: onWfSuccess('Pago registrado — egreso en flujo de caja'), onError: onWfError,
   })
 
   const eliminarMut = useMutation({
@@ -194,9 +255,143 @@ export default function ComprasPage() {
     crearMut.mutate({ ...form, proveedor: prov?.razon_social || '', items: validItems })
   }
 
-  const totalOCs  = ordenes.reduce((s, o) => s + (o.total || 0), 0)
-  const pendPago  = ordenes.filter(o => o.estado === 'recibida' && !o.pagada).reduce((s, o) => s + (o.total || 0), 0)
-  const enTransito = ordenes.filter(o => o.estado === 'enviada').length
+  const duplicarComoBorrador = (oc) => {
+    setForm({
+      fecha: HOY, proveedor_id: oc.proveedor_id || '',
+      medio_pago: oc.medio_pago || 'Contado',
+      numero_factura: '', fecha_vencimiento: '', notas: oc.notas || '',
+      items: (oc.items || []).map(i => ({ codigo: i.codigo, descripcion: i.descripcion, cantidad: i.cantidad, precio_unitario: i.precio_unitario })),
+    })
+    setShowForm(true)
+    toast('Formulario cargado con los datos de la OC anterior', { icon: '📋' })
+  }
+
+  const totalOCs   = ordenes.reduce((s, o) => s + (o.total || 0), 0)
+  const pendPago   = ordenes.filter(o => o.estado === 'Recibida_Bodega' || (o.estado === 'recibida' && !o.pagada)).reduce((s, o) => s + (o.total || 0), 0)
+  const enTransito = ordenes.filter(o => ['enviada', 'Enviada_Proveedor'].includes(o.estado)).length
+  const pendAuth   = pendientes?.pendAuth || 0
+
+  const renderAcciones = (oc) => {
+    const botones = []
+    const esAdmin   = rol === 'admin'
+    const esGerente = rol === 'admin' // admin hace todo en este sistema
+
+    // Flujo NUEVO
+    if (oc.estado === 'borrador' && !oc.pagada) {
+      if (esAdmin) {
+        botones.push(
+          <button key="edit" onClick={() => setEditando({ ...oc })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }} title="Editar"><Pencil size={13}/></button>,
+          <button key="send-auth" onClick={() => enviarAuthMut.mutate(oc.id)} disabled={enviarAuthMut.isPending}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
+            style={{ background: 'rgba(234,179,8,0.15)', color: '#854d0e', border: '1px solid rgba(234,179,8,0.4)' }}>
+            <Send size={11}/> Env. Autorización
+          </button>
+        )
+      }
+    }
+    if (oc.estado === 'Pendiente_Autorizacion') {
+      if (esGerente) {
+        botones.push(
+          <button key="autorizar" onClick={() => autorizarMut.mutate(oc.id)} disabled={autorizarMut.isPending}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
+            style={{ background: 'rgba(59,130,246,0.15)', color: '#1d4ed8', border: '1px solid rgba(59,130,246,0.4)' }}>
+            <CheckCircle size={11}/> Autorizar
+          </button>,
+          <button key="rechazar" onClick={() => setModal({ type: 'rechazar', oc })}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded"
+            style={{ background: 'rgba(239,68,68,0.12)', color: '#b91c1c', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <XCircle size={11}/> Rechazar
+          </button>
+        )
+      }
+    }
+    if (oc.estado === 'Autorizada') {
+      if (esAdmin) {
+        botones.push(
+          <button key="env-prov" onClick={() => enviarProvMut.mutate(oc.id)} disabled={enviarProvMut.isPending}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
+            style={{ background: 'rgba(6,182,212,0.15)', color: '#0e7490', border: '1px solid rgba(6,182,212,0.4)' }}>
+            <Truck size={11}/> Enviar Proveedor
+          </button>
+        )
+      }
+    }
+    if (oc.estado === 'Enviada_Proveedor') {
+      if (esAdmin) {
+        botones.push(
+          <button key="recibir-bod" onClick={() => setModal({ type: 'recibir-bodega', oc })}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded"
+            style={{ background: 'rgba(249,115,22,0.15)', color: '#c2410c', border: '1px solid rgba(249,115,22,0.4)' }}>
+            <PackageCheck size={11}/> Registrar Recepción
+          </button>
+        )
+      }
+    }
+    if (oc.estado === 'Recibida_Bodega') {
+      if (esGerente) {
+        botones.push(
+          <button key="aut-pago" onClick={() => setModal({ type: 'autorizar-pago', oc })}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded"
+            style={{ background: 'rgba(34,197,94,0.15)', color: '#15803d', border: '1px solid rgba(34,197,94,0.4)' }}>
+            <CreditCard size={11}/> Autorizar Pago
+          </button>
+        )
+      }
+    }
+    if (oc.estado === 'Rechazada') {
+      if (esAdmin) {
+        botones.push(
+          <button key="duplicar" onClick={() => duplicarComoBorrador(oc)}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded"
+            style={{ background: 'rgba(148,163,184,0.15)', color: '#475569', border: '1px solid rgba(148,163,184,0.3)' }}>
+            <Copy size={11}/> Duplicar
+          </button>
+        )
+      }
+    }
+    // Flujo legado
+    if (oc.estado === 'borrador' && !oc.pagada && esAdmin) {
+      botones.push(
+        <button key="enviar-leg" onClick={() => enviarMut.mutate(oc.id)} disabled={enviarMut.isPending}
+          className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
+          style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blt)', border: '1px solid rgba(56,182,255,0.25)' }}>
+          <Send size={11}/> Enviar
+        </button>
+      )
+    }
+    if (oc.estado === 'enviada' && !oc.pagada && esAdmin) {
+      botones.push(
+        <button key="recibir-leg" onClick={() => recibirMut.mutate(oc.id)} disabled={recibirMut.isPending}
+          className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
+          style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.25)' }}>
+          <PackageCheck size={11}/> Recibida
+        </button>
+      )
+    }
+    if (oc.estado === 'recibida' && !oc.pagada && esGerente) {
+      botones.push(
+        <button key="pagar-leg" onClick={() => { if (confirm(`¿Registrar pago de ${oc.numero}?`)) pagarMut.mutate(oc.id) }} disabled={pagarMut.isPending}
+          className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
+          style={{ background: 'rgba(244,162,60,0.12)', color: 'var(--rmg-gold)', border: '1px solid rgba(244,162,60,0.25)' }}>
+          <CreditCard size={11}/> Pagar
+        </button>
+      )
+    }
+    // Eliminar siempre disponible para admin
+    if (esAdmin && !['Pagada'].includes(oc.estado) && !oc.pagada) {
+      botones.push(
+        <button key="delete" onClick={() => {
+          const msg = oc.estado === 'recibida' || oc.estado === 'Recibida_Bodega'
+            ? `¿Eliminar OC ${oc.numero}?\nSe revertirá el stock agregado al inventario.`
+            : `¿Eliminar OC ${oc.numero}?`
+          if (confirm(msg)) eliminarMut.mutate(oc.id)
+        }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }} title="Eliminar">
+          <Trash2 size={13}/>
+        </button>
+      )
+    }
+    return botones
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -204,14 +399,14 @@ export default function ComprasPage() {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Órdenes de Compra</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Creada → Enviada → Recibida → Pagada</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Borrador → Autorización → Enviada → Bodega → Pago</p>
         </div>
         <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2">
           {showForm ? <><X size={15}/> Cerrar</> : <><Plus size={15}/> Nueva OC</>}
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="rmg-card p-4">
           <div className="text-xs uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--rmg-muted)' }}>OCs totales</div>
           <div className="font-black text-2xl" style={{ fontFamily: 'Inter Tight, sans-serif', color: 'var(--rmg-blt)' }}>{ordenes.length}</div>
@@ -226,6 +421,11 @@ export default function ComprasPage() {
           <div className="text-xs uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--rmg-muted)' }}>En tránsito</div>
           <div className="font-black text-2xl" style={{ fontFamily: 'Inter Tight, sans-serif', color: 'var(--rmg-purple)' }}>{enTransito}</div>
           <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>enviadas al proveedor</div>
+        </div>
+        <div className="rmg-card p-4">
+          <div className="text-xs uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--rmg-muted)' }}>Pend. autorización</div>
+          <div className="font-black text-2xl" style={{ fontFamily: 'Inter Tight, sans-serif', color: pendAuth > 0 ? '#ca8a04' : 'var(--rmg-muted)' }}>{pendAuth}</div>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>esperando aprobación</div>
         </div>
       </div>
 
@@ -369,6 +569,38 @@ export default function ComprasPage() {
         </div>
       )}
 
+      {/* Modales de acciones */}
+      {modal?.type === 'rechazar' && (
+        <Modal
+          title="Rechazar OC" subtitle={modal.oc.numero}
+          fields={[{ key: 'motivo_rechazo', label: 'Motivo de rechazo', required: true, placeholder: 'Indica el motivo...' }]}
+          onConfirm={(vals) => rechazarMut.mutate({ id: modal.oc.id, ...vals })}
+          onClose={() => setModal(null)} isPending={rechazarMut.isPending}
+        />
+      )}
+      {modal?.type === 'recibir-bodega' && (
+        <Modal
+          title="Registrar Recepción en Bodega" subtitle={modal.oc.numero}
+          fields={[
+            { key: 'numero_factura', label: 'N° Factura proveedor', placeholder: 'F-12345' },
+            { key: 'fecha_factura', label: 'Fecha factura', type: 'date', default: HOY },
+          ]}
+          onConfirm={(vals) => recibirBodMut.mutate({ id: modal.oc.id, ...vals })}
+          onClose={() => setModal(null)} isPending={recibirBodMut.isPending}
+        />
+      )}
+      {modal?.type === 'autorizar-pago' && (
+        <Modal
+          title="Autorizar Pago OC" subtitle={`${modal.oc.numero} · ${formatCLP(modal.oc.total)}`}
+          fields={[
+            { key: 'forma_pago', label: 'Forma de pago', required: true, type: 'select', options: ['Transferencia bancaria', 'Cheque', 'Efectivo', 'Crédito'], default: 'Transferencia bancaria' },
+            { key: 'fecha_pago', label: 'Fecha de pago', type: 'date', default: HOY },
+          ]}
+          onConfirm={(vals) => autPagoMut.mutate({ id: modal.oc.id, ...vals })}
+          onClose={() => setModal(null)} isPending={autPagoMut.isPending}
+        />
+      )}
+
       <div className="rmg-card overflow-hidden">
         <div className="px-5 py-3 border-b" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
           <span className="font-bold text-sm">{ordenes.length} órdenes de compra</span>
@@ -377,7 +609,7 @@ export default function ComprasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.015)' }}>
-                {['N° OC', 'Proveedor', 'Fecha', 'Total', 'Estado', 'Vencimiento', 'Acciones', ''].map(h => (
+                {['N° OC', 'Proveedor', 'Fecha', 'Total', 'Estado', 'Factura', 'Acciones', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -392,9 +624,8 @@ export default function ComprasPage() {
                     </tr>
                   ))
                 : ordenes.map((oc, idx) => {
-                    const estDisplay = getEstadoDisplay(oc)
-                    const est = ESTADO_STYLE[estDisplay] || ESTADO_STYLE.Creada
                     const isExp = expandida === oc.id
+                    const acciones = renderAcciones(oc)
                     return (
                       <>
                         <tr key={oc.id}
@@ -405,42 +636,11 @@ export default function ComprasPage() {
                           <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(oc.fecha_emision)}</td>
                           <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(oc.total)}</td>
                           <td className="px-4 py-3">
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{estDisplay}</span>
+                            <EstadoBadge estado={oc.estado} pagada={oc.pagada} />
                           </td>
-                          <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{oc.fecha_vencimiento ? formatFecha(oc.fecha_vencimiento) : '—'}</td>
+                          <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{oc.numero_factura || '—'}</td>
                           <td className="px-4 py-3">
-                            <div className="flex gap-1 items-center flex-wrap">
-                              {oc.estado === 'borrador' && !oc.pagada && (
-                                <button onClick={() => enviarMut.mutate(oc.id)} disabled={enviarMut.isPending}
-                                  className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
-                                  style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blt)', border: '1px solid rgba(56,182,255,0.25)' }}>
-                                  <Send size={11}/> Enviar
-                                </button>
-                              )}
-                              {oc.estado === 'enviada' && !oc.pagada && (
-                                <button onClick={() => recibirMut.mutate(oc.id)} disabled={recibirMut.isPending}
-                                  className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
-                                  style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.25)' }}>
-                                  <PackageCheck size={11}/> Recibida
-                                </button>
-                              )}
-                              {oc.estado === 'recibida' && !oc.pagada && (
-                                <button onClick={() => { if (confirm(`¿Registrar pago de ${oc.numero}?\nEsto creará un egreso en el flujo de caja.`)) pagarMut.mutate(oc.id) }} disabled={pagarMut.isPending}
-                                  className="flex items-center gap-1 text-xs px-2 py-1 rounded disabled:opacity-50"
-                                  style={{ background: 'rgba(244,162,60,0.12)', color: 'var(--rmg-gold)', border: '1px solid rgba(244,162,60,0.25)' }}>
-                                  <CreditCard size={11}/> Pagar
-                                </button>
-                              )}
-                              <button onClick={() => setEditando({ ...oc })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }} title="Editar"><Pencil size={13}/></button>
-                              <button onClick={() => {
-                                const msg = oc.pagada
-                                  ? `¿Eliminar OC ${oc.numero}?\nSe revertirá el stock y el egreso registrado en caja.`
-                                  : oc.estado === 'recibida'
-                                  ? `¿Eliminar OC ${oc.numero}?\nSe revertirá el stock agregado al inventario.`
-                                  : `¿Eliminar OC ${oc.numero}?`
-                                if (confirm(msg)) eliminarMut.mutate(oc.id)
-                              }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }} title="Eliminar"><Trash2 size={13}/></button>
-                            </div>
+                            <div className="flex gap-1 items-center flex-wrap">{acciones}</div>
                           </td>
                           <td className="px-4 py-3">
                             <button onClick={() => setExpandida(isExp ? null : oc.id)} className="p-1 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
@@ -451,6 +651,16 @@ export default function ComprasPage() {
                         {isExp && (
                           <tr key={`${oc.id}-detail`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                             <td colSpan={8} className="px-6 pb-4 pt-2">
+                              {oc.motivo_rechazo && (
+                                <div className="mb-2 text-xs px-3 py-2 rounded" style={{ background: 'rgba(239,68,68,0.1)', color: '#b91c1c', border: '1px solid rgba(239,68,68,0.2)' }}>
+                                  Motivo rechazo: {oc.motivo_rechazo}
+                                </div>
+                              )}
+                              {oc.autorizado_por && (
+                                <div className="mb-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                                  Autorizado por: <span style={{ color: 'var(--rmg-teal)' }}>{oc.autorizado_por}</span> · {oc.fecha_autorizacion}
+                                </div>
+                              )}
                               <div className="text-xs uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--rmg-muted)' }}>
                                 Ítems{oc.medio_pago ? ` · ${oc.medio_pago}` : ''}{oc.notas ? ` · ${oc.notas}` : ''}
                               </div>

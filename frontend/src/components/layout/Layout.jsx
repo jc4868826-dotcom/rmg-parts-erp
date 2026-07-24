@@ -57,7 +57,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/catalogo',     icon: Package,         label: 'Catálogo',        badge: null },
       { to: '/proveedores',  icon: Building2,       label: 'Proveedores',     badge: null },
-      { to: '/compras',      icon: Truck,           label: 'OC',              badge: null },
+      { to: '/compras',      icon: Truck,           label: 'OC',              badge: 'oc' },
       { to: '/bodegas',      icon: Warehouse,       label: 'Bodegas',         badge: null },
     ],
   },
@@ -85,6 +85,18 @@ export default function Layout() {
     staleTime: 60_000,
   })
   const prospeccionCount = prospecStats?.total_activos ?? null
+
+  const { data: ocPendientes } = useQuery({
+    queryKey: ['oc-pendientes-workflow'],
+    queryFn: () => api.get('/compras/ordenes/pendientes-workflow').then(r => r.data),
+    staleTime: 60_000,
+    retry: false,
+  })
+  // admin ve: autorizadas + enviadas (tareas pendientes de gestión)
+  // gerente (admin en este sistema) ve: pendAuth + recibidasBodega
+  const ocBadgeAdmin   = (ocPendientes?.autorizadas ?? 0) + (ocPendientes?.enviadasProv ?? 0)
+  const ocBadgeGerente = (ocPendientes?.pendAuth ?? 0) + (ocPendientes?.recibidasBodega ?? 0)
+  const ocBadgeTotal   = ocBadgeAdmin + ocBadgeGerente
 
   const handleLogout = async () => {
     await logout()
@@ -142,6 +154,8 @@ export default function Layout() {
                 {section.items.map(({ to, icon: Icon, label, badge }) => {
                   const badgeValue = badge === 'prospeccion'
                     ? (prospeccionCount !== null ? String(prospeccionCount) : null)
+                    : badge === 'oc'
+                    ? (ocBadgeTotal > 0 ? String(ocBadgeTotal) : null)
                     : badge
                   return (
                   <NavLink
