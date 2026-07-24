@@ -155,7 +155,7 @@ const recibirOrden = (req, res) => {
   try {
     const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!o) return res.status(404).json({ error: 'Orden no encontrada' })
-    if (['recibida', 'anulada'].includes(o.estado)) {
+    if (['recibida', 'anulada', 'Recibida_Bodega', 'Pagada'].includes(o.estado) || o.pagada) {
       return res.status(400).json({ error: `La OC ya está en estado ${o.estado}` })
     }
     const advertencias = []
@@ -165,14 +165,14 @@ const recibirOrden = (req, res) => {
       const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(req.params.id)
       for (const item of items) {
         if (!item.codigo) continue
-        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ? AND activo = 1').get(item.codigo)
-        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado — stock no actualizado`); continue }
-        const stockAnterior = prod.stock_actual
+        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.codigo)
+        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en catálogo — stock no actualizado`); continue }
+        const stockAnterior = prod.stock_actual ?? 0
         const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
-        db.prepare('UPDATE productos SET stock_actual = ? WHERE codigo = ?').run(stockNuevo, item.codigo)
+        db.prepare('UPDATE productos SET stock_actual = ?, updated_at = datetime(\'now\') WHERE codigo = ?').run(stockNuevo, item.codigo)
         try {
-          db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo) VALUES (?,?,?,?,?,?,?,?)')
-            .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo)
+          db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_oc', o.numero)
         } catch (_) {}
       }
     })
