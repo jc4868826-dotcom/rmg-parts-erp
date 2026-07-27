@@ -100,6 +100,7 @@ app.use('/api/configuracion',          require('./routes/configuracion')); // Co
 app.use('/api/notas-venta',            require('./routes/notasVenta'));    // Notas de venta
 app.use('/api/ventas',                 require('./routes/ventas'));          // ERP Ventas
 app.use('/api/edr',                    require('./routes/edr'));             // Estado de Resultados
+app.use('/api/campanas',            require('./routes/campanas'));  // Módulo Campañas
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {

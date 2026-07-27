@@ -1735,6 +1735,30 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('clientes_v2')
     console.log('✅ Migración clientes_v2 — dv,ciudad,celular,region,rubro + bitácora creada')
   }
+
+  // Migration 33: campanas_v1 — tabla campanas + campana_id/campana_nombre en pipeline_contactos
+  const m33 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('campanas_v1')
+  if (!m33) {
+    db.exec(`CREATE TABLE IF NOT EXISTS campanas (
+      id TEXT PRIMARY KEY,
+      nombre TEXT NOT NULL,
+      tipo TEXT DEFAULT 'prospección',
+      segmento TEXT,
+      rubro TEXT,
+      canal TEXT DEFAULT 'whatsapp',
+      mensaje_generado TEXT,
+      mensaje_editado TEXT,
+      estado TEXT DEFAULT 'borrador',
+      fecha_creacion TEXT DEFAULT (datetime('now','localtime')),
+      creado_por TEXT,
+      total_prospectos INTEGER DEFAULT 0
+    )`)
+    const pcCols = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+    if (!pcCols.includes('campana_id'))     try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN campana_id TEXT") } catch(_) {}
+    if (!pcCols.includes('campana_nombre')) try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN campana_nombre TEXT") } catch(_) {}
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('campanas_v1')
+    console.log('✅ Migración campanas_v1 — tabla campanas creada + campana_id/campana_nombre en pipeline_contactos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

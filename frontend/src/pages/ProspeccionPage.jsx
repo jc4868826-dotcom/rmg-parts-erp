@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
-import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check } from 'lucide-react'
+import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check, Megaphone } from 'lucide-react'
 
 // ─── constants ──────────────────────────────────────────────────────────────
 
@@ -183,6 +183,8 @@ export default function ProspeccionPage() {
   const [editando, setEditando]           = useState(null)
   const [form, setForm]                   = useState(FORM_INIT)
   const [preview, setPreview]             = useState(null) // { registros: [] }
+  const [selectedIds, setSelectedIds]     = useState(new Set())
+  const [showAsignarCampana, setShowAsignarCampana] = useState(false)
   const fileRef                           = useRef(null)
   const qc = useQueryClient()
 
@@ -194,6 +196,11 @@ export default function ProspeccionPage() {
   const { data: stats } = useQuery({
     queryKey: ['prospeccion-stats'],
     queryFn: () => api.get('/prospeccion/stats').then(r => r.data),
+  })
+
+  const { data: campanas = [] } = useQuery({
+    queryKey: ['campanas'],
+    queryFn: () => api.get('/campanas').then(r => r.data),
   })
 
   const invalidate = () => {
@@ -224,6 +231,17 @@ export default function ProspeccionPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error en importación'),
   })
 
+  const asignarMut = useMutation({
+    mutationFn: (d) => api.put('/prospeccion/asignar-campana', d).then(r => r.data),
+    onSuccess: (res) => {
+      invalidate()
+      toast.success(`Campaña asignada a ${res.actualizados} prospectos`)
+      setSelectedIds(new Set())
+      setShowAsignarCampana(false)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al asignar campaña'),
+  })
+
   const segmentos = useMemo(() => ['Todos', ...new Set(data.map(p => p.segmento).filter(Boolean))].sort((a, b) => a === 'Todos' ? -1 : a.localeCompare(b)), [data])
   const regiones  = useMemo(() => ['Todas', ...new Set(data.map(p => p.region).filter(Boolean))].sort((a, b) => a === 'Todas' ? -1 : a.localeCompare(b)), [data])
 
@@ -240,6 +258,15 @@ export default function ProspeccionPage() {
       return true
     })
   }, [data, busqueda, segmentoFiltro, prioridadFiltro, regionFiltro])
+
+  const toggleSelect = (id) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const toggleAll = () => setSelectedIds(prev =>
+    prev.size === filtrados.length ? new Set() : new Set(filtrados.map(p => p.id))
+  )
 
   const handleMoverAContacto = async (id) => {
     try {
@@ -401,6 +428,13 @@ export default function ProspeccionPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
           <thead>
             <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <th className="px-3 py-3 w-8" style={{ borderBottom: '0.5px solid rgba(56,182,255,0.1)' }}>
+                <input type="checkbox"
+                  checked={selectedIds.size === filtrados.length && filtrados.length > 0}
+                  onChange={toggleAll}
+                  style={{ accentColor: 'var(--rmg-blt)', cursor: 'pointer' }}
+                />
+              </th>
               {TABLE_HEADERS.map(h => (
                 <th key={h} style={{ padding: '9px 12px', fontSize: 11, fontWeight: 500, color: 'rgba(90,143,168,0.7)', textAlign: 'left', borderBottom: '0.5px solid rgba(56,182,255,0.1)', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
@@ -412,7 +446,7 @@ export default function ProspeccionPage() {
               : filtrados.length === 0
                 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: '56px 24px', textAlign: 'center' }}>
+                    <td colSpan={10} style={{ padding: '56px 24px', textAlign: 'center' }}>
                       <div style={{ color: 'rgba(90,143,168,0.5)', fontSize: 14 }}>Sin prospectos activos</div>
                       <div style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12, marginTop: 6 }}>
                         {busqueda || segmentoFiltro !== 'Todos' || prioridadFiltro !== 'Todas' || regionFiltro !== 'Todas'
@@ -426,9 +460,24 @@ export default function ProspeccionPage() {
                   <tr key={p.id} style={{ borderBottom: '0.5px solid rgba(56,182,255,0.07)' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    {/* Checkbox */}
+                    <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox"
+                        checked={selectedIds.has(p.id)}
+                        onChange={() => toggleSelect(p.id)}
+                        style={{ accentColor: 'var(--rmg-blt)', cursor: 'pointer' }}
+                      />
+                    </td>
                     {/* Empresa + segmento */}
                     <td style={{ padding: '11px 12px', minWidth: 160 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>{p.empresa || '—'}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>
+                        {p.empresa || '—'}
+                        {p.campana_nombre && (
+                          <span className="ml-1 text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>
+                            {p.campana_nombre}
+                          </span>
+                        )}
+                      </div>
                       <SegmentoBadge segmento={p.segmento} />
                     </td>
                     {/* Rubro */}
@@ -529,6 +578,62 @@ export default function ProspeccionPage() {
           isPending={editarMut.isPending}
           onCancelar={() => setEditando(null)}
         />
+      )}
+
+      {/* ── Floating action bar: multi-select ── */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl animate-fade-in"
+          style={{ background: 'rgba(7,21,40,0.97)', border: '1px solid rgba(56,182,255,0.3)', backdropFilter: 'blur(8px)' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>
+            {selectedIds.size} seleccionados
+          </span>
+          <button
+            onClick={() => setShowAsignarCampana(true)}
+            className="btn-primary text-xs flex items-center gap-1.5"
+          >
+            <Megaphone size={13}/> Asignar campaña
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} style={{ color: 'var(--rmg-muted)' }}>
+            <X size={16}/>
+          </button>
+        </div>
+      )}
+
+      {/* ── Modal: Asignar campaña ── */}
+      {showAsignarCampana && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold">Asignar campaña</h2>
+              <button onClick={() => setShowAsignarCampana(false)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <p className="text-sm mb-4" style={{ color: 'var(--rmg-muted)' }}>
+              Asignar campaña a <strong style={{ color: 'var(--rmg-off)' }}>{selectedIds.size} prospectos</strong>
+            </p>
+            <select className="rmg-input mb-4" id="campana-select">
+              <option value="">— Seleccionar campaña —</option>
+              {campanas.map(c => (
+                <option key={c.id} value={c.id} data-nombre={c.nombre}>{c.nombre} · {c.rubro}</option>
+              ))}
+            </select>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowAsignarCampana(false)} className="btn-secondary">Cancelar</button>
+              <button
+                className="btn-primary"
+                disabled={asignarMut.isPending}
+                onClick={() => {
+                  const sel = document.getElementById('campana-select')
+                  const campana_id = sel.value
+                  const campana_nombre = sel.options[sel.selectedIndex]?.text?.split(' · ')[0]
+                  if (!campana_id) { toast.error('Selecciona una campaña'); return }
+                  asignarMut.mutate({ ids: Array.from(selectedIds), campana_id, campana_nombre })
+                }}
+              >
+                {asignarMut.isPending ? 'Asignando...' : 'Asignar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Modal: preview Excel ── */}

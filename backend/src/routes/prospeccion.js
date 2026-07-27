@@ -27,4 +27,21 @@ router.patch('/:id/descartar',       authenticate, c.descartar)
 // POST  /api/prospeccion/:id/mover-a-contacto — promover al Pipeline CRM
 router.post('/:id/mover-a-contacto', authenticate, c.moverAContacto)
 
+// PUT /api/prospeccion/asignar-campana
+router.put('/asignar-campana', authenticate, (req, res) => {
+  try {
+    const { db } = require('../../config/database')
+    const { ids, campana_id, campana_nombre } = req.body
+    if (!ids?.length || !campana_id) return res.status(400).json({ error: 'ids y campana_id requeridos' })
+    const placeholders = ids.map(() => '?').join(',')
+    db.prepare(`UPDATE pipeline_contactos SET campana_id = ?, campana_nombre = ?, fecha_ultima_actualizacion = datetime('now') WHERE id IN (${placeholders})`)
+      .run(campana_id, campana_nombre || null, ...ids)
+    const count = db.prepare(`SELECT COUNT(*) as n FROM pipeline_contactos WHERE campana_id = ?`).get(campana_id).n
+    db.prepare(`UPDATE campanas SET total_prospectos = ? WHERE id = ?`).run(count, campana_id)
+    res.json({ ok: true, actualizados: ids.length, total_campana: count })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 module.exports = router

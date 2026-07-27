@@ -40,6 +40,7 @@ import ConfigurarLandingPage from '@pages/ConfigurarLandingPage'
 import VentasPage from '@pages/VentasPage'
 import ComprasErpPage from '@pages/ComprasErpPage'
 import EDRPage from '@pages/EDRPage'
+import CampanasPage from '@pages/CampanasPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,6 +115,7 @@ export default function App() {
               <Route path="ventas"            element={<VentasPage />} />
               <Route path="compras-erp"       element={<ComprasErpPage />} />
               <Route path="edr"               element={<EDRPage />} />
+              <Route path="campanas"          element={<CampanasPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

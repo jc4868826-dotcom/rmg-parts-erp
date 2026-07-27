@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -64,6 +64,7 @@ const NAV_SECTIONS = [
   {
     label: 'Canal & Análisis',
     items: [
+      { to: '/campanas',     icon: Megaphone,       label: 'Campañas',        badge: null },
       { to: '/whatsapp',     icon: MessageCircle,   label: 'Bot WhatsApp',    badge: '5' },
       { to: '/reportes',     icon: BarChart3,       label: 'Reportes',        badge: null },
       { to: '/config',             icon: Settings,        label: 'Configuración',    badge: null },
