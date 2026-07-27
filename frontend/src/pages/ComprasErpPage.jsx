@@ -171,16 +171,15 @@ export default function ComprasErpPage() {
   })
 
   const { data: ocsDisponibles = [] } = useQuery({
-    queryKey: ['oc-por-proveedor', form.proveedor],
-    queryFn: () => api.get('/compras/ordenes', { params: { proveedor: form.proveedor } })
-      .then(r => r.data.filter(o => !['pagada', 'anulada'].includes((o.estado || '').toLowerCase()))),
+    queryKey: ['oc-disponibles', form.proveedor],
+    queryFn: () => api.get('/compras/oc-disponibles', { params: { proveedor: form.proveedor } }).then(r => r.data),
     enabled: showForm && !!form.proveedor && form.proveedor !== 'Otro',
     staleTime: 30_000,
   })
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['compras-erp'] })
-    qc.invalidateQueries({ queryKey: ['oc-por-proveedor'] })
+    qc.invalidateQueries({ queryKey: ['oc-disponibles'] })
   }
 
   const handleSelectOC = (oc) => {
@@ -327,7 +326,9 @@ export default function ComprasErpPage() {
                 >
                   <option value="">— Sin vincular —</option>
                   {ocsDisponibles.map(o => (
-                    <option key={o.id} value={o.id}>{o.numero} · {o.estado} · {formatCLP(o.total)}</option>
+                    <option key={o.id} value={o.id}>
+                      {o.numero} — {(o.proveedor || '').toUpperCase()} — {formatCLP(o.total)} [{o.estado}]
+                    </option>
                   ))}
                 </select>
               </div>

@@ -608,4 +608,32 @@ const deleteOrden = (req, res) => {
   }
 }
 
-module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra, enviarAutorizacion, autorizarOC, rechazarOC, enviarProveedor, recibirBodega, autorizarPago, getPendientesWorkflow }
+const ESTADOS_OC_ACTIVOS = [
+  'Autorizada', 'Enviada_Proveedor', 'Recibida_Bodega',
+  'Pendiente_Autorizacion', 'pendiente_autorizacion',
+  'enviada', 'recibida',
+]
+
+const getOcsDisponibles = (req, res) => {
+  try {
+    const { proveedor, proveedor_id } = req.query
+    const placeholders = ESTADOS_OC_ACTIVOS.map(() => '?').join(',')
+    let sql = `SELECT id, numero, total, estado, proveedor_id, proveedor
+               FROM ordenes_compra
+               WHERE estado IN (${placeholders})`
+    const params = [...ESTADOS_OC_ACTIVOS]
+    if (proveedor_id) {
+      sql += ' AND proveedor_id = ?'
+      params.push(proveedor_id)
+    } else if (proveedor) {
+      sql += ' AND LOWER(proveedor) LIKE LOWER(?)'
+      params.push(`%${proveedor}%`)
+    }
+    sql += ' ORDER BY created_at DESC'
+    res.json(db.prepare(sql).all(...params))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra, enviarAutorizacion, autorizarOC, rechazarOC, enviarProveedor, recibirBodega, autorizarPago, getPendientesWorkflow, getOcsDisponibles }

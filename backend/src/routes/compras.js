@@ -9,6 +9,7 @@ router.post('/proveedores',        c.createProveedor)
 router.put('/proveedores/:id',     c.updateProveedor)
 
 // Órdenes de compra — consultas
+router.get('/oc-disponibles',                          c.getOcsDisponibles)
 router.get('/ordenes/pendientes-workflow', authenticate, c.getPendientesWorkflow)
 router.get('/ordenes',             c.getOrdenes)
 router.get('/ordenes/:id',         c.getOrden)
