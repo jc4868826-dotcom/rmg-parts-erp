@@ -6,7 +6,7 @@ import { formatFecha, labelSegmento, colorSegmento } from '@utils/format'
 import {
   Search, Plus, Users, X, Pencil, Trash2, FileText,
   Mail, MessageCircle, Send, ChevronRight, Building2,
-  Phone, MapPin, Briefcase, Check,
+  Phone, MapPin, Briefcase, Check, Megaphone,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -677,12 +677,18 @@ export default function ClientesPage() {
   const [fichaCliente, setFicha]  = useState(null)
   const [emailClientes, setEmailC] = useState(null)
   const [wspClientes, setWspC]    = useState(null)
+  const [showAsignarCampana, setShowAsignarCampana] = useState(false)
 
   // ── Data ────────────────────────────────────────────────────────────────────
 
   const { data: clientes = [], isLoading } = useQuery({
     queryKey: ['clientes'],
     queryFn: () => api.get('/clientes').then(r => r.data),
+  })
+
+  const { data: campanas = [] } = useQuery({
+    queryKey: ['campanas'],
+    queryFn: () => api.get('/campanas').then(r => r.data),
   })
 
   const filtered = clientes.filter(c => {
@@ -720,6 +726,17 @@ export default function ClientesPage() {
       toast.success('Cliente eliminado')
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar'),
+  })
+
+  const asignarCampanaMut = useMutation({
+    mutationFn: (d) => api.put('/clientes/asignar-campana', d).then(r => r.data),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['clientes'] })
+      toast.success(`Campaña asignada a ${res.actualizados} clientes`)
+      setSelected(new Set())
+      setShowAsignarCampana(false)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al asignar campaña'),
   })
 
   const handleDelete = (c) => {
@@ -840,6 +857,12 @@ export default function ClientesPage() {
             className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors"
             style={{ color: 'var(--rmg-teal)', background: 'rgba(45,201,138,0.1)' }}>
             <MessageCircle size={14} /> Enviar WSP
+          </button>
+          <button
+            onClick={() => setShowAsignarCampana(true)}
+            className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors"
+            style={{ color: '#a78bfa', background: 'rgba(167,139,250,0.1)' }}>
+            <Megaphone size={14} /> Asignar campaña
           </button>
           <button onClick={() => setSelected(new Set())} className="ml-1" style={{ color: 'var(--rmg-muted)' }}>
             <X size={15} />
@@ -1034,6 +1057,43 @@ export default function ClientesPage() {
       )}
       {wspClientes && (
         <WspModal clientes={wspClientes} onClose={() => setWspC(null)} />
+      )}
+
+      {/* Modal: Asignar campaña */}
+      {showAsignarCampana && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold">Asignar campaña</h2>
+              <button onClick={() => setShowAsignarCampana(false)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <p className="text-sm mb-4" style={{ color: 'var(--rmg-muted)' }}>
+              Asignar campaña a <strong style={{ color: 'var(--rmg-off)' }}>{selected.size} clientes</strong>
+            </p>
+            <select className="rmg-input mb-4" id="cl-campana-select">
+              <option value="">— Seleccionar campaña —</option>
+              {campanas.map(c => (
+                <option key={c.id} value={c.id}>{c.nombre} · {c.rubro}</option>
+              ))}
+            </select>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowAsignarCampana(false)} className="btn-secondary">Cancelar</button>
+              <button
+                className="btn-primary"
+                disabled={asignarCampanaMut.isPending}
+                onClick={() => {
+                  const sel = document.getElementById('cl-campana-select')
+                  const campana_id = sel.value
+                  const campana_nombre = sel.options[sel.selectedIndex]?.text?.split(' · ')[0]
+                  if (!campana_id) { toast.error('Selecciona una campaña'); return }
+                  asignarCampanaMut.mutate({ ids: Array.from(selected), campana_id, campana_nombre })
+                }}
+              >
+                {asignarCampanaMut.isPending ? 'Asignando...' : 'Asignar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

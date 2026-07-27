@@ -237,6 +237,87 @@ function parseExcel(file) {
 
 const TABLE_HEADERS = ['RUT', 'Razón Social', 'Rubro', 'Comuna', 'Email', 'Teléfono / Celular', 'Campaña', 'Acciones']
 
+// Defined at module level so React never sees a new reference on re-render (fixes input focus loss)
+function FormularioProspecto({ titulo, datos, setDatos, onSubmit, isPending, onCancelar }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)' }}>
+      <div className="rmg-card p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-bold text-lg">{titulo}</h2>
+          <button onClick={onCancelar} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+        </div>
+        <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3">
+          {/* RUT + DV */}
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>RUT</label>
+            <input className="rmg-input" placeholder="76461668" value={datos.rut || ''} onChange={e => setDatos(p => ({ ...p, rut: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>DV</label>
+            <input className="rmg-input" placeholder="5" maxLength={1} value={datos.dv || ''} onChange={e => setDatos(p => ({ ...p, dv: e.target.value }))} />
+          </div>
+          {/* Razón Social */}
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Razón Social *</label>
+            <input className="rmg-input" required value={datos.empresa || ''} onChange={e => setDatos(p => ({ ...p, empresa: e.target.value }))} />
+          </div>
+          {/* Dirección + Comuna */}
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Dirección</label>
+            <input className="rmg-input" value={datos.direccion || ''} onChange={e => setDatos(p => ({ ...p, direccion: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Comuna</label>
+            <input className="rmg-input" value={datos.comuna || ''} onChange={e => setDatos(p => ({ ...p, comuna: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Ciudad</label>
+            <input className="rmg-input" value={datos.ciudad || ''} onChange={e => setDatos(p => ({ ...p, ciudad: e.target.value }))} />
+          </div>
+          {/* Teléfono + Celular */}
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Teléfono</label>
+            <input className="rmg-input" value={datos.telefono_contacto || ''} onChange={e => setDatos(p => ({ ...p, telefono_contacto: e.target.value, telefono_empresa: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Celular</label>
+            <input className="rmg-input" value={datos.celular || ''} onChange={e => setDatos(p => ({ ...p, celular: e.target.value }))} />
+          </div>
+          {/* Email + Región */}
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Email</label>
+            <input type="email" className="rmg-input" value={datos.email || ''} onChange={e => setDatos(p => ({ ...p, email: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Región</label>
+            <input className="rmg-input" value={datos.region || 'RM'} onChange={e => setDatos(p => ({ ...p, region: e.target.value }))} />
+          </div>
+          {/* Rubro + Segmento */}
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Rubro</label>
+            <input className="rmg-input" placeholder="FABRICACION E INDUSTRIA"
+              value={datos.rubro || ''}
+              onChange={e => setDatos(p => ({ ...p, rubro: e.target.value, segmento: inferirSegmento(e.target.value) }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Segmento (inferido)</label>
+            <select className="rmg-input" value={datos.segmento || 'flota'} onChange={e => setDatos(p => ({ ...p, segmento: e.target.value }))}>
+              {SEGMENTOS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          {/* Botones */}
+          <div className="col-span-2 flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onCancelar} className="btn-secondary">Cancelar</button>
+            <button type="submit" disabled={isPending} className="btn-primary disabled:opacity-50">
+              {isPending ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ProspeccionPage() {
   const [busqueda, setBusqueda]           = useState('')
   const [segmentoFiltro, setSegmentoFiltro] = useState('Todos')
@@ -375,84 +456,6 @@ export default function ProspeccionPage() {
       toast.error('Error al leer el archivo Excel')
     }
   }
-
-  const FormularioProspecto = ({ titulo, datos, setDatos, onSubmit, isPending, onCancelar }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)' }}>
-      <div className="rmg-card p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="font-bold text-lg">{titulo}</h2>
-          <button onClick={onCancelar} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
-        </div>
-        <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3">
-          {/* RUT + DV */}
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>RUT</label>
-            <input className="rmg-input" placeholder="76461668" value={datos.rut || ''} onChange={e => setDatos(p => ({ ...p, rut: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>DV</label>
-            <input className="rmg-input" placeholder="5" maxLength={1} value={datos.dv || ''} onChange={e => setDatos(p => ({ ...p, dv: e.target.value }))} />
-          </div>
-          {/* Razón Social */}
-          <div className="col-span-2">
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Razón Social *</label>
-            <input className="rmg-input" required value={datos.empresa || ''} onChange={e => setDatos(p => ({ ...p, empresa: e.target.value }))} />
-          </div>
-          {/* Dirección + Comuna */}
-          <div className="col-span-2">
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Dirección</label>
-            <input className="rmg-input" value={datos.direccion || ''} onChange={e => setDatos(p => ({ ...p, direccion: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Comuna</label>
-            <input className="rmg-input" value={datos.comuna || ''} onChange={e => setDatos(p => ({ ...p, comuna: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Ciudad</label>
-            <input className="rmg-input" value={datos.ciudad || ''} onChange={e => setDatos(p => ({ ...p, ciudad: e.target.value }))} />
-          </div>
-          {/* Teléfono + Celular */}
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Teléfono</label>
-            <input className="rmg-input" value={datos.telefono_contacto || ''} onChange={e => setDatos(p => ({ ...p, telefono_contacto: e.target.value, telefono_empresa: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Celular</label>
-            <input className="rmg-input" value={datos.celular || ''} onChange={e => setDatos(p => ({ ...p, celular: e.target.value }))} />
-          </div>
-          {/* Email + Región */}
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Email</label>
-            <input type="email" className="rmg-input" value={datos.email || ''} onChange={e => setDatos(p => ({ ...p, email: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Región</label>
-            <input className="rmg-input" value={datos.region || 'RM'} onChange={e => setDatos(p => ({ ...p, region: e.target.value }))} />
-          </div>
-          {/* Rubro + Segmento */}
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Rubro</label>
-            <input className="rmg-input" placeholder="FABRICACION E INDUSTRIA"
-              value={datos.rubro || ''}
-              onChange={e => setDatos(p => ({ ...p, rubro: e.target.value, segmento: inferirSegmento(e.target.value) }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Segmento (inferido)</label>
-            <select className="rmg-input" value={datos.segmento || 'flota'} onChange={e => setDatos(p => ({ ...p, segmento: e.target.value }))}>
-              {SEGMENTOS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          {/* Botones */}
-          <div className="col-span-2 flex gap-3 justify-end pt-2">
-            <button type="button" onClick={onCancelar} className="btn-secondary">Cancelar</button>
-            <button type="submit" disabled={isPending} className="btn-primary disabled:opacity-50">
-              {isPending ? 'Guardando...' : 'Guardar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
 
   return (
     <div className="space-y-5 animate-fade-in">
