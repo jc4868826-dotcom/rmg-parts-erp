@@ -1772,6 +1772,15 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('pipeline_excel_fields')
     console.log('✅ Migración pipeline_excel_fields — rut, dv, celular, ciudad, rubro en pipeline_contactos')
   }
+
+  // Migration 35: limpiar_prospectos_demo — eliminar data de prueba
+  const m35 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('limpiar_prospectos_demo')
+  if (!m35) {
+    const antes = db.prepare('SELECT COUNT(*) as n FROM pipeline_contactos').get().n
+    db.exec('DELETE FROM pipeline_contactos')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('limpiar_prospectos_demo')
+    console.log(`✅ Migración limpiar_prospectos_demo — ${antes} prospectos eliminados`)
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

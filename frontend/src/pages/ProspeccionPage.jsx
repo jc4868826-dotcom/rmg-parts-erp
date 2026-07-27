@@ -57,6 +57,9 @@ function inferirSegmento(rubro = '') {
   const r = rubro.toUpperCase()
   if (r.includes('CONSTRUC')) return 'construccion'
   if (r.includes('TALLER') || r.includes('MECAN') || r.includes('AUTOMOTRIZ') || r.includes('LUBRI')) return 'taller'
+  if (r.includes('TRANSP') || r.includes('FLOTA') || r.includes('BUSES') || r.includes('LOGIST')) return 'flota'
+  if (r.includes('AGRICOL') || r.includes('AGRO') || r.includes('FRUTERA') || r.includes('VITIVI') || r.includes('GANADE')) return 'flota'
+  if (r.includes('MINER')) return 'flota'
   return 'flota'
 }
 
@@ -65,9 +68,10 @@ function limpiarTelefono(val = '') {
 }
 
 const FORM_INIT = {
-  empresa: '', segmento: 'taller', rubro_especialidad: '', nombre_contacto: '',
-  cargo: '', telefono_contacto: '', email: '', comuna: '', region: 'RM',
-  prioridad: 'media', notas: '', origen: 'Manual',
+  rut: '', dv: '', empresa: '', direccion: '', comuna: '', ciudad: '',
+  telefono_contacto: '', telefono_empresa: '', email: '', celular: '',
+  region: 'RM', rubro: '', segmento: 'flota',
+  prioridad: 'media', origen: 'Manual',
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -201,7 +205,7 @@ function parseExcel(file) {
 
 // ─── main component ─────────────────────────────────────────────────────────
 
-const TABLE_HEADERS = ['Empresa / Segmento', 'Rubro', 'Contacto', 'Región / Comuna', 'Teléfono', 'Notas', 'Origen', 'Prioridad', 'Acciones']
+const TABLE_HEADERS = ['RUT', 'Razón Social', 'Rubro', 'Comuna', 'Email', 'Teléfono / Celular', 'Campaña', 'Acciones']
 
 export default function ProspeccionPage() {
   const [busqueda, setBusqueda]           = useState('')
@@ -282,7 +286,7 @@ export default function ProspeccionPage() {
       if (prioridadFiltro !== 'Todas' && p.prioridad !== prioridadFiltro) return false
       if (regionFiltro !== 'Todas' && p.region !== regionFiltro) return false
       if (q) {
-        const hay = [p.empresa, p.nombre_contacto, p.notas, p.origen].join(' ').toLowerCase()
+        const hay = [p.empresa, p.rut, p.rubro || p.rubro_especialidad, p.email, p.comuna, p.nombre_contacto].join(' ').toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
@@ -342,32 +346,43 @@ export default function ProspeccionPage() {
           <button onClick={onCancelar} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
         </div>
         <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3">
+          {/* RUT + DV */}
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>RUT</label>
+            <input className="rmg-input" placeholder="76461668" value={datos.rut || ''} onChange={e => setDatos(p => ({ ...p, rut: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>DV</label>
+            <input className="rmg-input" placeholder="5" maxLength={1} value={datos.dv || ''} onChange={e => setDatos(p => ({ ...p, dv: e.target.value }))} />
+          </div>
+          {/* Razón Social */}
           <div className="col-span-2">
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Empresa *</label>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Razón Social *</label>
             <input className="rmg-input" required value={datos.empresa || ''} onChange={e => setDatos(p => ({ ...p, empresa: e.target.value }))} />
           </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Segmento</label>
-            <select className="rmg-input" value={datos.segmento || 'taller'} onChange={e => setDatos(p => ({ ...p, segmento: e.target.value }))}>
-              {SEGMENTOS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+          {/* Dirección + Comuna */}
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Dirección</label>
+            <input className="rmg-input" value={datos.direccion || ''} onChange={e => setDatos(p => ({ ...p, direccion: e.target.value }))} />
           </div>
           <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Rubro / Especialidad</label>
-            <input className="rmg-input" value={datos.rubro_especialidad || ''} onChange={e => setDatos(p => ({ ...p, rubro_especialidad: e.target.value }))} />
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Comuna</label>
+            <input className="rmg-input" value={datos.comuna || ''} onChange={e => setDatos(p => ({ ...p, comuna: e.target.value }))} />
           </div>
           <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Nombre contacto</label>
-            <input className="rmg-input" value={datos.nombre_contacto || ''} onChange={e => setDatos(p => ({ ...p, nombre_contacto: e.target.value }))} />
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Ciudad</label>
+            <input className="rmg-input" value={datos.ciudad || ''} onChange={e => setDatos(p => ({ ...p, ciudad: e.target.value }))} />
           </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cargo</label>
-            <input className="rmg-input" value={datos.cargo || ''} onChange={e => setDatos(p => ({ ...p, cargo: e.target.value }))} />
-          </div>
+          {/* Teléfono + Celular */}
           <div>
             <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Teléfono</label>
             <input className="rmg-input" value={datos.telefono_contacto || ''} onChange={e => setDatos(p => ({ ...p, telefono_contacto: e.target.value, telefono_empresa: e.target.value }))} />
           </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Celular</label>
+            <input className="rmg-input" value={datos.celular || ''} onChange={e => setDatos(p => ({ ...p, celular: e.target.value }))} />
+          </div>
+          {/* Email + Región */}
           <div>
             <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Email</label>
             <input type="email" className="rmg-input" value={datos.email || ''} onChange={e => setDatos(p => ({ ...p, email: e.target.value }))} />
@@ -376,26 +391,20 @@ export default function ProspeccionPage() {
             <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Región</label>
             <input className="rmg-input" value={datos.region || 'RM'} onChange={e => setDatos(p => ({ ...p, region: e.target.value }))} />
           </div>
+          {/* Rubro + Segmento */}
           <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Comuna</label>
-            <input className="rmg-input" value={datos.comuna || ''} onChange={e => setDatos(p => ({ ...p, comuna: e.target.value }))} />
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Rubro</label>
+            <input className="rmg-input" placeholder="FABRICACION E INDUSTRIA"
+              value={datos.rubro || ''}
+              onChange={e => setDatos(p => ({ ...p, rubro: e.target.value, segmento: inferirSegmento(e.target.value) }))} />
           </div>
           <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Prioridad</label>
-            <select className="rmg-input" value={datos.prioridad || 'media'} onChange={e => setDatos(p => ({ ...p, prioridad: e.target.value }))}>
-              {PRIORIDADES.map(v => <option key={v} value={v}>{v}</option>)}
+            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Segmento (inferido)</label>
+            <select className="rmg-input" value={datos.segmento || 'flota'} onChange={e => setDatos(p => ({ ...p, segmento: e.target.value }))}>
+              {SEGMENTOS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Origen</label>
-            <select className="rmg-input" value={datos.origen || 'Manual'} onChange={e => setDatos(p => ({ ...p, origen: e.target.value }))}>
-              {ORIGENES.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div className="col-span-2">
-            <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
-            <textarea className="rmg-input" rows={3} value={datos.notas || ''} onChange={e => setDatos(p => ({ ...p, notas: e.target.value }))} />
-          </div>
+          {/* Botones */}
           <div className="col-span-2 flex gap-3 justify-end pt-2">
             <button type="button" onClick={onCancelar} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={isPending} className="btn-primary disabled:opacity-50">
@@ -439,7 +448,7 @@ export default function ProspeccionPage() {
       <div className="rmg-card p-3" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: '1 1 220px' }}>
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(90,143,168,0.6)', pointerEvents: 'none' }} />
-          <input type="text" placeholder="Buscar empresa, contacto, notas…" value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          <input type="text" placeholder="Buscar empresa, RUT, rubro, email, comuna…" value={busqueda} onChange={e => setBusqueda(e.target.value)}
             style={{ width: '100%', paddingLeft: 30, paddingRight: 10, paddingTop: 7, paddingBottom: 7, background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(56,182,255,0.15)', borderRadius: 8, fontSize: 13, color: 'rgba(255,255,255,0.8)', outline: 'none' }} />
         </div>
         <FilterSelect value={segmentoFiltro} onChange={setSegmentoFiltro} options={segmentos} />
@@ -476,7 +485,7 @@ export default function ProspeccionPage() {
               : filtrados.length === 0
                 ? (
                   <tr>
-                    <td colSpan={10} style={{ padding: '56px 24px', textAlign: 'center' }}>
+                    <td colSpan={9} style={{ padding: '56px 24px', textAlign: 'center' }}>
                       <div style={{ color: 'rgba(90,143,168,0.5)', fontSize: 14 }}>Sin prospectos activos</div>
                       <div style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12, marginTop: 6 }}>
                         {busqueda || segmentoFiltro !== 'Todos' || prioridadFiltro !== 'Todas' || regionFiltro !== 'Todas'
@@ -498,57 +507,50 @@ export default function ProspeccionPage() {
                         style={{ accentColor: 'var(--rmg-blt)', cursor: 'pointer' }}
                       />
                     </td>
-                    {/* Empresa + segmento */}
+                    {/* RUT */}
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap' }}>
+                      {p.rut ? `${p.rut}${p.dv ? `-${p.dv}` : ''}` : <span style={{ color: 'rgba(90,143,168,0.35)' }}>—</span>}
+                    </td>
+                    {/* Razón Social + segmento */}
                     <td style={{ padding: '11px 12px', minWidth: 160 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>
-                        {p.empresa || '—'}
-                        {p.campana_nombre && (
-                          <span className="ml-1 text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>
-                            {p.campana_nombre}
-                          </span>
-                        )}
-                      </div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>{p.empresa || '—'}</div>
                       <SegmentoBadge segmento={p.segmento} />
                     </td>
                     {/* Rubro */}
-                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.55)', minWidth: 120 }}>{p.rubro_especialidad || '—'}</td>
-                    {/* Contacto */}
-                    <td style={{ padding: '11px 12px', minWidth: 140 }}>
-                      {p.nombre_contacto
-                        ? (<><div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{p.nombre_contacto}</div>{p.cargo && <div style={{ fontSize: 11, color: 'rgba(90,143,168,0.7)', marginTop: 2 }}>{p.cargo}</div>}</>)
-                        : <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>}
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.55)', minWidth: 120 }}>
+                      {p.rubro || p.rubro_especialidad || <span style={{ color: 'rgba(90,143,168,0.35)' }}>—</span>}
                     </td>
-                    {/* Región / Comuna */}
-                    <td style={{ padding: '11px 12px', minWidth: 130 }}>
-                      {p.region
-                        ? (<><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{p.region}</div>{p.comuna && <div style={{ fontSize: 11, color: 'rgba(90,143,168,0.6)', marginTop: 2 }}>{p.comuna}</div>}</>)
-                        : <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>}
+                    {/* Comuna */}
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.65)', minWidth: 100 }}>
+                      {p.comuna || <span style={{ color: 'rgba(90,143,168,0.35)' }}>—</span>}
                     </td>
-                    {/* Teléfono + WA */}
+                    {/* Email */}
+                    <td style={{ padding: '11px 12px', fontSize: 12, minWidth: 160 }}>
+                      {p.email
+                        ? <a href={`mailto:${p.email}`} style={{ color: 'rgba(56,182,255,0.75)', textDecoration: 'none' }}>{p.email}</a>
+                        : <span style={{ color: 'rgba(90,143,168,0.35)' }}>—</span>}
+                    </td>
+                    {/* Teléfono + Celular + WA */}
                     <td style={{ padding: '11px 12px', minWidth: 130 }}>
                       {(() => {
                         const phone = p.telefono_contacto || p.telefono_empresa
-                        const waUrl = toWaLink(phone)
-                        if (!phone) return <span style={{ color: 'rgba(90,143,168,0.4)', fontSize: 12 }}>—</span>
+                        const cell  = p.celular
+                        const waUrl = toWaLink(cell || phone)
+                        if (!phone && !cell) return <span style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12 }}>—</span>
                         return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{phone}</span>
-                            {waUrl && <a href={waUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', color: '#2dc98a', flexShrink: 0 }}><MessageCircle size={14} /></a>}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {phone && <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{phone}</span>}
+                            {cell && cell !== phone && <span style={{ fontSize: 11, color: 'rgba(90,143,168,0.7)' }}>{cell}</span>}
+                            {waUrl && <a href={waUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#2dc98a', fontSize: 11, marginTop: 2 }}><MessageCircle size={12} /> WhatsApp</a>}
                           </div>
                         )
                       })()}
                     </td>
-                    {/* Notas */}
-                    <td style={{ padding: '11px 12px', minWidth: 160, maxWidth: 220 }}>
-                      <NotasCell id={p.id} text={p.notas} expanded={!!expandedNotas[p.id]} onToggle={toggleNota} />
-                    </td>
-                    {/* Origen */}
+                    {/* Campaña */}
                     <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
-                      <OrigenBadge value={p.origen || 'Manual'} />
-                    </td>
-                    {/* Prioridad */}
-                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
-                      <PrioridadBadge value={p.prioridad} />
+                      {p.campana_nombre
+                        ? <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>{p.campana_nombre}</span>
+                        : <span style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12 }}>—</span>}
                     </td>
                     {/* Acciones */}
                     <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
@@ -683,7 +685,7 @@ export default function ProspeccionPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
-                    {['Empresa', 'Contacto', 'Teléfono', 'Rubro', 'Región', 'Comuna', 'Prioridad', 'Origen'].map(h => (
+                    {['RUT', 'Razón Social', 'Rubro', 'Comuna', 'Teléfono', 'Celular', 'Email', 'Segmento'].map(h => (
                       <th key={h} className="text-left px-3 py-2 uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
                   </tr>
@@ -691,14 +693,14 @@ export default function ProspeccionPage() {
                 <tbody>
                   {preview.registros.map((r, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/[0.02]">
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.rut ? `${r.rut}-${r.dv || ''}` : '—'}</td>
                       <td className="px-3 py-2 font-semibold" style={{ color: 'var(--rmg-off)' }}>{r.empresa}</td>
-                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.nombre_contacto || '—'}</td>
-                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.telefono_contacto || '—'}</td>
-                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.rubro_especialidad || '—'}</td>
-                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.region || 'RM'}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.rubro || '—'}</td>
                       <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.comuna || '—'}</td>
-                      <td className="px-3 py-2"><PrioridadBadge value={r.prioridad} /></td>
-                      <td className="px-3 py-2"><OrigenBadge value={r.origen} /></td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.telefono_contacto || '—'}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.celular || '—'}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.email || '—'}</td>
+                      <td className="px-3 py-2"><SegmentoBadge segmento={r.segmento} /></td>
                     </tr>
                   ))}
                 </tbody>

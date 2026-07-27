@@ -202,21 +202,25 @@ const ORIGENES_VALIDOS = ['Manual', 'Excel', 'WhatsApp', 'Web', 'Referido', 'Goo
 const create = (req, res) => {
   try {
     const {
-      empresa, segmento = 'taller', rubro_especialidad, nombre_contacto, cargo,
-      telefono_empresa, telefono_contacto, email, direccion, comuna, region = 'RM',
+      empresa, segmento = 'flota', rubro, rubro_especialidad, nombre_contacto, cargo,
+      rut, dv, telefono_empresa, telefono_contacto, celular, email,
+      direccion, comuna, ciudad, region = 'RM',
       prioridad = 'media', notas, fuente = 'Manual', origen = 'Manual',
     } = req.body
     if (!empresa) return res.status(400).json({ error: 'empresa es requerida' })
     const id = uuidv4()
+    const rubroVal = rubro || rubro_especialidad || null
     db.prepare(`
       INSERT INTO pipeline_contactos
-        (id, empresa, segmento, rubro_especialidad, nombre_contacto, cargo,
-         telefono_empresa, telefono_contacto, email, direccion, comuna, region,
+        (id, empresa, segmento, rubro, rubro_especialidad, nombre_contacto, cargo,
+         rut, dv, telefono_empresa, telefono_contacto, celular, email,
+         direccion, comuna, ciudad, region,
          prioridad, notas, fuente, origen, etapa, estado)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prospecto','activo')
-    `).run(id, empresa, segmento, rubro_especialidad || null, nombre_contacto || null,
-      cargo || null, telefono_empresa || null, telefono_contacto || null,
-      email || null, direccion || null, comuna || null, region,
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prospecto','activo')
+    `).run(id, empresa, segmento, rubroVal, rubroVal, nombre_contacto || null,
+      cargo || null, rut || null, dv || null,
+      telefono_empresa || null, telefono_contacto || null, celular || null,
+      email || null, direccion || null, comuna || null, ciudad || null, region,
       prioridad, notas || null, fuente, ORIGENES_VALIDOS.includes(origen) ? origen : 'Manual')
     res.status(201).json(db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(id))
   } catch (err) {
@@ -230,9 +234,9 @@ const update = (req, res) => {
     const reg = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id)
     if (!reg) return res.status(404).json({ error: 'Prospecto no encontrado' })
     const allowed = [
-      'empresa', 'segmento', 'rubro_especialidad', 'nombre_contacto', 'cargo',
-      'telefono_empresa', 'telefono_contacto', 'email', 'direccion', 'comuna',
-      'region', 'prioridad', 'notas', 'origen',
+      'empresa', 'segmento', 'rubro', 'rubro_especialidad', 'nombre_contacto', 'cargo',
+      'rut', 'dv', 'telefono_empresa', 'telefono_contacto', 'celular', 'email',
+      'direccion', 'comuna', 'ciudad', 'region', 'prioridad', 'notas', 'origen',
     ]
     const toUpdate = allowed.filter(f => req.body[f] !== undefined)
     if (!toUpdate.length) return res.json(reg)
