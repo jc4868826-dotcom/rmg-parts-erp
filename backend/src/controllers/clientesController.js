@@ -2,11 +2,13 @@ const { db, uuidv4 } = require('../../config/database')
 
 const getAll = (req, res) => {
   try {
-    const { segmento, etapa } = req.query
+    const { segmento, etapa, rubro, comuna } = req.query
     let sql = 'SELECT * FROM clientes WHERE activo = 1'
     const params = []
     if (segmento) { sql += ' AND segmento = ?'; params.push(segmento) }
     if (etapa) { sql += ' AND etapa_pipeline = ?'; params.push(etapa) }
+    if (rubro) { sql += ' AND rubro = ?'; params.push(rubro) }
+    if (comuna) { sql += ' AND LOWER(comuna) LIKE LOWER(?)'; params.push(`%${comuna}%`) }
     sql += ' ORDER BY razon_social'
     res.json(db.prepare(sql).all(...params))
   } catch (err) {
@@ -69,4 +71,42 @@ const remove = (req, res) => {
   }
 }
 
-module.exports = { getAll, getOne, create, update, remove }
+const getBitacora = (req, res) => {
+  try {
+    const notas = db.prepare(
+      'SELECT * FROM clientes_bitacora WHERE cliente_id = ? ORDER BY fecha DESC'
+    ).all(req.params.id)
+    res.json(notas)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const addBitacora = (req, res) => {
+  try {
+    const { contenido, tipo = 'nota', usuario } = req.body
+    if (!contenido) return res.status(400).json({ error: 'contenido requerido' })
+    const result = db.prepare(
+      "INSERT INTO clientes_bitacora (cliente_id, tipo, contenido, usuario) VALUES (?,?,?,?)"
+    ).run(req.params.id, tipo, contenido, usuario || null)
+    const nota = db.prepare('SELECT * FROM clientes_bitacora WHERE id = ?').get(result.lastInsertRowid)
+    res.status(201).json(nota)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const sendEmail = (req, res) => {
+  try {
+    const { from, to, asunto, mensaje, cliente_id } = req.body
+    if (!cliente_id || !mensaje) return res.status(400).json({ error: 'cliente_id y mensaje requeridos' })
+    db.prepare(
+      "INSERT INTO clientes_bitacora (cliente_id, tipo, contenido, usuario) VALUES (?,?,?,?)"
+    ).run(cliente_id, 'email_enviado', `Para: ${to}\nAsunto: ${asunto}\n\n${mensaje}`, from || null)
+    res.json({ ok: true, mensaje: 'Registrado en bitácora' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getAll, getOne, create, update, remove, getBitacora, addBitacora, sendEmail }

@@ -1609,6 +1609,132 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('gerente_user_v1')
     console.log('✅ Migración gerente_user_v1 — tabla usuarios con rol gerente habilitado')
   }
+
+  // Migration 32: clientes_v2 — nuevos campos + bitácora + seed 80 clientes
+  const m32 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('clientes_v2')
+  if (!m32) {
+    const clientesCols = db.prepare('PRAGMA table_info(clientes)').all().map(c => c.name)
+    if (!clientesCols.includes('dv'))      try { db.exec("ALTER TABLE clientes ADD COLUMN dv TEXT") } catch(_) {}
+    if (!clientesCols.includes('ciudad'))  try { db.exec("ALTER TABLE clientes ADD COLUMN ciudad TEXT") } catch(_) {}
+    if (!clientesCols.includes('celular')) try { db.exec("ALTER TABLE clientes ADD COLUMN celular TEXT") } catch(_) {}
+    if (!clientesCols.includes('region'))  try { db.exec("ALTER TABLE clientes ADD COLUMN region TEXT") } catch(_) {}
+    if (!clientesCols.includes('rubro'))   try { db.exec("ALTER TABLE clientes ADD COLUMN rubro TEXT") } catch(_) {}
+
+    db.exec(`CREATE TABLE IF NOT EXISTS clientes_bitacora (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente_id TEXT NOT NULL,
+      fecha TEXT DEFAULT (datetime('now','localtime')),
+      tipo TEXT DEFAULT 'nota',
+      contenido TEXT NOT NULL,
+      usuario TEXT
+    )`)
+
+    const nClientes = db.prepare("SELECT COUNT(*) as n FROM clientes WHERE activo = 1").get().n
+    if (nClientes < 5) {
+      db.exec("DELETE FROM clientes")
+      const insCliente = db.prepare(
+        "INSERT OR IGNORE INTO clientes (id,rut,dv,razon_social,direccion,comuna,ciudad,telefono,email,celular,region,rubro,segmento,etapa_pipeline,activo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)"
+      )
+      const mapSeg = (rubro) => {
+        if (!rubro) return 'flota'
+        const r = rubro.toUpperCase()
+        if (r.includes('CONSTRUCCION')) return 'construccion'
+        return 'flota'
+      }
+      const clientes80 = [
+        {rut:"76461668",dv:"5",nombre:"SOLUCIONES INDUSTRIALES",direccion:"LAS ESTERAS NORTE 2610",comuna:"QUILICURA",ciudad:"SANTIAGO",telefono:"976596238",email:"contacto@solustriales.cl",celular:"976596238",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"77752030",dv:"K",nombre:"COMERCIALIZADORA DE PRODUCTOS PARA LA MINERIA E INDUSTRIA LIMITADA",direccion:"14 de la Fama 2521",comuna:"CONCHALÍ",ciudad:"SANTIAGO",telefono:"",email:"wvilches@supplyrs.cl",celular:"56990995882",region:"METROPOLITANA",rubro:"IMPORTADORES DE MANGUERAS"},
+        {rut:"76898830",dv:"7",nombre:"CONSTRUCTORA PETRA CIA",direccion:"El Pajal Esq Los Eucaliptus ote 12345 Sector lo Aguila",comuna:"CURACAVÍ",ciudad:"SANTIAGO",telefono:"",email:"mperez@constructotapetra.cl",celular:"958791242",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76067865",dv:"1",nombre:"COMERCIALIZADORA DE PRODUCTOS INDUSTRIALES IPROTEC LTDA.",direccion:"GASPAR DE ORENSE Nº181",comuna:"ESTACIÓN CENTRAL",ciudad:"SANTIAGO",telefono:"22 5228300",email:"ventas@iprotec.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"81140300",dv:"8",nombre:"WILLIAMSON INDUSTRIAL S.A.",direccion:"SANTA MARTA Nº1501",comuna:"MAIPÚ",ciudad:"SANTIAGO",telefono:"223866200",email:"ehuerta@williamsonindustrial.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"96691680",dv:"K",nombre:"EMPRESA CONSTRUCTORA MENA Y OVALLE S.A.",direccion:"AV. APOQUINDO Nº3500 PISO 3",comuna:"LAS CONDES",ciudad:"SANTIAGO",telefono:"998756585",email:"juan.meza@menayovalle.cl",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76197308",dv:"8",nombre:"AGRICOLA BALLERINA CHILE LTDA",direccion:"CAMINO A LONQUEN 16240, SAN BERNARDO",comuna:"SAN BERNARDO",ciudad:"SANTIAGO",telefono:"+56 2 2925 3087",email:"paola.sanchez@ballerina.cl",celular:"+56 9 5959 1302",region:"METROPOLITANA",rubro:"AGRICOLA ALMENDRAS"},
+        {rut:"76665858",dv:"K",nombre:"COMERCIALIZ. DE MATERIALES Y EQUIPOS INDUSTRIALES ANDES SPA",direccion:"EL CANELO 270",comuna:"QUILICURA",ciudad:"SANTIAGO",telefono:"",email:"contactos@maquinasandes.cl",celular:"932305240",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"77086730",dv:"4",nombre:"CVP CONSTRUCTORA E INMOBILIARIA LTDA.",direccion:"ALONSO DE CORDOVA N°2860 OF. 503",comuna:"VITACURA",ciudad:"SANTIAGO",telefono:"+56-2-22332831",email:"caguilar@cvp.cl",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76552670",dv:"1",nombre:"CONSTRUCTORA AUSTRAL S.A",direccion:"AV. DEL VALLE N°961 OF. 2710",comuna:"HUECHURABA",ciudad:"SANTIAGO",telefono:"",email:"rguerra@austral.la",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76722632",dv:"2",nombre:"ALGORITMO INDUSTRIAL SPA",direccion:"A Zanrtu 2546",comuna:"RENCA",ciudad:"SANTIAGO",telefono:"945875554",email:"gestion@algoritmoindustrial.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"99598420",dv:"2",nombre:"INDUSTRIAS PERFECT SA",direccion:"LOS LIBERTADORES 131",comuna:"COLINA",ciudad:"SANTIAGO",telefono:"56 932250457",email:"fherrera@elmasud.com",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"76351987",dv:"2",nombre:"SERVICIOS SERVIBUS LTDA",direccion:"Americo vespucio 1367",comuna:"HUECHURABA",ciudad:"SANTIAGO",telefono:"",email:"paulina.flores@epysa.cl",celular:"958350334",region:"METROPOLITANA",rubro:"FLOTA BUSES"},
+        {rut:"76006020",dv:"8",nombre:"COTRANS LIMITADA",direccion:"Los yacimientos 550",comuna:"MAIPÚ",ciudad:"SANTIAGO",telefono:"942876450",email:"omoreno@cotrans.cl",celular:"",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"84542800",dv:"K",nombre:"COMPAÑIA MINERA LA PATAGUA S.A.",direccion:"AV LAS CONDES 9460 OF 806",comuna:"LAS CONDES",ciudad:"SANTIAGO",telefono:"9 9539 4906",email:"raulvargas@lapatagua.cl",celular:"9 9539 4906",region:"METROPOLITANA",rubro:"MINERA"},
+        {rut:"96503050",dv:"6",nombre:"AGRICOLA Y FRUTERA CURACAVI S.A",direccion:"RUTA 68, KM 42,5",comuna:"CURACAVÍ",ciudad:"SANTIAGO",telefono:"228352020",email:"sandra.ramirez@westfaliafruit.com",celular:"",region:"METROPOLITANA",rubro:"AGRICOLA Y FRUTERA"},
+        {rut:"76033004",dv:"3",nombre:"CONSTRUCTORA SUKSA S.A",direccion:"ANDRES BELLO 2777 OF 2302",comuna:"SANTIAGO",ciudad:"SANTIAGO",telefono:"",email:"rperez@sukza.cl",celular:"56 9 4296 1103",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77028217",dv:"9",nombre:"CHM CONSTRUCTORA SPA.",direccion:"CALLE SAN MARTIN N°3290 2°PISO",comuna:"MAIPÚ",ciudad:"SANTIAGO",telefono:"989094228",email:"chmconstructoraspa@gmail.com",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77972583",dv:"9",nombre:"V&J FABRICACION Y MONTAJE INDUSTRIAL SPA",direccion:"Antonio Bellet 193 1210",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"961111768",email:"j.clavero@vjingeneria.com",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"76308449",dv:"3",nombre:"MAQUINARIAS Y EQUIPOS MGA LTDA",direccion:"Baron de juras reales 5290",comuna:"CONCHALÍ",ciudad:"SANTIAGO",telefono:"942980989",email:"r.jofre@maquinariasmga.cl",celular:"226242370",region:"METROPOLITANA",rubro:"RENTAL EQUIPOS PERFORACION"},
+        {rut:"77119765",dv:"5",nombre:"CONSTRUCTORA FURA SPA",direccion:"GENERAL DEL CANTO N°50 OF. 301",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"",email:"sac@fura.cl",celular:"940030443",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76879310",dv:"7",nombre:"COMERCIALIZADORA Y TRANSFORMADORA DE METALES SPA",direccion:"Santa Catalina de Chena 751",comuna:"SAN BERNARDO",ciudad:"SANTIAGO",telefono:"952249352",email:"victor.henriquez@ctmaceros.cl",celular:"",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"76983563",dv:"6",nombre:"PANZER INDUSTRIAL SPA",direccion:"PASAJE LAS BRISAS PONIENTE 2672 C17",comuna:"LAMPA",ciudad:"SANTIAGO",telefono:"932252768",email:"jeanpierre@panzerindustrial.cl",celular:"932252768",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"79840820",dv:"8",nombre:"CONSTRUCTORA POCURO SPA.",direccion:"NUEVA DE LYON 0145 PISO 13",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"963926304",email:"pbadilla@pocuro.cl",celular:"995831878",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"99582170",dv:"2",nombre:"EMPRESA CONSTRUCTORA CEMENTA S.A",direccion:"AV. VITACURA N°3568 OF. 213",comuna:"VITACURA",ciudad:"SANTIAGO",telefono:"999911465",email:"nsoto@cementa.cl",celular:"999911465",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77465560",dv:"3",nombre:"FERRETERIA INDUSTRIAL GALIANO LTDA.",direccion:"BUZETA #4285",comuna:"CERRILLOS",ciudad:"SANTIAGO",telefono:"56 9 84098478",email:"ivann.galiano@gmail.com",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"78779450",dv:"5",nombre:"SOCIEDAD TECNICA MINERA LTDA",direccion:"ANTONIO MACEO 2960",comuna:"RENCA",ciudad:"SANTIAGO",telefono:"+56990780878",email:"mcsoto@mysspa.com",celular:"",region:"METROPOLITANA",rubro:"MAQUINAS PARA MINERIA"},
+        {rut:"76510226",dv:"K",nombre:"GTC ELECTRICIDAD INDUSTRIAL LTDA",direccion:"INDEPENDENCIA N°1443 OFICINA 206D",comuna:"INDEPENDENCIA",ciudad:"SANTIAGO",telefono:"",email:"gtc@gtc.tie.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"78198420",dv:"5",nombre:"ELASTOMEROS INDUSTRIALES LIMITADA",direccion:"HOEVEL # 4768",comuna:"QUINTA NORMAL",ciudad:"SANTIAGO",telefono:"3278400",email:"carlos@elastomeros.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"77959216",dv:"2",nombre:"Transervic SpA",direccion:"PJ. EMILIANO FIGUEROA 221 BARRIO MODELO",comuna:"TALAGANTE",ciudad:"SANTIAGO",telefono:"984553554",email:"transervic.rcalderon@gmail.com",celular:"984553554",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"77526800",dv:"K",nombre:"EMPRESA CONSTRUCTORA ECR LTDA",direccion:"RIQUELME 441",comuna:"EL BOSQUE",ciudad:"SANTIAGO",telefono:"56 947742675",email:"leonbm12@gmail.com",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77046730",dv:"6",nombre:"INMOBILIARIA Y CONSTRUCTORA NUEVA PACIFICO SUR S.A",direccion:"Petrohue 2790",comuna:"PEDRO AGUIRRE CERDA",ciudad:"SANTIAGO",telefono:"",email:"compras1@npasur.cl",celular:"977746067",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77710017",dv:"3",nombre:"LEAN SOLUTIONS SUR INDUSTRIA Y COMERCIO SPA",direccion:"AMERICO VESPUCIO 1001 BODEGA 28",comuna:"QUILICURA",ciudad:"SANTIAGO",telefono:"56931423188",email:"adm@lsmodulares.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"76956435",dv:"7",nombre:"Constructora Daniel Molina Caceres EiRL",direccion:"Doctor sotero del rio 290 Casa t7 La Florida",comuna:"LA FLORIDA",ciudad:"SANTIAGO",telefono:"961077300",email:"danielmolina18@gmail.com",celular:"961077300",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"96755110",dv:"4",nombre:"TRANSWORLD POWER & TELCOM SPA.",direccion:"Calle nueva 1890",comuna:"HUECHURABA",ciudad:"SANTIAGO",telefono:"56992217420",email:"cpino@transworld.cl",celular:"56992217420",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"79885340",dv:"6",nombre:"EMPRESA CONSTRUCTORA GERARDO INFANTE Y CIA LTDA",direccion:"Los Militares 5885 of 401/402",comuna:"LAS CONDES",ciudad:"SANTIAGO",telefono:"56 9 4637 0310",email:"pvergara@altiplanochile.cl",celular:"56 9 4637 0310",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76405479",dv:"2",nombre:"Sociedad Industrial y Comercial en Tecnologia de Alta Resistencia Ltda",direccion:"Agustinas 1022 Oficina 705",comuna:"SANTIAGO",ciudad:"SANTIAGO",telefono:"996360188",email:"claudia.carvajal@high-res.cl",celular:"996360188",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"96905450",dv:"7",nombre:"AGRICOLA ALIANZA S A",direccion:"Av. Nueva Providencia 1860 Of. 92",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"228169210",email:"jsoto@agricolasutil.cl",celular:"932409614",region:"METROPOLITANA",rubro:"AGRICOLA Y VITIVINICOLA"},
+        {rut:"77075577",dv:"8",nombre:"INDUSTRIA METALMECANICA FLORES SPA.",direccion:"DOCTOR AMADOR NEGHME N°3639",comuna:"LA PINTANA",ciudad:"SANTIAGO",telefono:"227592412",email:"administracion@pjflores.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"76508064",dv:"9",nombre:"TRANSPORTES PLUSS CHILE GASPAR CIKUTOVIC MADARIAGA E.I.R.L",direccion:"SAN DE BORJA 18469",comuna:"ESTACIÓN CENTRAL",ciudad:"SANTIAGO",telefono:"940063600",email:"a.compras@plusschile.cl",celular:"",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"76265352",dv:"4",nombre:"CONSTRUCTORA EL LINGUE LIMITADA",direccion:"Luis carrera 1321, vitacura",comuna:"VITACURA",ciudad:"SANTIAGO",telefono:"56998290186",email:"jaimelorc@gmail.com",celular:"56998290186",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"86811700",dv:"1",nombre:"CONSTRUCTORA PEREZ Y GOMEZ LTDA",direccion:"EDUARDO FREY MONTALVA 3348",comuna:"RENCA",ciudad:"SANTIAGO",telefono:"",email:"jvera@copergo.cl",celular:"9491926212",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76432224",dv:"K",nombre:"AST INDUSTRIAL LIMITADA.",direccion:"EL ALFALFA 471 BODEGA 95",comuna:"LAMPA",ciudad:"SANTIAGO",telefono:"",email:"marketing@ast-industrial.com",celular:"931120084",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"76012648",dv:"9",nombre:"FERRETERIA INDUSTRIAL Y MATERIALES DE CONSTRUCCION LTDA.",direccion:"PADRE VICENTE IRARRAZABAL Nº1011",comuna:"ESTACIÓN CENTRAL",ciudad:"SANTIAGO",telefono:"225920186",email:"ventas@ferrymat.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"96833820",dv:"K",nombre:"SERVICIOS LOGISTICOS DE ALMACENAJE TRANSPORTE Y DISTRIBUCION EN FRIO",direccion:"AV. CLAUDIO ARRAU Nº7000",comuna:"PUDAHUEL",ciudad:"SANTIAGO",telefono:"77062475",email:"eosorio@topfrio.cl",celular:"",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"76159284",dv:"K",nombre:"Hornos Industriales Ltda",direccion:"Volcan Lascar Oriente 720, Pudahuel",comuna:"PUDAHUEL",ciudad:"SANTIAGO",telefono:"56 2 3210 1362",email:"hornos@hornosindustriales.cl",celular:"56 2 3210 1362",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"96590000",dv:"4",nombre:"AGROINDUSTRIAL EL PAICO S.A.",direccion:"AVDA LOS LIBERTADORES 1714",comuna:"EL MONTE",ciudad:"SANTIAGO",telefono:"",email:"mirocuamt@ariztia.com",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"83547100",dv:"4",nombre:"AUTORENTAS DEL PACIFICO SPA",direccion:"Av. Americo Vespucio 1601",comuna:"QUILICURA",ciudad:"SANTIAGO",telefono:"",email:"scabreral@mitta.cl",celular:"971349480",region:"METROPOLITANA",rubro:"FLOTAS"},
+        {rut:"77845959",dv:"0",nombre:"Constructora Fercat-A spa",direccion:"Los suspiros 3071",comuna:"QUINTA NORMAL",ciudad:"SANTIAGO",telefono:"978979820",email:"mvidela.m@gmail.com",celular:"978979820",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76013587",dv:"9",nombre:"MARIA TERESA GAETE CHRISTINY REPUESTOS INDUSTRIALES SPA",direccion:"COQUIMBO 1637",comuna:"PUENTE ALTO",ciudad:"SANTIAGO",telefono:"939284228",email:"jaraya@repuestosmt.cl",celular:"939284228",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"78056272",dv:"2",nombre:"CONSTRUCTORA SAN GENNARO SPA",direccion:"PEDRO JORQUERA 853",comuna:"PUDAHUEL",ciudad:"SANTIAGO",telefono:"9923896013",email:"contactanos.csg@gmail.com",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77216850",dv:"0",nombre:"AGRICOLA SAN JOSE LTDA",direccion:"NUEVO SENDERO PARCELA 23",comuna:"PAINE",ciudad:"SANTIAGO",telefono:"974794862",email:"asistentecontabilidad@agricolasanjose.cl",celular:"974794862",region:"METROPOLITANA",rubro:"AGRICOLA UVA"},
+        {rut:"86856700",dv:"7",nombre:"CONSTRUCTORA NOVATEC S.A",direccion:"AVDA. PRESIDENTE RIESCO Nº5335 PISO 11",comuna:"LAS CONDES",ciudad:"SANTIAGO",telefono:"987101115",email:"cmarifilo@novatec.cl",celular:"22 9020885",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"79694220",dv:"7",nombre:"soc agricola lo campino ltda",direccion:"fundo lo campino s/n",comuna:"QUILICURA",ciudad:"SANTIAGO",telefono:"981296936",email:"tguzman@locampino.cl",celular:"981296936",region:"METROPOLITANA",rubro:"AGROINDUSTRIA GANADERO"},
+        {rut:"76916552",dv:"5",nombre:"TRANSPORTES Y SERVICIOS VALTRI SPA",direccion:"AV. NUEVA PROVIDENCIA #1881 OF 1201",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"",email:"ignacio@tranportesvaltri.cl",celular:"963947503",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"78928030",dv:"4",nombre:"EECOL INDUSTRIAL ELECTRIC LTDA.",direccion:"14 DE LA FAMA 2761",comuna:"CONCHALÍ",ciudad:"SANTIAGO",telefono:"6204200",email:"ma.rivera@eecol.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"76425685",dv:"9",nombre:"constructora hermanos henriquez limitada",direccion:"brisas de chacabuco parcela c2 el colorado colina",comuna:"COLINA",ciudad:"SANTIAGO",telefono:"56985955264",email:"ahenriquez@savicop.cl",celular:"56985955264",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76124254",dv:"7",nombre:"H&S EQUIPOS INDUSTRIALES SPA.",direccion:"LO INFANTE Nº1681",comuna:"SAN BERNARDO",ciudad:"SANTIAGO",telefono:"(562) 2 706 53 40",email:"cpozo@hys.cl",celular:"985297391",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"76896784",dv:"9",nombre:"EMPRESA CONSTRUCTORA OROLEC SPA",direccion:"ALFREDO BARROS ERRAZURIZ 1953 OFIC 605",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"956492095",email:"rromero@emcor.cl",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76329072",dv:"7",nombre:"RESITER INDUSTRIAL S.A.",direccion:"LOS CONQUISTADORES Nº2752 B",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"226567575",email:"amedina@resiter.cl",celular:"57889025",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"78802550",dv:"5",nombre:"CONSTRUCTORA LAGO RIÑIHUE",direccion:"J.M. INFANTE #805",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"",email:"autosrrp@gmail.com",celular:"963527618",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77051670",dv:"6",nombre:"CONSTRUCTORA FAJARDO LTDA",direccion:"BRASIL 8476",comuna:"LA FLORIDA",ciudad:"SANTIAGO",telefono:"",email:"j.sepulveda@cfajardo.cl",celular:"56966089524",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"78245085",dv:"9",nombre:"TRANSPORTE S G SPA",direccion:"EULOGIA SANCHEZ 065",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"941697784",email:"transsg2025@gmail.com",celular:"",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"87717500",dv:"6",nombre:"EMPRESA CONSTRUCTORA DLP",direccion:"APOQUINDO 4775 PISO 9",comuna:"LAS CONDES",ciudad:"SANTIAGO",telefono:"",email:"bortiz@dlp.cl",celular:"+569 95858107",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77492758",dv:"1",nombre:"TRANSPORTE JOSE MIGUEL CARRERA",direccion:"JOSE MIGUEL CARRERA 1418",comuna:"MACUL",ciudad:"SANTIAGO",telefono:"952163692",email:"evelynkaterine82@hotmail.com",celular:"",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"77644905",dv:"9",nombre:"RT MONTAJES INDUSTRIALES",direccion:"EDUARDO FREI MONTALVA 1495",comuna:"INDEPENDENCIA",ciudad:"SANTIAGO",telefono:"56934515339",email:"rtmontajespa@gmail.com",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"84343900",dv:"4",nombre:"SOC AGRICOLA LOS MAITENES DE LIPANGUE LIMITADA",direccion:"SAN PABLO 1910",comuna:"SANTIAGO",ciudad:"SANTIAGO",telefono:"979719980",email:"fdoelmaiten@gmail.com",celular:"",region:"METROPOLITANA",rubro:"AGROINDUSTRIA"},
+        {rut:"76501989",dv:"3",nombre:"INMOBILIARIA Y CONSTRUCTORA ADVISORY SPA.",direccion:"Av. Presidente Kennedy 5118 OF73",comuna:"VITACURA",ciudad:"SANTIAGO",telefono:"56 9 9325 2509",email:"contacto@advisory.cl",celular:"222190608",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76368171",dv:"8",nombre:"CONSTRUCTORA ESSCON SPA",direccion:"LOS GLADIOLOS 3336",comuna:"RECOLETA",ciudad:"SANTIAGO",telefono:"961407122",email:"rorellana@esscon.cl",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77835800",dv:"K",nombre:"INDUSTRIAL OCHAGAVIA LTDA.",direccion:"JOSE JOAQUIN PRIETO #8020",comuna:"LA CISTERNA",ciudad:"SANTIAGO",telefono:"2 2637 8139",email:"mirocuant@ariztia.com",celular:"9435 6229",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"96709420",dv:"K",nombre:"MONTAJES INDUSTRIALES MONTEC S.A.",direccion:"San Pio X 2460 Oficina 910",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"227130300",email:"mbriones@montec.cl",celular:"+569 84394212",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"78771600",dv:"8",nombre:"SOCIEDAD CONSTRUCTORA ATENAS Y CIA LTDA.",direccion:"AVDA DEL VALLE SUR Nº576 OFICINA 402",comuna:"HUECHURABA",ciudad:"SANTIAGO",telefono:"22646616",email:"asandoval@scatenas.cl",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77266285",dv:"8",nombre:"SOCIEDAD COMERCIALIZADORA DE FRUTAS Y VERDURAS SJ-IC SPA",direccion:"EL ROBLE 215 BODEGA C Y D",comuna:"LAMPA",ciudad:"SANTIAGO",telefono:"940546827",email:"mariafernanda.barra@vivaldigroup.cl",celular:"",region:"METROPOLITANA",rubro:"AGRO FRUTAS"},
+        {rut:"76342129",dv:"5",nombre:"SOCIEDAD COMERCIAL AGROMINERALS LIMITADA",direccion:"San Antonio 19 ofic #907",comuna:"SANTIAGO",ciudad:"SANTIAGO",telefono:"",email:"agrominerals.lt@gmail.com",celular:"9 9303 3168",region:"METROPOLITANA",rubro:"MAQUINAS AGRICOLAS"},
+        {rut:"77575085",dv:"5",nombre:"CONSTRUCTORA E INGENIERIA Y SERVICIOS H&D LIMITADA",direccion:"morande 835 518 santiago",comuna:"SANTIAGO",ciudad:"SANTIAGO",telefono:"994877373",email:"consultoriopingenieriahd@gmail.com",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"76329258",dv:"4",nombre:"CONSTRUCTORA TORINA SPA.",direccion:"Balmoral 309 oficina 705",comuna:"LAS CONDES",ciudad:"SANTIAGO",telefono:"",email:"",celular:"9 8442 1353",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"78546290",dv:"4",nombre:"CONSTRUCTORA PJP LTDA.",direccion:"CURICO N°338",comuna:"SANTIAGO",ciudad:"SANTIAGO",telefono:"2354275",email:"paulo.villouta@pjp.cl",celular:"",region:"METROPOLITANA",rubro:"CONSTRUCCION"},
+        {rut:"77124120",dv:"4",nombre:"COMERCIAL ELECTRICA INDUSTRIAL Y SERVICIOS SPA",direccion:"CAMINO A MELIPILLA 1076",comuna:"PEÑALOLEN",ciudad:"SANTIAGO",telefono:"934382774",email:"borybor@boorybor.cl",celular:"",region:"METROPOLITANA",rubro:"FABRICACION E INDUSTRIA"},
+        {rut:"77788558",dv:"8",nombre:"TRANSPORTES E INVERSIONES MUÑOZ BRICEÑO SPA",direccion:"PROVIDENCIA 1208 OF 1607 16P",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"937353982",email:"sebastian.munoz6640@gmail.com",celular:"",region:"METROPOLITANA",rubro:"TRANSPORTE"},
+        {rut:"76026358",dv:"3",nombre:"TRANSPORTES SANTOLAYA LIMITADA",direccion:"padre mariano 181 piso 5, providencia",comuna:"PROVIDENCIA",ciudad:"SANTIAGO",telefono:"",email:"transportes@santolaya.cl",celular:"942990053",region:"METROPOLITANA",rubro:"TRANSPORTE"}
+      ]
+      for (const c of clientes80) {
+        insCliente.run(
+          uuidv4(), c.rut, c.dv, c.nombre, c.direccion || null, c.comuna || null, c.ciudad || null,
+          c.telefono || null, c.email || null, c.celular || null, c.region || null, c.rubro || null,
+          mapSeg(c.rubro), 'prospecto'
+        )
+      }
+      console.log(`✅ Migración clientes_v2 — ${clientes80.length} clientes sembrados`)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('clientes_v2')
+    console.log('✅ Migración clientes_v2 — dv,ciudad,celular,region,rubro + bitácora creada')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
