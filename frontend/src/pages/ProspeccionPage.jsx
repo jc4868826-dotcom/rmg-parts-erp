@@ -9,7 +9,7 @@ import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Penci
 
 const ORIGENES = ['Manual', 'Excel', 'WhatsApp', 'Web', 'Referido', 'Google Ads', 'Meta Ads', 'LinkedIn']
 const PRIORIDADES = ['alta', 'media', 'baja']
-const SEGMENTOS = ['taller', 'flota', 'concesionario', 'construccion', 'rentacar']
+const SEGMENTOS = ['Taller', 'Flotas', 'Construcción', 'Industria', 'Agrícola', 'Minería', 'Rent-a-Car']
 
 const ORIGEN_STYLE = {
   Manual:       { bg: 'rgba(90,143,168,0.12)',  color: 'rgba(90,143,168,0.9)' },
@@ -55,12 +55,15 @@ const EXCEL_MAP = {
 
 function inferirSegmento(rubro = '') {
   const r = rubro.toUpperCase()
-  if (r.includes('CONSTRUC')) return 'construccion'
-  if (r.includes('TALLER') || r.includes('MECAN') || r.includes('AUTOMOTRIZ') || r.includes('LUBRI')) return 'taller'
-  if (r.includes('TRANSP') || r.includes('FLOTA') || r.includes('BUSES') || r.includes('LOGIST')) return 'flota'
-  if (r.includes('AGRICOL') || r.includes('AGRO') || r.includes('FRUTERA') || r.includes('VITIVI') || r.includes('GANADE')) return 'flota'
-  if (r.includes('MINER')) return 'flota'
-  return 'flota'
+  if (r.includes('TALLER') || r.includes('MECAN') || r.includes('AUTOMOTRIZ') || r.includes('LUBRI')) return 'Taller'
+  if (r.includes('CONSTRUC')) return 'Construcción'
+  if (r.includes('TRANSP') || r.includes('FLOTA') || r.includes('BUSES') || r.includes('LOGIST')) return 'Flotas'
+  if (r.includes('AGRICOL') || r.includes('AGRO') || r.includes('FRUTERA') || r.includes('VITIVI') || r.includes('GANADE')) return 'Agrícola'
+  if (r.includes('MINER')) return 'Minería'
+  if (r.includes('INDUSTRIA') || r.includes('FABRICAC') || r.includes('METALME') || r.includes('ELECTR') ||
+      r.includes('ELASTIC') || r.includes('HORNO') || r.includes('MONTAJ') || r.includes('MANGUERA') ||
+      r.includes('RENTAL') || r.includes('MAQUINA')) return 'Industria'
+  return 'Industria'
 }
 
 function limpiarTelefono(val = '') {
@@ -70,7 +73,7 @@ function limpiarTelefono(val = '') {
 const FORM_INIT = {
   rut: '', dv: '', empresa: '', direccion: '', comuna: '', ciudad: '',
   telefono_contacto: '', telefono_empresa: '', email: '', celular: '',
-  region: 'RM', rubro: '', segmento: 'flota',
+  region: 'RM', rubro: '', segmento: 'Industria',
   prioridad: 'media', origen: 'Manual',
 }
 
@@ -99,10 +102,27 @@ function OrigenBadge({ value }) {
   return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{value || 'Manual'}</span>
 }
 
+const SEG_MAP = {
+  // valores legacy
+  taller:       { label: 'Taller',       bg: 'rgba(244,162,60,0.18)',   color: '#f4a23c' },
+  flota:        { label: 'Flotas',       bg: 'rgba(56,182,255,0.13)',   color: 'var(--rmg-blt)' },
+  construccion: { label: 'Construcción', bg: 'rgba(224,90,78,0.14)',    color: '#e05a4e' },
+  concesionario:{ label: 'Concesionario',bg: 'rgba(167,139,250,0.14)', color: '#a78bfa' },
+  rentacar:     { label: 'Rent-a-Car',   bg: 'rgba(45,201,138,0.15)',   color: '#2dc98a' },
+  // valores nuevos
+  Taller:       { label: 'Taller',       bg: 'rgba(244,162,60,0.18)',   color: '#f4a23c' },
+  Flotas:       { label: 'Flotas',       bg: 'rgba(56,182,255,0.13)',   color: 'var(--rmg-blt)' },
+  'Construcción':{ label: 'Construcción',bg: 'rgba(224,90,78,0.14)',    color: '#e05a4e' },
+  Industria:    { label: 'Industria',    bg: 'rgba(90,143,168,0.14)',   color: 'rgba(90,143,168,0.9)' },
+  'Agrícola':   { label: 'Agrícola',     bg: 'rgba(45,201,138,0.15)',   color: '#2dc98a' },
+  'Minería':    { label: 'Minería',      bg: 'rgba(167,139,250,0.14)', color: '#a78bfa' },
+  'Rent-a-Car': { label: 'Rent-a-Car',  bg: 'rgba(45,201,138,0.15)',   color: '#2dc98a' },
+}
+
 function SegmentoBadge({ segmento }) {
   if (!segmento) return null
-  if (segmento === 'rentacar') return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(45,201,138,0.15)', color: '#2dc98a' }}>Rent-a-Car</span>
-  return <span className={`badge-${segmento}`}>{segmento}</span>
+  const st = SEG_MAP[segmento] || { label: segmento, bg: 'rgba(90,143,168,0.12)', color: 'rgba(90,143,168,0.8)' }
+  return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>
 }
 
 function NotasCell({ id, text, expanded, onToggle }) {
@@ -264,6 +284,12 @@ export default function ProspeccionPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar'),
   })
 
+  const recalcularMut = useMutation({
+    mutationFn: () => api.post('/prospeccion/recalcular-segmentos').then(r => r.data),
+    onSuccess: (res) => { invalidate(); toast.success(`Segmentos recalculados (${res.actualizados} registros)`) },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al recalcular'),
+  })
+
   const importarMut = useMutation({
     mutationFn: (registros) => api.post('/prospeccion/bulk', registros).then(r => r.data),
     onSuccess: (res) => {
@@ -271,6 +297,8 @@ export default function ProspeccionPage() {
       toast.success(`${res.importados} prospectos importados${res.errores?.length ? ` · ${res.errores.length} errores` : ''}`)
       setPreview(null)
       if (fileRef.current) fileRef.current.value = ''
+      // Recalcular segmentos en segundo plano para asegurar labels correctas
+      api.post('/prospeccion/recalcular-segmentos').then(() => invalidate()).catch(() => {})
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error en importación'),
   })
@@ -448,6 +476,9 @@ export default function ProspeccionPage() {
             <Upload size={13}/> Importar Excel
           </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
+          <button onClick={() => recalcularMut.mutate()} disabled={recalcularMut.isPending} className="btn-secondary flex items-center gap-1.5 text-sm" title="Recalcular segmentos desde rubro">
+            <Check size={13}/> {recalcularMut.isPending ? 'Recalculando…' : 'Recalcular segmentos'}
+          </button>
           <button onClick={() => { setForm(FORM_INIT); setShowForm(true) }} className="btn-primary flex items-center gap-1.5 text-sm">
             <Plus size={13}/> Nuevo prospecto
           </button>
@@ -471,6 +502,28 @@ export default function ProspeccionPage() {
           </button>
         )}
       </div>
+
+      {/* ── Barra de acciones masivas ── */}
+      {selectedIds.size > 0 && (
+        <div className="rmg-card px-4 py-2.5 flex items-center gap-3 flex-wrap animate-fade-in"
+          style={{ border: '1px solid rgba(56,182,255,0.35)', background: 'rgba(7,21,40,0.9)' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>
+            ✓ {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={() => setShowAsignarCampana(true)}
+            className="btn-primary text-xs flex items-center gap-1.5"
+          >
+            <Megaphone size={12}/> Asignar campaña
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="btn-secondary text-xs flex items-center gap-1.5"
+          >
+            <X size={12}/> Deseleccionar
+          </button>
+        </div>
+      )}
 
       {/* ── Table ── */}
       <div style={{ overflowX: 'auto', borderRadius: 8, border: '0.5px solid rgba(56,182,255,0.15)' }}>
@@ -620,25 +673,6 @@ export default function ProspeccionPage() {
           isPending={editarMut.isPending}
           onCancelar={() => setEditando(null)}
         />
-      )}
-
-      {/* ── Floating action bar: multi-select ── */}
-      {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl animate-fade-in"
-          style={{ background: 'rgba(7,21,40,0.97)', border: '1px solid rgba(56,182,255,0.3)', backdropFilter: 'blur(8px)' }}>
-          <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>
-            {selectedIds.size} seleccionados
-          </span>
-          <button
-            onClick={() => setShowAsignarCampana(true)}
-            className="btn-primary text-xs flex items-center gap-1.5"
-          >
-            <Megaphone size={13}/> Asignar campaña
-          </button>
-          <button onClick={() => setSelectedIds(new Set())} style={{ color: 'var(--rmg-muted)' }}>
-            <X size={16}/>
-          </button>
-        </div>
       )}
 
       {/* ── Modal: Asignar campaña ── */}

@@ -27,6 +27,37 @@ router.patch('/:id/descartar',       authenticate, c.descartar)
 // POST  /api/prospeccion/:id/mover-a-contacto — promover al Pipeline CRM
 router.post('/:id/mover-a-contacto', authenticate, c.moverAContacto)
 
+// POST /api/prospeccion/recalcular-segmentos
+router.post('/recalcular-segmentos', authenticate, (req, res) => {
+  try {
+    const { db } = require('../../config/database')
+    function inferSeg(rubro) {
+      const r = (rubro || '').toUpperCase()
+      if (r.includes('TALLER') || r.includes('MECAN') || r.includes('AUTOMOTRIZ') || r.includes('LUBRI')) return 'Taller'
+      if (r.includes('CONSTRUC')) return 'Construcción'
+      if (r.includes('TRANSP') || r.includes('FLOTA') || r.includes('BUSES') || r.includes('LOGIST')) return 'Flotas'
+      if (r.includes('AGRICOL') || r.includes('AGRO') || r.includes('FRUTERA') || r.includes('VITIVI') || r.includes('GANADE')) return 'Agrícola'
+      if (r.includes('MINER')) return 'Minería'
+      return 'Industria'
+    }
+    const rows = db.prepare('SELECT id, rubro, rubro_especialidad FROM pipeline_contactos').all()
+    const upd = db.prepare("UPDATE pipeline_contactos SET segmento = ? WHERE id = ?")
+    const run = db.transaction(() => {
+      let n = 0
+      for (const r of rows) {
+        const seg = inferSeg(r.rubro || r.rubro_especialidad || '')
+        upd.run(seg, r.id)
+        n++
+      }
+      return n
+    })
+    const actualizados = run()
+    res.json({ ok: true, actualizados })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // PUT /api/prospeccion/asignar-campana
 router.put('/asignar-campana', authenticate, (req, res) => {
   try {
