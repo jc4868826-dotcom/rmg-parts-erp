@@ -157,7 +157,17 @@ function parseExcel(file) {
     reader.onload = (e) => {
       try {
         const wb = XLSX.read(e.target.result, { type: 'binary' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
+        // Buscar la primera hoja que tenga datos reales (no siempre es SheetNames[0])
+        let sheetName = wb.SheetNames[0]
+        for (const name of wb.SheetNames) {
+          const s = wb.Sheets[name]
+          const preview = XLSX.utils.sheet_to_json(s, { header: 1 })
+          if (preview.length > 1 && preview[0] && preview[0].length > 3) {
+            sheetName = name
+            break
+          }
+        }
+        const ws = wb.Sheets[sheetName]
         const raw = XLSX.utils.sheet_to_json(ws, { defval: '' })
         const registros = raw.map(row => {
           const mapped = {}
