@@ -22,27 +22,46 @@ const ORIGEN_STYLE = {
   LinkedIn:     { bg: 'rgba(0,119,181,0.12)',   color: '#0077b5' },
 }
 
-// columnas de Excel → campos internos (case-insensitive)
+// columnas de Excel → campos internos (case-insensitive, trim aplicado antes)
 const EXCEL_MAP = {
+  // Columnas del formato Excel RMG (Rut|Digito|RazonSocial|...)
+  razonsocial: 'empresa',
+  rut: 'rut',
+  digito: 'dv',
+  fono: 'telefono',
+  celular: 'celular',
+  email: 'email',
+  direccion: 'direccion',
+  dirección: 'direccion',
+  comuna: 'comuna',
+  ciudad: 'ciudad',
+  region: 'region',
+  región: 'region',
+  'rubro negocio': 'rubro',
+  // Columnas genéricas (retrocompatibilidad)
   empresa: 'empresa',
   'nombre empresa': 'empresa',
   contacto: 'nombre_contacto',
   'nombre contacto': 'nombre_contacto',
   telefono: 'telefono',
   teléfono: 'telefono',
-  fono: 'telefono',
-  rubro: 'rubro_especialidad',
-  region: 'region',
-  región: 'region',
-  comuna: 'comuna',
+  rubro: 'rubro',
   notas: 'notas',
   segmento: 'segmento',
   prioridad: 'prioridad',
   origen: 'origen',
   cargo: 'cargo',
-  email: 'email',
-  direccion: 'direccion',
-  dirección: 'direccion',
+}
+
+function inferirSegmento(rubro = '') {
+  const r = rubro.toUpperCase()
+  if (r.includes('CONSTRUC')) return 'construccion'
+  if (r.includes('TALLER') || r.includes('MECAN') || r.includes('AUTOMOTRIZ') || r.includes('LUBRI')) return 'taller'
+  return 'flota'
+}
+
+function limpiarTelefono(val = '') {
+  return String(val).replace(/[/.\s]+/g, '').trim()
 }
 
 const FORM_INIT = {
@@ -118,8 +137,8 @@ function FilterSelect({ value, onChange, options }) {
 
 function descargarPlantilla() {
   const ws = XLSX.utils.aoa_to_sheet([
-    ['Empresa', 'Contacto', 'Telefono', 'Rubro', 'Region', 'Comuna', 'Segmento', 'Prioridad', 'Origen', 'Notas'],
-    ['Ejemplo Taller SA', 'Juan Pérez', '+56 9 1234 5678', 'Mecánica general', 'RM', 'Santiago', 'taller', 'alta', 'Manual', 'Notas opcionales'],
+    ['Rut', 'Digito', 'RazonSocial', 'Direccion', 'Comuna', 'Ciudad', 'Fono', 'Email', 'Celular', 'Region', 'RUBRO NEGOCIO'],
+    ['76461668', '5', 'SOLUCIONES INDUSTRIALES SPA', 'LAS ESTERAS NORTE 2610', 'QUILICURA', 'SANTIAGO', '976596238', 'contacto@ejemplo.cl', '976596238', 'METROPOLITANA', 'FABRICACION E INDUSTRIA'],
   ])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Prospectos')
@@ -142,6 +161,8 @@ function parseExcel(file) {
             const fieldKey = EXCEL_MAP[(key || '').toLowerCase().trim()]
             if (fieldKey) mapped[fieldKey] = String(val).trim()
           }
+          // Ignorar filas sin empresa
+          if (!mapped.empresa) return null
           // defaults
           if (!mapped.prioridad || !PRIORIDADES.includes(mapped.prioridad.toLowerCase())) {
             mapped.prioridad = 'alta'
@@ -149,16 +170,25 @@ function parseExcel(file) {
             mapped.prioridad = mapped.prioridad.toLowerCase()
           }
           if (!mapped.origen || !ORIGENES.includes(mapped.origen)) mapped.origen = 'Excel'
-          if (!mapped.segmento || !SEGMENTOS.includes(mapped.segmento)) mapped.segmento = 'taller'
+          // Inferir segmento desde rubro si no viene explícito
+          if (!mapped.segmento || !SEGMENTOS.includes(mapped.segmento)) {
+            mapped.segmento = inferirSegmento(mapped.rubro || '')
+          }
           if (!mapped.region) mapped.region = 'RM'
-          // telefono → ambos campos
+          // Limpiar teléfonos: quitar /, ., espacios extra
           if (mapped.telefono) {
-            mapped.telefono_contacto = mapped.telefono
-            mapped.telefono_empresa = mapped.telefono
+            const t = limpiarTelefono(mapped.telefono)
+            mapped.telefono_contacto = t
+            mapped.telefono_empresa = t
             delete mapped.telefono
           }
+          if (mapped.celular) mapped.celular = limpiarTelefono(mapped.celular)
+          // Email inválido → vacío
+          if (mapped.email && !mapped.email.includes('@')) delete mapped.email
+          // nombre_contacto vacío si no viene
+          if (!mapped.nombre_contacto) mapped.nombre_contacto = ''
           return mapped
-        }).filter(r => r.empresa)
+        }).filter(Boolean)
         resolve(registros)
       } catch (err) {
         reject(err)

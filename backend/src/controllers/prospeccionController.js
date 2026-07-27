@@ -256,10 +256,10 @@ const bulkImport = (req, res) => {
     const errores = []
     const stmt = db.prepare(`
       INSERT INTO pipeline_contactos
-        (id, empresa, segmento, rubro_especialidad, nombre_contacto, cargo,
-         telefono_empresa, telefono_contacto, email, direccion, comuna, region,
-         prioridad, notas, fuente, origen, etapa, estado)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prospecto','activo')
+        (id, empresa, segmento, rubro_especialidad, rubro, nombre_contacto, cargo,
+         telefono_empresa, telefono_contacto, email, celular, direccion, comuna, ciudad, region,
+         rut, dv, prioridad, notas, fuente, origen, etapa, estado)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prospecto','activo')
     `)
     for (const r of registros) {
       try {
@@ -267,12 +267,15 @@ const bulkImport = (req, res) => {
         const prioridad = ['alta', 'media', 'baja'].includes((r.prioridad || '').toLowerCase())
           ? r.prioridad.toLowerCase() : 'alta'
         const origen = ORIGENES_VALIDOS.includes(r.origen) ? r.origen : 'Excel'
+        const rubro = r.rubro || r.rubro_especialidad || null
         stmt.run(
-          uuidv4(), r.empresa, r.segmento || 'taller',
-          r.rubro_especialidad || null, r.nombre_contacto || null, r.cargo || null,
+          uuidv4(), r.empresa, r.segmento || 'flota',
+          rubro, rubro, r.nombre_contacto || null, r.cargo || null,
           r.telefono_empresa || r.telefono || null,
           r.telefono_contacto || r.telefono || null,
-          r.email || null, r.direccion || null, r.comuna || null, r.region || 'RM',
+          r.email || null, r.celular || null,
+          r.direccion || null, r.comuna || null, r.ciudad || null, r.region || 'RM',
+          r.rut || null, r.dv || null,
           prioridad, r.notas || null, 'Importación Excel', origen
         )
         importados++

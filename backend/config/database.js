@@ -1759,6 +1759,19 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('campanas_v1')
     console.log('✅ Migración campanas_v1 — tabla campanas creada + campana_id/campana_nombre en pipeline_contactos')
   }
+
+  // Migration 34: pipeline_excel_fields — nuevas columnas para importación Excel
+  const m34 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('pipeline_excel_fields')
+  if (!m34) {
+    const pcCols34 = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+    if (!pcCols34.includes('rut'))    try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN rut TEXT") } catch(_) {}
+    if (!pcCols34.includes('dv'))     try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN dv TEXT") } catch(_) {}
+    if (!pcCols34.includes('celular'))try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN celular TEXT") } catch(_) {}
+    if (!pcCols34.includes('ciudad')) try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN ciudad TEXT") } catch(_) {}
+    if (!pcCols34.includes('rubro'))  try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN rubro TEXT") } catch(_) {}
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('pipeline_excel_fields')
+    console.log('✅ Migración pipeline_excel_fields — rut, dv, celular, ciudad, rubro en pipeline_contactos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
