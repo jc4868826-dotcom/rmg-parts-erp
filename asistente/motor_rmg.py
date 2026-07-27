@@ -5,6 +5,28 @@ import pandas as pd
 # ─── Catálogo de ingeniería: cargado UNA sola vez al importar el módulo ────────
 _DF_ING = None
 
+# ─── Catálogo técnico Vistony 2025 ───────────────────────────────────────────
+_VISTONY = None
+
+def _load_vistony():
+    global _VISTONY
+    if _VISTONY is not None:
+        return _VISTONY
+    base = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(base, 'vistony_catalogo.json')
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, encoding='utf-8') as f:
+                _VISTONY = json.load(f)
+            print(f'[motor_rmg] Catálogo Vistony: {len(_VISTONY)} productos cargados')
+        except Exception as e:
+            print(f'[motor_rmg] Error cargando vistony_catalogo.json: {e}')
+            _VISTONY = []
+    else:
+        print('[motor_rmg] vistony_catalogo.json no encontrado')
+        _VISTONY = []
+    return _VISTONY
+
 def _load_ing():
     """Carga y cachea el catálogo de ingeniería al startup.
 
@@ -93,6 +115,7 @@ def enriquecer_df(df_precios):
 
 # Cargar al importar el módulo (startup del servidor)
 _load_ing()
+_load_vistony()
 
 
 def deducir_y_buscar_360(query, client, df_precios):

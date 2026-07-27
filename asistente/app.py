@@ -206,6 +206,86 @@ Para TIPO B, usa los productos del catalogo agrupados por sub-categoria
 de producto segun lo que necesita el distribuidor. Muestra TODOS los
 productos disponibles en cada sub-categoria, no solo uno.
 
+CONOCIMIENTO TÉCNICO VISTONY 2025 — MARCAS DISTRIBUIDAS POR RMG:
+Attom, Sintek, Blindax, Forza, Brikson, Transmec, Draula, Hidraroly,
+Draulacat, Trakoil, Veltron, Rayvon, Lotox.
+
+LUBRICANTES GASOLINA:
+- ATTOM S310: SAE 5W-30/5W-40/10W-40 | 100% sintético | autos modernos con inyección electrónica y turbo
+- ATTOM S320: SAE 5W-30 | 1L-5L
+- ATTOM RACING: SAE 10W-60 | alto rendimiento
+- SINTEK S210: SAE 10W-30/10W-40 | semisintético
+- BLINDAX SUPER: SAE 10W-30/20W-50 | multipropósito gasolina
+- BLINDAX HD SAE: SAE 40/50 | convencional
+
+LUBRICANTES DIESEL:
+- VOLTEK C300: SAE 10W-40/15W-40 | equipos pesados y móviles | bidón 5G y 55G
+- FORZA RAYGOLD: SAE 15W-40 | diesel estándar
+- FORZA PLUS: SAE 15W-40 | diesel mejorado
+- FORZA TURBO: SAE 15W-40 | motores turboalimentados diesel
+- FORZA VIS: SAE 15W-40 | viscosidad controlada
+- FORZA ULTRA D: SAE 5W-30/10W-40 | diesel de última generación
+
+TRANSMISIONES AUTOS:
+- BRIKSON ATF CVT-F: transmisiones CVT | 100% sintético
+- BRIKSON ATF SYNTH: multivehículo sintético | cajas automáticas
+- ATF BRIKSON MDIII: DEXRON III | cajas automáticas estándar
+- GEAR OIL GL-5: SAE 80W-90/85W-140 | diferencial y caja manual
+- TRANSMEC DUAL: SAE 80W-90/90/140/250 | transmisiones manuales pesadas
+
+TRANSMISIONES CAMIONES:
+- TRANSMEC CAMIÓN GL-4/GL-5: SAE 80W-90 y 85W-140
+- TRANSMEC SYNTHETIC: SAE 75W-90 | sintético para camiones
+
+MOTOCICLETAS:
+- ATTOM RAYVON 4T: SAE 15W-50 | 4 tiempos alta performance
+- SINTEK RAYVON 4T: SAE 10W-40/15W-50/20W-50 | 4 tiempos
+- RAYVON SUPER 4T: SAE 20W-50 | 4 tiempos convencional
+- RAYVON SUPER 2T: JASO FB/API TC | 2 tiempos
+
+HIDRÁULICOS (Minería, Construcción, Industria):
+- DRAULA HT: ISO 46/68 | alta temperatura | retroexcavadoras, grúas
+- DRAULA H: ISO 32/46/68 | estándar industrial
+- HIDRAROLY ZF: transmisiones hidráulicas equipos móviles
+- HIDRAROLY: hidráulico general
+- DRAULACAT: TO-4 | Caterpillar y equipos similares
+- TRAKOIL: SAE 10W/30W | transmisiones de equipos móviles
+
+REDUCTORES INDUSTRIALES:
+- VELTRON SYNTH: ISO 150/220/320/460 | sintético
+- VELTRON EP: ISO 68 a 680 | extrema presión
+
+COMPRESORES:
+- COMPRESSOR OIL RSP SYNTH: ISO 32/46/68 | rotativo sintético
+- AIR COMPRESSOR OIL: ISO 100/150 | pistón convencional
+
+GRASAS:
+- NANOLITHIUM WS2: NLGI 2 | premium con bisulfuro de tungsteno
+- SULFONATO DE CALCIO: NLGI 1/2 | extrema presión y alta temperatura
+- GRASA EP LITHIUM: NLGI 0/1/2/3 | multipropósito general | hasta 180kg
+- MOLIBDENO LITHIUM EP-2: NLGI 2 | con molibdeno | cojinetes y articulaciones
+- CHASIS SUPER H: NLGI 00/0/1/2 | chasis camiones | hasta 180kg
+
+REFRIGERANTES:
+- ICE FREEZE OAT 50/50: Verde, Rosa, Fuchsia | autos modernos | OAT
+- ICE FREEZE HEAVY DUTY: Verde y Rosa | camiones y maquinaria pesada | OAT HD
+- CONCENTRADO OAT: diluir según necesidad
+- DOT 3 / DOT 4 / DOT 5.1: líquidos de freno para auto y moto
+
+CAR CARE (Lotox):
+- LOTOX INFINITE: línea premium detailing interior (protector, limpia vidrios, cuero, lavado ecológico, renovador plásticos)
+- LOTOX: brillanta llantas, cera, shampoo, silicona, limpiador tapiz
+
+AUXILIARES Y ADITIVOS:
+- AFLOJATODO ZK-90, Limpia inyectores, Brake Cleaner, Limpia radiador
+- SPRAY ARRANQUE, Limpia carburador, Limpia contacto, Lube multiusos
+- ADITIVOS: Mejorador octanaje, Aditivo Diesel, Aditivo Gasolinero, No Smoke
+
+REGLA VISTONY: Si el vendedor pregunta qué producto Vistony usar para una aplicación
+específica, responde con la marca y nombre de producto correcto según esta lista.
+Ejemplo: "¿aceite para retroexcavadora?" → DRAULACAT TO-4 o DRAULA HT ISO 46.
+Usa este conocimiento para complementar el catálogo del ERP, nunca para inventar SKUs.
+
 INSTRUCCION ANTI-ALUCINACION — DATOS DE COMPOSICION Y APLICACION:
 Algunas descripciones de producto incluyen campos "Comp:" y "Aplicación:" que provienen
 del cruce con el catálogo de ingeniería del proveedor. Estos datos son provisorios y están
