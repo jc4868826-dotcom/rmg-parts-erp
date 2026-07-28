@@ -15,18 +15,6 @@ router.post('/',                     authenticate, c.create)
 // POST /api/prospeccion/bulk     — importación masiva desde Excel
 router.post('/bulk',                 authenticate, c.bulkImport)
 
-// PUT  /api/prospeccion/:id      — actualizar prospecto
-router.put('/:id',                   authenticate, c.update)
-
-// PATCH /api/prospeccion/:id/etapa    — cambiar etapa del prospecto
-router.patch('/:id/etapa',           authenticate, c.cambiarEtapa)
-
-// PATCH /api/prospeccion/:id/descartar — marcar como descartado
-router.patch('/:id/descartar',       authenticate, c.descartar)
-
-// POST  /api/prospeccion/:id/mover-a-contacto — promover al Pipeline CRM
-router.post('/:id/mover-a-contacto', authenticate, c.moverAContacto)
-
 // POST /api/prospeccion/recalcular-segmentos
 router.post('/recalcular-segmentos', authenticate, (req, res) => {
   try {
@@ -58,7 +46,7 @@ router.post('/recalcular-segmentos', authenticate, (req, res) => {
   }
 })
 
-// PUT /api/prospeccion/asignar-campana
+// PUT /api/prospeccion/asignar-campana  — debe ir ANTES de /:id para evitar que Express lo capture como wildcard
 router.put('/asignar-campana', authenticate, (req, res) => {
   try {
     const { db } = require('../../config/database')
@@ -74,5 +62,17 @@ router.put('/asignar-campana', authenticate, (req, res) => {
     res.status(500).json({ error: err.message })
   }
 })
+
+// PUT  /api/prospeccion/:id      — actualizar prospecto
+router.put('/:id',                   authenticate, c.update)
+
+// PATCH /api/prospeccion/:id/etapa    — cambiar etapa del prospecto
+router.patch('/:id/etapa',           authenticate, c.cambiarEtapa)
+
+// PATCH /api/prospeccion/:id/descartar — marcar como descartado
+router.patch('/:id/descartar',       authenticate, c.descartar)
+
+// POST  /api/prospeccion/:id/mover-a-contacto — promover al Pipeline CRM
+router.post('/:id/mover-a-contacto', authenticate, c.moverAContacto)
 
 module.exports = router
