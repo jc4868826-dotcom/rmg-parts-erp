@@ -1781,6 +1781,30 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('limpiar_prospectos_demo')
     console.log(`✅ Migración limpiar_prospectos_demo — ${antes} prospectos eliminados`)
   }
+
+  // Migration 36: clientes_campana — campaña en tabla clientes
+  const m36 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('clientes_campana')
+  if (!m36) {
+    const clCols = db.prepare('PRAGMA table_info(clientes)').all().map(c => c.name)
+    if (!clCols.includes('campana_id'))     try { db.exec("ALTER TABLE clientes ADD COLUMN campana_id TEXT") } catch(_) {}
+    if (!clCols.includes('campana_nombre')) try { db.exec("ALTER TABLE clientes ADD COLUMN campana_nombre TEXT") } catch(_) {}
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('clientes_campana')
+    console.log('✅ Migración clientes_campana — campana_id/campana_nombre en clientes')
+  }
+
+  // Migration 37: campana_estado_v1 — estado de envío por prospecto + contadores en campanas
+  const m37 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('campana_estado_v1')
+  if (!m37) {
+    const pcCols37 = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+    if (!pcCols37.includes('campana_estado'))     try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN campana_estado TEXT DEFAULT 'Sin enviar'") } catch(_) {}
+    if (!pcCols37.includes('campana_enviado_at')) try { db.exec("ALTER TABLE pipeline_contactos ADD COLUMN campana_enviado_at TEXT") } catch(_) {}
+    const cCols37 = db.prepare('PRAGMA table_info(campanas)').all().map(c => c.name)
+    if (!cCols37.includes('enviados'))    try { db.exec("ALTER TABLE campanas ADD COLUMN enviados INTEGER DEFAULT 0") } catch(_) {}
+    if (!cCols37.includes('abiertos'))   try { db.exec("ALTER TABLE campanas ADD COLUMN abiertos INTEGER DEFAULT 0") } catch(_) {}
+    if (!cCols37.includes('respondidos'))try { db.exec("ALTER TABLE campanas ADD COLUMN respondidos INTEGER DEFAULT 0") } catch(_) {}
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('campana_estado_v1')
+    console.log('✅ Migración campana_estado_v1 — campana_estado/campana_enviado_at en pipeline_contactos + enviados/abiertos/respondidos en campanas')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

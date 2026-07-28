@@ -235,7 +235,16 @@ function parseExcel(file) {
 
 // ─── main component ─────────────────────────────────────────────────────────
 
-const TABLE_HEADERS = ['RUT', 'Razón Social', 'Rubro', 'Comuna', 'Email', 'Teléfono / Celular', 'Campaña', 'Acciones']
+const TABLE_HEADERS = ['RUT', 'Razón Social', 'Rubro', 'Comuna', 'Email', 'Teléfono / Celular', 'Campaña', 'Estado campaña', 'Acciones']
+
+const ESTADOS_CAMPANA = ['Sin enviar', 'Enviado', 'Abrió', 'Respondió', 'Sin respuesta']
+const ESTADO_CAMPANA_STYLE = {
+  'Sin enviar':   { color: 'rgba(90,143,168,0.7)',  background: 'rgba(90,143,168,0.1)' },
+  'Enviado':      { color: 'var(--rmg-blt)',         background: 'rgba(56,182,255,0.12)' },
+  'Abrió':        { color: '#f4a23c',               background: 'rgba(244,162,60,0.12)' },
+  'Respondió':    { color: 'var(--rmg-teal)',        background: 'rgba(45,201,138,0.12)' },
+  'Sin respuesta':{ color: '#e05a4e',               background: 'rgba(224,90,78,0.12)' },
+}
 
 // Defined at module level so React never sees a new reference on re-render (fixes input focus loss)
 function FormularioProspecto({ titulo, datos, setDatos, onSubmit, isPending, onCancelar }) {
@@ -382,6 +391,12 @@ export default function ProspeccionPage() {
       api.post('/prospeccion/recalcular-segmentos').then(() => invalidate()).catch(() => {})
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error en importación'),
+  })
+
+  const cambiarEstadoCampanaMut = useMutation({
+    mutationFn: ({ id, estado }) => api.put(`/prospeccion/${id}/campana-estado`, { estado }).then(r => r.data),
+    onSuccess: () => invalidate(),
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al cambiar estado'),
   })
 
   const asignarMut = useMutation({
@@ -551,7 +566,7 @@ export default function ProspeccionPage() {
               : filtrados.length === 0
                 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: '56px 24px', textAlign: 'center' }}>
+                    <td colSpan={10} style={{ padding: '56px 24px', textAlign: 'center' }}>
                       <div style={{ color: 'rgba(90,143,168,0.5)', fontSize: 14 }}>Sin prospectos activos</div>
                       <div style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12, marginTop: 6 }}>
                         {busqueda || segmentoFiltro !== 'Todos' || prioridadFiltro !== 'Todas' || regionFiltro !== 'Todas'
@@ -617,6 +632,24 @@ export default function ProspeccionPage() {
                       {p.campana_nombre
                         ? <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>{p.campana_nombre}</span>
                         : <span style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12 }}>—</span>}
+                    </td>
+                    {/* Estado campaña */}
+                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
+                      {p.campana_id ? (
+                        <select
+                          value={p.campana_estado || 'Sin enviar'}
+                          onChange={e => cambiarEstadoCampanaMut.mutate({ id: p.id, estado: e.target.value })}
+                          style={{
+                            fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 20, cursor: 'pointer',
+                            border: 'none', outline: 'none',
+                            ...(ESTADO_CAMPANA_STYLE[p.campana_estado] || ESTADO_CAMPANA_STYLE['Sin enviar']),
+                          }}
+                        >
+                          {ESTADOS_CAMPANA.map(e => <option key={e} value={e}>{e}</option>)}
+                        </select>
+                      ) : (
+                        <span style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12 }}>—</span>
+                      )}
                     </td>
                     {/* Acciones */}
                     <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>

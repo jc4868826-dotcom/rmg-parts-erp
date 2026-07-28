@@ -23,6 +23,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
+    "nodemailer": "^9.0.3",
     "sql.js": "^1.14.1",
     "uuid": "^9.0.0",
     "winston": "^3.11.0"

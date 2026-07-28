@@ -46,6 +46,24 @@ router.post('/recalcular-segmentos', authenticate, (req, res) => {
   }
 })
 
+// PUT /api/prospeccion/:id/campana-estado — actualizar estado de campaña de un prospecto manualmente
+router.put('/:id/campana-estado', authenticate, (req, res) => {
+  try {
+    const { db } = require('../../config/database')
+    const ESTADOS = ['Sin enviar', 'Enviado', 'Abrió', 'Respondió', 'Sin respuesta']
+    const { estado } = req.body
+    if (!estado || !ESTADOS.includes(estado)) {
+      return res.status(400).json({ error: `estado inválido. Valores: ${ESTADOS.join(', ')}` })
+    }
+    const reg = db.prepare('SELECT id FROM pipeline_contactos WHERE id = ?').get(req.params.id)
+    if (!reg) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    db.prepare("UPDATE pipeline_contactos SET campana_estado = ?, fecha_ultima_actualizacion = datetime('now') WHERE id = ?").run(estado, req.params.id)
+    res.json(db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // PUT /api/prospeccion/asignar-campana  — debe ir ANTES de /:id para evitar que Express lo capture como wildcard
 router.put('/asignar-campana', authenticate, (req, res) => {
   try {

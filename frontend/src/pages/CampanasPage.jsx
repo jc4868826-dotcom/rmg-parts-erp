@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import toast from 'react-hot-toast'
-import { Plus, Sparkles, Save, Eye, Pencil, Trash2, X, Megaphone, Loader2 } from 'lucide-react'
+import { Plus, Sparkles, Save, Eye, Pencil, Trash2, X, Megaphone, Loader2, Rocket } from 'lucide-react'
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -76,6 +76,7 @@ export default function CampanasPage() {
   // modal state
   const [verMensaje, setVerMensaje]       = useState(null)  // { nombre, mensaje_editado }
   const [editModal, setEditModal]         = useState(null)  // campana object
+  const [lanzarResult, setLanzarResult]   = useState({})   // { [campanaId]: { enviados, errores } }
 
   // ── data ────────────────────────────────────────────────────────────────────
   const { data: campanas = [], isLoading } = useQuery({
@@ -112,6 +113,18 @@ export default function CampanasPage() {
       setEditModal(null)
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar campaña'),
+  })
+
+  const lanzarMut = useMutation({
+    mutationFn: (id) => api.post(`/campanas/${id}/lanzar`).then(r => r.data),
+    onSuccess: (res, id) => {
+      qc.invalidateQueries({ queryKey: ['campanas'] })
+      qc.invalidateQueries({ queryKey: ['prospeccion'] })
+      setLanzarResult(prev => ({ ...prev, [id]: res }))
+      if (res.enviados > 0) toast.success(`${res.enviados} emails enviados correctamente`)
+      else toast(res.mensaje || 'Sin prospectos pendientes de envío')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al lanzar campaña'),
   })
 
   // ── handlers ─────────────────────────────────────────────────────────────────
@@ -312,7 +325,7 @@ export default function CampanasPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
             <thead>
               <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                {['Nombre', 'Tipo', 'Segmento', 'Rubro', 'Canal', 'Estado', 'Prospectos', 'Acciones'].map(h => (
+                {['Nombre', 'Tipo', 'Segmento', 'Rubro', 'Canal', 'Estado', 'Enviados / Asignados', 'Acciones'].map(h => (
                   <th key={h} className="px-4 py-3 text-left" style={{ fontSize: 11, fontWeight: 500, color: 'rgba(90,143,168,0.7)', borderBottom: '0.5px solid rgba(56,182,255,0.1)', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>
@@ -366,13 +379,41 @@ export default function CampanasPage() {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <EstadoBadge value={c.estado} />
                       </td>
-                      {/* Prospectos */}
-                      <td className="px-4 py-3 text-center" style={{ fontSize: 13, color: 'var(--rmg-blt)', fontWeight: 600 }}>
-                        {c.total_prospectos ?? 0}
+                      {/* Enviados / Asignados */}
+                      <td className="px-4 py-3" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ color: 'var(--rmg-blt)', fontWeight: 600 }}>
+                            Env: {c.enviados ?? 0}
+                          </span>
+                          <span style={{ color: 'rgba(90,143,168,0.6)' }}>
+                            Asig: {c.total_prospectos ?? 0}
+                          </span>
+                          {(c.respondidos ?? 0) > 0 && (
+                            <span style={{ color: 'var(--rmg-teal)', fontSize: 11 }}>
+                              Resp: {c.respondidos}
+                            </span>
+                          )}
+                          {lanzarResult[c.id] && (
+                            <span style={{ color: 'var(--rmg-teal)', fontSize: 10 }}>
+                              ✓ {lanzarResult[c.id].enviados} enviados
+                            </span>
+                          )}
+                        </div>
                       </td>
                       {/* Acciones */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div style={{ display: 'flex', gap: 5 }}>
+                          {/* Lanzar campaña */}
+                          <button
+                            title="Lanzar campaña (enviar emails)"
+                            disabled={lanzarMut.isPending}
+                            onClick={() => lanzarMut.mutate(c.id)}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(45,201,138,0.12)', border: '0.5px solid rgba(45,201,138,0.3)', color: 'var(--rmg-teal)', cursor: 'pointer', opacity: lanzarMut.isPending ? 0.5 : 1 }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(45,201,138,0.25)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(45,201,138,0.12)'}
+                          >
+                            {lanzarMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Rocket size={13} />}
+                          </button>
                           {/* Ver mensaje */}
                           <button
                             title="Ver mensaje"

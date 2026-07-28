@@ -55,6 +55,61 @@ router.delete('/:id', authenticate, (req, res) => {
   }
 })
 
+// POST /api/campanas/:id/lanzar — envía emails a todos los prospectos con campana_estado = 'Sin enviar'
+router.post('/:id/lanzar', authenticate, async (req, res) => {
+  try {
+    const campana = db.prepare('SELECT * FROM campanas WHERE id = ?').get(req.params.id)
+    if (!campana) return res.status(404).json({ error: 'Campaña no encontrada' })
+
+    const prospectos = db.prepare(
+      "SELECT * FROM pipeline_contactos WHERE campana_id = ? AND (campana_estado IS NULL OR campana_estado = 'Sin enviar')"
+    ).all(req.params.id)
+
+    if (!prospectos.length) {
+      return res.json({ enviados: 0, errores: [], mensaje: 'No hay prospectos pendientes de envío' })
+    }
+
+    const nodemailer = require('nodemailer')
+    const transporter = nodemailer.createTransport({
+      host: 'mail.rmgautos.cl',
+      port: 465,
+      secure: true,
+      auth: {
+        user: 'juancarlos.contreras@rmgautos.cl',
+        pass: process.env.SMTP_PASS,
+      },
+    })
+
+    let enviados = 0
+    const errores = []
+
+    for (const p of prospectos) {
+      if (!p.email) {
+        errores.push({ empresa: p.empresa, error: 'Sin email registrado' })
+        continue
+      }
+      try {
+        await transporter.sendMail({
+          from: '"RMG Auto Parts" <juancarlos.contreras@rmgautos.cl>',
+          to: p.email,
+          subject: campana.nombre,
+          text: campana.mensaje_editado || campana.mensaje_generado || '',
+        })
+        db.prepare("UPDATE pipeline_contactos SET campana_estado = 'Enviado', campana_enviado_at = datetime('now') WHERE id = ?").run(p.id)
+        enviados++
+      } catch (e) {
+        errores.push({ empresa: p.empresa, error: e.message })
+      }
+    }
+
+    db.prepare("UPDATE campanas SET enviados = enviados + ?, estado = 'activa' WHERE id = ?").run(enviados, req.params.id)
+
+    res.json({ ok: true, enviados, errores })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/campanas/generar — genera mensaje con IA (sin guardar)
 router.post('/generar', authenticate, async (req, res) => {
   try {
