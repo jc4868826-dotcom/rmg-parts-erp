@@ -89,11 +89,19 @@ router.post('/:id/lanzar', authenticate, async (req, res) => {
         continue
       }
       try {
+        const mensajeBase = campana.mensaje_editado || campana.mensaje_generado || ''
+        const mensajePersonalizado = mensajeBase
+          .replace(/\{\{empresa\}\}/g, p.empresa || '')
+          .replace(/\{\{nombre\}\}/g,  p.nombre   || p.empresa || '')
+          .replace(/\{\{rubro\}\}/g,   p.rubro    || '')
+        const textoFinal = campana.firma
+          ? mensajePersonalizado + '\n\n' + campana.firma
+          : mensajePersonalizado
         await transporter.sendMail({
           from: '"RMG Auto Parts" <juancarlos.contreras@rmgautos.cl>',
           to: p.email,
-          subject: campana.nombre,
-          text: campana.mensaje_editado || campana.mensaje_generado || '',
+          subject: campana.asunto || campana.nombre,
+          text: textoFinal,
         })
         db.prepare("UPDATE pipeline_contactos SET campana_estado = 'Enviado', campana_enviado_at = datetime('now') WHERE id = ?").run(p.id)
         enviados++

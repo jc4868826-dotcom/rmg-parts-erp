@@ -1805,6 +1805,16 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('campana_estado_v1')
     console.log('✅ Migración campana_estado_v1 — campana_estado/campana_enviado_at en pipeline_contactos + enviados/abiertos/respondidos en campanas')
   }
+
+  // Migration 38: campanas_asunto_firma — asunto del email y firma en campanas
+  const m38 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('campanas_asunto_firma')
+  if (!m38) {
+    const cCols38 = db.prepare('PRAGMA table_info(campanas)').all().map(c => c.name)
+    if (!cCols38.includes('asunto')) try { db.exec("ALTER TABLE campanas ADD COLUMN asunto TEXT") } catch(_) {}
+    if (!cCols38.includes('firma'))  try { db.exec("ALTER TABLE campanas ADD COLUMN firma TEXT") } catch(_) {}
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('campanas_asunto_firma')
+    console.log('✅ Migración campanas_asunto_firma — asunto y firma agregados a campanas')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

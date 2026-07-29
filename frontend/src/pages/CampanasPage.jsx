@@ -41,6 +41,8 @@ const FORM_INIT = {
   rubro: 'CONSTRUCCION',
   canal: 'WhatsApp',
   contexto_adicional: '',
+  asunto: '',
+  firma: '',
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -161,6 +163,8 @@ export default function CampanasPage() {
       rubro: form.rubro,
       canal: form.canal,
       mensaje_editado: mensajeGenerado,
+      asunto: form.asunto || null,
+      firma: form.firma || null,
     })
   }
 
@@ -279,6 +283,19 @@ export default function CampanasPage() {
           )}
         </div>
 
+        {/* Asunto del email */}
+        <div>
+          <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>
+            Asunto del email <span style={{ color: 'rgba(90,143,168,0.5)', fontWeight: 400, textTransform: 'none' }}>(para canal Email)</span>
+          </label>
+          <input
+            className="rmg-input"
+            placeholder="Ej: Soluciones de lubricación para su flota"
+            value={form.asunto}
+            onChange={e => fld('asunto')(e.target.value)}
+          />
+        </div>
+
         {/* Generated message textarea */}
         <div>
           <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>
@@ -290,6 +307,27 @@ export default function CampanasPage() {
             placeholder="El mensaje generado por ZARA aparecerá aquí. Puedes editarlo antes de guardar."
             value={mensajeGenerado}
             onChange={e => setMensajeGenerado(e.target.value)}
+          />
+          <p style={{ fontSize: 11, color: 'rgba(90,143,168,0.6)', marginTop: 5 }}>
+            Usa <code style={{ background: 'rgba(56,182,255,0.1)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>{'{{empresa}}'}</code>{' '}
+            <code style={{ background: 'rgba(56,182,255,0.1)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>{'{{nombre}}'}</code>{' '}
+            <code style={{ background: 'rgba(56,182,255,0.1)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>{'{{rubro}}'}</code>{' '}
+            para personalizar por prospecto al enviar.
+          </p>
+        </div>
+
+        {/* Firma */}
+        <div>
+          <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>
+            Firma <span style={{ color: 'rgba(90,143,168,0.5)', fontWeight: 400, textTransform: 'none' }}>(se agrega al final del mensaje)</span>
+          </label>
+          <textarea
+            className="rmg-input"
+            rows={3}
+            placeholder={'Juan Carlos Contreras\nGerente Comercial\nRMG Auto Parts\n+56 9 XXXX XXXX\nwww.rmgparts.cl'}
+            value={form.firma}
+            onChange={e => fld('firma')(e.target.value)}
+            style={{ whiteSpace: 'pre-wrap' }}
           />
         </div>
 
@@ -468,9 +506,26 @@ export default function CampanasPage() {
               </div>
               <button onClick={() => setVerMensaje(null)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
             </div>
-            <div className="p-4 rounded-lg text-sm" style={{ background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(56,182,255,0.1)', color: 'rgba(255,255,255,0.75)', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 80 }}>
-              {verMensaje.mensaje_editado || <span style={{ color: 'var(--rmg-muted)' }}>Sin mensaje guardado</span>}
+            {verMensaje.asunto && (
+              <div className="mb-3">
+                <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--rmg-muted)' }}>Asunto</div>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{verMensaje.asunto}</div>
+              </div>
+            )}
+            <div className="mb-3">
+              <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--rmg-muted)' }}>Mensaje</div>
+              <div className="p-4 rounded-lg text-sm" style={{ background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(56,182,255,0.1)', color: 'rgba(255,255,255,0.75)', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 80 }}>
+                {verMensaje.mensaje_editado || <span style={{ color: 'var(--rmg-muted)' }}>Sin mensaje guardado</span>}
+              </div>
             </div>
+            {verMensaje.firma && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--rmg-muted)' }}>Firma</div>
+                <div className="p-3 rounded-lg text-xs" style={{ background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(56,182,255,0.07)', color: 'rgba(255,255,255,0.5)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                  {verMensaje.firma}
+                </div>
+              </div>
+            )}
             <div className="flex justify-end mt-4">
               <button onClick={() => setVerMensaje(null)} className="btn-secondary">Cerrar</button>
             </div>
@@ -508,12 +563,38 @@ export default function CampanasPage() {
                 </select>
               </div>
               <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Asunto del email</label>
+                <input
+                  className="rmg-input"
+                  placeholder="Ej: Soluciones de lubricación para su flota"
+                  value={editModal.asunto || ''}
+                  onChange={e => setEditModal(p => ({ ...p, asunto: e.target.value }))}
+                />
+              </div>
+              <div>
                 <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Mensaje</label>
                 <textarea
                   className="rmg-input"
                   rows={5}
                   value={editModal.mensaje_editado || ''}
                   onChange={e => setEditModal(p => ({ ...p, mensaje_editado: e.target.value }))}
+                />
+                <p style={{ fontSize: 11, color: 'rgba(90,143,168,0.6)', marginTop: 5 }}>
+                  Usa <code style={{ background: 'rgba(56,182,255,0.1)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>{'{{empresa}}'}</code>{' '}
+                  <code style={{ background: 'rgba(56,182,255,0.1)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>{'{{nombre}}'}</code>{' '}
+                  <code style={{ background: 'rgba(56,182,255,0.1)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>{'{{rubro}}'}</code>{' '}
+                  para personalizar por prospecto.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Firma</label>
+                <textarea
+                  className="rmg-input"
+                  rows={3}
+                  placeholder={'Juan Carlos Contreras\nGerente Comercial\nRMG Auto Parts'}
+                  value={editModal.firma || ''}
+                  onChange={e => setEditModal(p => ({ ...p, firma: e.target.value }))}
+                  style={{ whiteSpace: 'pre-wrap' }}
                 />
               </div>
             </div>
@@ -522,7 +603,7 @@ export default function CampanasPage() {
               <button
                 disabled={editarMut.isPending}
                 className="btn-primary flex items-center gap-2"
-                onClick={() => editarMut.mutate({ id: editModal.id, data: { nombre: editModal.nombre, estado: editModal.estado, mensaje_editado: editModal.mensaje_editado } })}
+                onClick={() => editarMut.mutate({ id: editModal.id, data: { nombre: editModal.nombre, estado: editModal.estado, mensaje_editado: editModal.mensaje_editado, asunto: editModal.asunto || null, firma: editModal.firma || null } })}
               >
                 {editarMut.isPending ? <><Loader2 size={13} className="animate-spin" /> Guardando...</> : <><Save size={13} /> Guardar</>}
               </button>
