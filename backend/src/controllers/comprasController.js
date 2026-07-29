@@ -636,4 +636,348 @@ const getOcsDisponibles = (req, res) => {
   }
 }
 
-module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra, enviarAutorizacion, autorizarOC, rechazarOC, enviarProveedor, recibirBodega, autorizarPago, getPendientesWorkflow, getOcsDisponibles }
+// ── Recepción parcial por línea ────────────────────────────────
+const recepcionParcial = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    const estadosValidos = ['Enviada_Proveedor', 'Recibida_Parcial', 'enviada']
+    if (!estadosValidos.includes(o.estado)) {
+      return res.status(400).json({ error: `Solo se puede registrar recepción desde Enviada_Proveedor o Recibida_Parcial (estado actual: ${o.estado})` })
+    }
+    const { usuario_receptor_id, observacion, lineas } = req.body
+    if (!lineas || !lineas.length) return res.status(400).json({ error: 'Se requiere al menos una línea con cantidad > 0' })
+
+    const lineasFiltradas = lineas.filter(l => Number(l.cantidad_recibida) > 0)
+    if (!lineasFiltradas.length) return res.status(400).json({ error: 'Ninguna línea tiene cantidad mayor a 0' })
+
+    const advertencias = []
+    const ejecutar = db.transaction(() => {
+      const recepcionId = uuidv4()
+      db.prepare('INSERT INTO recepciones_oc (id, oc_id, fecha_recepcion, usuario_receptor_id, observacion) VALUES (?,?,?,?,?)')
+        .run(recepcionId, o.id, new Date().toISOString().split('T')[0], usuario_receptor_id || null, observacion || null)
+
+      for (const linea of lineasFiltradas) {
+        const item = db.prepare('SELECT * FROM oc_items WHERE id = ?').get(linea.linea_oc_id)
+        if (!item) { advertencias.push(`Línea ${linea.linea_oc_id} no encontrada`); continue }
+
+        const cantRecibida = Math.round(Number(linea.cantidad_recibida))
+        const maxPendiente = item.cantidad - (item.cantidad_recibida_total || 0)
+        const cantReal = Math.min(cantRecibida, maxPendiente)
+        if (cantReal <= 0) { advertencias.push(`SKU ${item.codigo}: ya recibido al 100%`); continue }
+
+        db.prepare('INSERT INTO recepciones_oc_lineas (id, recepcion_id, linea_oc_id, cantidad_recibida) VALUES (?,?,?,?)')
+          .run(uuidv4(), recepcionId, item.id, cantReal)
+
+        db.prepare('UPDATE oc_items SET cantidad_recibida_total = COALESCE(cantidad_recibida_total, 0) + ? WHERE id = ?')
+          .run(cantReal, item.id)
+
+        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.codigo)
+        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en catálogo — stock no actualizado`); continue }
+        const stockAnterior = prod.stock_actual ?? 0
+        const stockNuevo = stockAnterior + cantReal
+        db.prepare("UPDATE productos SET stock_actual = ?, updated_at = datetime('now') WHERE codigo = ?").run(stockNuevo, item.codigo)
+        try {
+          db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', cantReal, stockAnterior, stockNuevo, 'recepcion_parcial_oc', o.numero)
+        } catch (_) {}
+      }
+
+      // Determinar si todas las líneas están completas
+      const itemsActualizados = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(o.id)
+      const todasCompletas = itemsActualizados.every(i => (i.cantidad_recibida_total || 0) >= i.cantidad)
+      const nuevoEstado = todasCompletas ? 'Recibida_Bodega' : 'Recibida_Parcial'
+      db.prepare("UPDATE ordenes_compra SET estado = ?, fecha_entrega = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(nuevoEstado, new Date().toISOString().split('T')[0], o.id)
+
+      // Crear CxP si está completamente recibida
+      if (todasCompletas) {
+        try {
+          db.prepare(`INSERT OR IGNORE INTO facturas_cxp (id, numero, proveedor_id, proveedor, oc_id, oc_numero, monto, fecha_emision, fecha_vencimiento, estado)
+            VALUES (?,?,?,?,?,?,?,?,?,?)`)
+            .run(uuidv4(), `CXP-${o.numero}`, o.proveedor_id || null, o.proveedor, o.id, o.numero, o.total,
+              new Date().toISOString().split('T')[0], o.fecha_vencimiento || null, 'pendiente')
+        } catch (_) {}
+      }
+    })
+
+    ejecutar()
+    const ocActualizada = withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id))
+    const recepciones = db.prepare('SELECT * FROM recepciones_oc WHERE oc_id = ? ORDER BY created_at DESC').all(req.params.id)
+    res.json({ ...ocActualizada, recepciones, advertencias })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const getRecepciones = (req, res) => {
+  try {
+    const recepciones = db.prepare('SELECT * FROM recepciones_oc WHERE oc_id = ? ORDER BY created_at DESC').all(req.params.id)
+    const result = recepciones.map(r => ({
+      ...r,
+      lineas: db.prepare('SELECT rol.*, oi.codigo, oi.descripcion, oi.cantidad FROM recepciones_oc_lineas rol JOIN oc_items oi ON oi.id = rol.linea_oc_id WHERE rol.recepcion_id = ?').all(r.id),
+    }))
+    res.json(result)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// ── Facturación de proveedor ───────────────────────────────────
+const registrarFactura = (req, res) => {
+  try {
+    const rolUser = req.user?.rol
+    if (!['gerente', 'admin', 'finanzas'].includes(rolUser)) {
+      return res.status(403).json({ error: 'Se requiere rol finanzas, gerente o admin para registrar factura' })
+    }
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    if (!['Recibida_Bodega', 'Recibida_Parcial', 'recibida'].includes(o.estado)) {
+      return res.status(400).json({ error: `Solo se puede facturar desde Recibida_Bodega o Recibida_Parcial (estado actual: ${o.estado})` })
+    }
+
+    const { numero_factura, fecha_factura, fecha_vencimiento_pago, monto_total, modo_pago } = req.body
+    if (!numero_factura || !fecha_factura || !fecha_vencimiento_pago || !monto_total || !modo_pago) {
+      return res.status(400).json({ error: 'numero_factura, fecha_factura, fecha_vencimiento_pago, monto_total y modo_pago son requeridos' })
+    }
+
+    const hoy = new Date().toISOString().split('T')[0]
+    const prov = o.proveedor_id ? db.prepare('SELECT razon_social FROM proveedores WHERE id = ?').get(o.proveedor_id) : null
+    const provNombre = prov?.razon_social || o.proveedor || 'Proveedor'
+
+    const ejecutar = db.transaction(() => {
+      const factId = uuidv4()
+      db.prepare(`INSERT INTO facturas_proveedor
+        (id, oc_id, numero_factura, fecha_factura, fecha_vencimiento_pago, monto_total, modo_pago, estado_pago, usuario_registro_id)
+        VALUES (?,?,?,?,?,?,?,?,?)`)
+        .run(factId, o.id, numero_factura, fecha_factura, fecha_vencimiento_pago, Number(monto_total),
+          modo_pago, 'pendiente', req.user?.id || null)
+
+      db.prepare("UPDATE ordenes_compra SET estado = 'Facturada', numero_factura = ?, fecha_factura = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(numero_factura, fecha_factura, o.id)
+
+      // Registrar en flujo de caja
+      const esReal = fecha_vencimiento_pago <= hoy
+      try {
+        db.prepare(`INSERT INTO caja_movimientos
+          (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id)
+          VALUES (?,?,?,?,?,?,?,?,?)`)
+          .run('egreso', 'Compra proveedor',
+            `Fac. N° ${numero_factura} · ${provNombre}`,
+            Number(monto_total), hoy, fecha_vencimiento_pago,
+            esReal ? 'confirmado' : 'proyectado',
+            'facturas_proveedor', factId)
+      } catch (_) {}
+
+      // Actualizar/crear CxP
+      try {
+        const cxpExiste = db.prepare('SELECT id FROM facturas_cxp WHERE oc_id = ?').get(o.id)
+        if (cxpExiste) {
+          db.prepare("UPDATE facturas_cxp SET numero = ?, monto = ?, fecha_emision = ?, fecha_vencimiento = ? WHERE oc_id = ?")
+            .run(numero_factura, Number(monto_total), fecha_factura, fecha_vencimiento_pago, o.id)
+        } else {
+          db.prepare(`INSERT INTO facturas_cxp (id, numero, proveedor_id, proveedor, oc_id, oc_numero, monto, fecha_emision, fecha_vencimiento, estado)
+            VALUES (?,?,?,?,?,?,?,?,?,?)`)
+            .run(uuidv4(), numero_factura, o.proveedor_id || null, o.proveedor, o.id, o.numero,
+              Number(monto_total), fecha_factura, fecha_vencimiento_pago, 'pendiente')
+        }
+      } catch (_) {}
+
+      return factId
+    })
+
+    const factId = ejecutar()
+    res.status(201).json({
+      ok: true,
+      factura_id: factId,
+      oc: withItems(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)),
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// ── PDF de OC ──────────────────────────────────────────────────
+const generarPdfOC = (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(o.id)
+    const prov = o.proveedor_id ? db.prepare('SELECT * FROM proveedores WHERE id = ?').get(o.proveedor_id) : null
+
+    const formatCLP = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-CL')}`
+    const lineasHtml = items.map((item, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${item.codigo || ''}</td>
+        <td>${item.descripcion || ''}</td>
+        <td style="text-align:center">${item.cantidad}</td>
+        <td style="text-align:right">${formatCLP(item.precio_unitario)}</td>
+        <td style="text-align:right">${formatCLP(item.subtotal)}</td>
+      </tr>`).join('')
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>OC ${o.numero}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 0; padding: 20px; }
+  h1 { font-size: 20px; margin: 0; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
+  .logo { font-size: 22px; font-weight: 900; color: #1a365d; }
+  .logo span { color: #e53e3e; }
+  .datos { display: flex; gap: 40px; margin-bottom: 16px; }
+  .datos div { flex: 1; }
+  .datos label { font-weight: bold; display: block; margin-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th { background: #1a365d; color: white; padding: 6px 8px; text-align: left; font-size: 11px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; }
+  tr:nth-child(even) { background: #f7fafc; }
+  .totales { margin-top: 16px; text-align: right; }
+  .totales table { width: 280px; margin-left: auto; }
+  .totales td { border: none; padding: 3px 8px; }
+  .totales .total-row { font-size: 14px; font-weight: bold; border-top: 2px solid #000; }
+  .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 12px; display: flex; justify-content: space-between; }
+  @media print { body { margin: 0; } button { display: none !important; } }
+</style>
+</head>
+<body>
+<button onclick="window.print()" style="position:fixed;top:10px;right:10px;padding:8px 16px;background:#1a365d;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Imprimir / Guardar PDF</button>
+<div class="header">
+  <div>
+    <div class="logo">RMG <span>Auto</span> Parts</div>
+    <div style="font-size:11px;color:#666;margin-top:2px">Santiago RM · Chile</div>
+  </div>
+  <div style="text-align:right">
+    <h1>ORDEN DE COMPRA</h1>
+    <div style="font-size:16px;font-weight:bold;color:#e53e3e">${o.numero}</div>
+    <div style="font-size:11px;color:#666">Fecha emisión: ${o.fecha_emision || ''}</div>
+    ${o.fecha_requerida ? `<div style="font-size:11px;color:#666">Fecha requerida: ${o.fecha_requerida}</div>` : ''}
+  </div>
+</div>
+
+<div class="datos">
+  <div>
+    <label>Proveedor:</label>
+    <div>${prov?.razon_social || o.proveedor || ''}</div>
+    ${prov?.rut ? `<div>RUT: ${prov.rut}</div>` : ''}
+    ${prov?.direccion ? `<div>${prov.direccion}</div>` : ''}
+    ${prov?.email ? `<div>Email: ${prov.email}</div>` : ''}
+    ${prov?.telefono ? `<div>Tel: ${prov.telefono}</div>` : ''}
+  </div>
+  <div>
+    <label>Condición de pago:</label>
+    <div>${o.medio_pago || 'Contado'}</div>
+    ${o.fecha_vencimiento ? `<div>Vencimiento: ${o.fecha_vencimiento}</div>` : ''}
+    ${o.notas ? `<div style="margin-top:8px;font-style:italic">${o.notas}</div>` : ''}
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr><th>N°</th><th>SKU</th><th>Descripción</th><th style="text-align:center">Cantidad</th><th style="text-align:right">P. Unit. Neto</th><th style="text-align:right">Subtotal</th></tr>
+  </thead>
+  <tbody>${lineasHtml}</tbody>
+</table>
+
+<div class="totales">
+  <table>
+    <tr><td>Subtotal Neto:</td><td style="text-align:right">${formatCLP(o.neto)}</td></tr>
+    <tr><td>IVA 19%:</td><td style="text-align:right">${formatCLP(o.iva)}</td></tr>
+    <tr class="total-row"><td>TOTAL CON IVA:</td><td style="text-align:right">${formatCLP(o.total)}</td></tr>
+  </table>
+</div>
+
+<div class="footer">
+  <div>
+    <div style="font-weight:bold;margin-bottom:30px">Firma / Sello RMG Auto Parts</div>
+    <div style="border-top:1px solid #000;width:180px;padding-top:4px">Autorizado por</div>
+  </div>
+  <div style="text-align:right;font-size:10px;color:#666">
+    <div>Documento generado por RMG Auto Parts ERP</div>
+    <div>Estado: ${o.estado}</div>
+  </div>
+</div>
+</body>
+</html>`
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Content-Disposition', `inline; filename="${o.numero}.html"`)
+    res.send(html)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// ── Envío email de OC ──────────────────────────────────────────
+const enviarEmailOC = async (req, res) => {
+  try {
+    const o = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!o) return res.status(404).json({ error: 'OC no encontrada' })
+    const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(o.id)
+    const prov = o.proveedor_id ? db.prepare('SELECT * FROM proveedores WHERE id = ?').get(o.proveedor_id) : null
+
+    const { email_destinatario, mensaje_adicional } = req.body
+    if (!email_destinatario) return res.status(400).json({ error: 'email_destinatario es requerido' })
+
+    const nodemailer = require('nodemailer')
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    })
+
+    const formatCLP = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-CL')}`
+    const lineasHtml = items.map((item, i) => `
+      <tr>
+        <td>${i + 1}</td><td>${item.codigo || ''}</td><td>${item.descripcion || ''}</td>
+        <td style="text-align:center">${item.cantidad}</td>
+        <td style="text-align:right">${formatCLP(item.precio_unitario)}</td>
+        <td style="text-align:right">${formatCLP(item.subtotal)}</td>
+      </tr>`).join('')
+
+    const html = `
+<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto">
+  <div style="background:#1a365d;color:white;padding:20px">
+    <h2 style="margin:0">RMG Auto Parts — Orden de Compra ${o.numero}</h2>
+  </div>
+  ${mensaje_adicional ? `<div style="background:#fffbeb;padding:16px;border-left:4px solid #d69e2e">${mensaje_adicional}</div>` : ''}
+  <div style="padding:20px">
+    <p><strong>Proveedor:</strong> ${prov?.razon_social || o.proveedor || ''}</p>
+    <p><strong>Fecha emisión:</strong> ${o.fecha_emision || ''} | <strong>Condición:</strong> ${o.medio_pago || 'Contado'}</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+      <thead><tr style="background:#1a365d;color:white">
+        <th style="padding:8px">N°</th><th style="padding:8px">SKU</th><th style="padding:8px">Descripción</th>
+        <th style="padding:8px">Cant.</th><th style="padding:8px">P.Unit</th><th style="padding:8px">Subtotal</th>
+      </tr></thead>
+      <tbody>${lineasHtml}</tbody>
+    </table>
+    <div style="text-align:right">
+      <p>Subtotal Neto: <strong>${formatCLP(o.neto)}</strong></p>
+      <p>IVA 19%: <strong>${formatCLP(o.iva)}</strong></p>
+      <p style="font-size:16px">TOTAL CON IVA: <strong style="color:#1a365d">${formatCLP(o.total)}</strong></p>
+    </div>
+    <hr/>
+    <p style="font-size:11px;color:#666">Documento enviado desde RMG Auto Parts ERP</p>
+  </div>
+</div>`
+
+    await transporter.sendMail({
+      from: process.env.SMTP_USER || 'erp@rmgautoparts.cl',
+      to: email_destinatario,
+      subject: `Orden de Compra ${o.numero} — RMG Auto Parts`,
+      html,
+    })
+
+    res.json({ ok: true, mensaje: `OC enviada por email a ${email_destinatario}` })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra, enviarAutorizacion, autorizarOC, rechazarOC, enviarProveedor, recibirBodega, autorizarPago, getPendientesWorkflow, getOcsDisponibles, recepcionParcial, getRecepciones, registrarFactura, generarPdfOC, enviarEmailOC }

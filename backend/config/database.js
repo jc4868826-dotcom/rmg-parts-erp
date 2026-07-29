@@ -1815,6 +1815,82 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('campanas_asunto_firma')
     console.log('✅ Migración campanas_asunto_firma — asunto y firma agregados a campanas')
   }
+
+  // Migration 39: oc_recepcion_parcial_v1 — recepción parcial por línea + facturas_proveedor
+  const m39 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('oc_recepcion_parcial_v1')
+  if (!m39) {
+    // cantidad_recibida_total en oc_items
+    const ocItemsCols = db.prepare('PRAGMA table_info(oc_items)').all().map(c => c.name)
+    if (!ocItemsCols.includes('cantidad_recibida_total')) {
+      db.exec('ALTER TABLE oc_items ADD COLUMN cantidad_recibida_total REAL DEFAULT 0')
+    }
+    // fecha_requerida en ordenes_compra (para el spec)
+    const ocCols39 = db.prepare('PRAGMA table_info(ordenes_compra)').all().map(c => c.name)
+    if (!ocCols39.includes('fecha_requerida')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN fecha_requerida TEXT')
+    if (!ocCols39.includes('usuario_creador_id')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN usuario_creador_id TEXT')
+    // Tablas nuevas
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS recepciones_oc (
+        id TEXT PRIMARY KEY,
+        oc_id TEXT REFERENCES ordenes_compra(id) ON DELETE CASCADE,
+        fecha_recepcion TEXT DEFAULT (date('now')),
+        usuario_receptor_id TEXT,
+        observacion TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS recepciones_oc_lineas (
+        id TEXT PRIMARY KEY,
+        recepcion_id TEXT REFERENCES recepciones_oc(id) ON DELETE CASCADE,
+        linea_oc_id TEXT REFERENCES oc_items(id),
+        cantidad_recibida REAL NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS facturas_proveedor (
+        id TEXT PRIMARY KEY,
+        oc_id TEXT REFERENCES ordenes_compra(id),
+        numero_factura TEXT,
+        fecha_factura TEXT,
+        fecha_vencimiento_pago TEXT,
+        monto_total REAL,
+        modo_pago TEXT DEFAULT 'transferencia',
+        estado_pago TEXT DEFAULT 'pendiente',
+        fecha_pago_real TEXT,
+        usuario_registro_id TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `)
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_recepcion_parcial_v1')
+    console.log('✅ Migración oc_recepcion_parcial_v1 — recepciones_oc, recepciones_oc_lineas, facturas_proveedor creadas')
+  }
+
+  // Migration 40: finanzas_rol_v1 — agregar rol finanzas a usuarios + usuario finanzas
+  const m40 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('finanzas_rol_v1')
+  if (!m40) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS usuarios_tmp40 (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        nombre TEXT NOT NULL,
+        telefono TEXT,
+        rol TEXT DEFAULT 'ventas' CHECK(rol IN ('admin','ventas','bodega','cliente','gerente','finanzas')),
+        activo INTEGER DEFAULT 1,
+        ultimo_acceso TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      INSERT OR IGNORE INTO usuarios_tmp40 SELECT * FROM usuarios;
+      DROP TABLE usuarios;
+      ALTER TABLE usuarios_tmp40 RENAME TO usuarios;
+    `)
+    const hasFinanzas = db.prepare("SELECT COUNT(*) as n FROM usuarios WHERE rol = 'finanzas'").get().n
+    if (!hasFinanzas) {
+      db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
+        .run(uuidv4(), 'finanzas@rmgautoparts.cl', bcrypt.hashSync('finanzas2026', 10), 'Finanzas RMG', '+56 9 0000 0003', 'finanzas')
+      console.log('✅ Migración finanzas_rol_v1 — usuario finanzas creado (finanzas@rmgautoparts.cl / finanzas2026)')
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('finanzas_rol_v1')
+    console.log('✅ Migración finanzas_rol_v1 — rol finanzas habilitado en usuarios')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

@@ -30,6 +30,13 @@ router.post('/ordenes/:id/enviar-proveedor',    authenticate, c.enviarProveedor)
 router.post('/ordenes/:id/recibir-bodega',      authenticate, c.recibirBodega)
 router.post('/ordenes/:id/autorizar-pago',      authenticate, c.autorizarPago)
 
+// Recepción parcial + facturación + PDF + email
+router.get('/ordenes/:id/recepciones',   c.getRecepciones)
+router.post('/ordenes/:id/recepcion',    c.recepcionParcial)
+router.post('/ordenes/:id/factura',      authenticate, c.registrarFactura)
+router.get('/ordenes/:id/pdf',           c.generarPdfOC)
+router.post('/ordenes/:id/enviar-email', c.enviarEmailOC)
+
 // CxP
 router.get('/cxp',                 c.getCxP)
 router.post('/cxp/:id/pagar',      c.pagarFactura)
