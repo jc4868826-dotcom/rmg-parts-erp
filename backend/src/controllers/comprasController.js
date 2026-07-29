@@ -170,14 +170,14 @@ const recibirOrden = (req, res) => {
       const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(req.params.id)
       for (const item of items) {
         if (!item.codigo) continue
-        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.codigo)
-        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en catálogo — stock no actualizado`); continue }
+        const prod = db.prepare('SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku').get(item.codigo)
+        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en maestro de precios — stock no actualizado`); continue }
         const stockAnterior = prod.stock_actual ?? 0
         const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
-        db.prepare('UPDATE productos SET stock_actual = ?, updated_at = datetime(\'now\') WHERE codigo = ?').run(stockNuevo, item.codigo)
+        db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stockNuevo, item.codigo)
         try {
           db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia) VALUES (?,?,?,?,?,?,?,?,?,?)')
-            .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_oc', o.numero)
+            .run(uuidv4(), item.codigo, item.codigo, item.descripcion || prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_oc', o.numero)
         } catch (_) {}
       }
     })
@@ -395,14 +395,14 @@ const recibirBodega = (req, res) => {
       const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(req.params.id)
       for (const item of items) {
         if (!item.codigo) continue
-        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.codigo)
-        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en catálogo — stock no actualizado`); continue }
+        const prod = db.prepare('SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku').get(item.codigo)
+        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en maestro de precios — stock no actualizado`); continue }
         const stockAnterior = prod.stock_actual ?? 0
         const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
-        db.prepare("UPDATE productos SET stock_actual = ?, updated_at = datetime('now') WHERE codigo = ?").run(stockNuevo, item.codigo)
+        db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stockNuevo, item.codigo)
         try {
           db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia) VALUES (?,?,?,?,?,?,?,?,?,?)')
-            .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_oc', o.numero)
+            .run(uuidv4(), item.codigo, item.codigo, item.descripcion || prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_oc', o.numero)
         } catch (_) {}
       }
       // Crear CxP pendiente
@@ -490,18 +490,20 @@ const cambiarEstadoCompra = (req, res) => {
         const items = db.prepare('SELECT * FROM compra_items WHERE compra_id = ?').all(req.params.id)
         for (const item of items) {
           if (!item.sku) continue
-          const prod = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.sku)
+          const prod = db.prepare(
+            'SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
+          ).get(item.sku)
           if (!prod) {
-            advertencias.push(`SKU ${item.sku} no encontrado en catálogo — stock no actualizado`)
+            advertencias.push(`SKU ${item.sku} no encontrado en lista de precios — stock no actualizado`)
             continue
           }
           const stockAnterior = prod.stock_actual ?? 0
           const stockNuevo = stockAnterior + Math.round(Number(item.cantidad))
-          db.prepare("UPDATE productos SET stock_actual = ?, updated_at = datetime('now') WHERE codigo = ?").run(stockNuevo, item.sku)
+          db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stockNuevo, item.sku)
           try {
             db.prepare(
               'INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo) VALUES (?,?,?,?,?,?,?,?,?)'
-            ).run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_compra')
+            ).run(uuidv4(), prod.codigo_sku, prod.codigo_sku, prod.descripcion, 'entrada', Math.round(Number(item.cantidad)), stockAnterior, stockNuevo, 'ingreso_compra')
           } catch (_) {}
         }
       }
@@ -575,7 +577,7 @@ const deleteOrden = (req, res) => {
         const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(o.id)
         for (const item of items) {
           if (!item.codigo) continue
-          db.prepare('UPDATE productos SET stock_actual = MAX(0, stock_actual - ?) WHERE codigo = ?')
+          db.prepare('UPDATE lista_precios SET stock_actual = MAX(0, stock_actual - ?) WHERE codigo_sku = ?')
             .run(Math.round(Number(item.cantidad)), item.codigo)
         }
       }
@@ -585,7 +587,7 @@ const deleteOrden = (req, res) => {
         const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(o.id)
         for (const item of items) {
           if (!item.codigo) continue
-          db.prepare('UPDATE productos SET stock_actual = MAX(0, stock_actual - ?) WHERE codigo = ?')
+          db.prepare('UPDATE lista_precios SET stock_actual = MAX(0, stock_actual - ?) WHERE codigo_sku = ?')
             .run(Math.round(Number(item.cantidad)), item.codigo)
         }
         db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla='ordenes_compra' AND origen_id=?").run(o.id)
@@ -672,14 +674,16 @@ const recepcionParcial = (req, res) => {
         db.prepare('UPDATE oc_items SET cantidad_recibida_total = COALESCE(cantidad_recibida_total, 0) + ? WHERE id = ?')
           .run(cantReal, item.id)
 
-        const prod = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.codigo)
-        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en catálogo — stock no actualizado`); continue }
+        const prod = db.prepare(
+          'SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
+        ).get(item.codigo)
+        if (!prod) { advertencias.push(`SKU ${item.codigo} no encontrado en lista de precios — stock no actualizado`); continue }
         const stockAnterior = prod.stock_actual ?? 0
         const stockNuevo = stockAnterior + cantReal
-        db.prepare("UPDATE productos SET stock_actual = ?, updated_at = datetime('now') WHERE codigo = ?").run(stockNuevo, item.codigo)
+        db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stockNuevo, item.codigo)
         try {
           db.prepare('INSERT INTO movimientos_stock (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia) VALUES (?,?,?,?,?,?,?,?,?,?)')
-            .run(uuidv4(), prod.id, prod.codigo, prod.descripcion, 'entrada', cantReal, stockAnterior, stockNuevo, 'recepcion_parcial_oc', o.numero)
+            .run(uuidv4(), prod.codigo_sku, prod.codigo_sku, prod.descripcion, 'entrada', cantReal, stockAnterior, stockNuevo, 'recepcion_parcial_oc', o.numero)
         } catch (_) {}
       }
 

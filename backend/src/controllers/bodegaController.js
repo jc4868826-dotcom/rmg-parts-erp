@@ -1,12 +1,18 @@
 const { db, uuidv4 } = require('../../config/database')
 
+function getLp(codigo) {
+  return db.prepare(
+    'SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
+  ).get(codigo)
+}
+
 const getMovimientos = (req, res) => {
   try {
     const { tipo, codigo } = req.query
     let sql = 'SELECT * FROM movimientos_stock'
     const params = []
-    const where = []
-    if (tipo) { where.push('tipo = ?'); params.push(tipo) }
+    const where  = []
+    if (tipo)   { where.push('tipo = ?');   params.push(tipo) }
     if (codigo) { where.push('codigo = ?'); params.push(codigo) }
     if (where.length) sql += ' WHERE ' + where.join(' AND ')
     sql += ' ORDER BY created_at DESC'
@@ -22,18 +28,17 @@ const ajustarStock = (req, res) => {
     if (!codigo || cantidad === undefined || !motivo) {
       return res.status(400).json({ error: 'codigo, cantidad y motivo son requeridos' })
     }
-    const p = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(codigo)
-    if (!p) return res.status(404).json({ error: 'Producto no encontrado' })
+    const p = getLp(codigo)
+    if (!p) return res.status(404).json({ error: 'Producto no encontrado en maestro de precios' })
 
     const stock_anterior = p.stock_actual
-    const stock_nuevo = stock_anterior + Number(cantidad)
+    const stock_nuevo    = stock_anterior + Number(cantidad)
 
-    db.prepare("UPDATE productos SET stock_actual = ?, updated_at = datetime('now') WHERE codigo = ?")
-      .run(stock_nuevo, codigo)
+    db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stock_nuevo, codigo)
 
     const movId = uuidv4()
     db.prepare(`INSERT INTO movimientos_stock
-      (id,producto_id,codigo,descripcion,tipo,cantidad,stock_anterior,stock_nuevo,motivo)
+      (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo)
       VALUES (?,?,?,?,?,?,?,?,?)`
     ).run(movId, codigo, codigo, p.descripcion, 'ajuste', Number(cantidad), stock_anterior, stock_nuevo, motivo)
 
@@ -55,18 +60,17 @@ const recibirOC = (req, res) => {
     const movimientos = db.transaction(() => {
       const movs = []
       for (const item of items) {
-        const p = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(item.codigo)
+        const p = getLp(item.codigo)
         const stock_anterior = p ? p.stock_actual : 0
-        const stock_nuevo = stock_anterior + item.cantidad
+        const stock_nuevo    = stock_anterior + item.cantidad
 
         if (p) {
-          db.prepare("UPDATE productos SET stock_actual = ?, updated_at = datetime('now') WHERE codigo = ?")
-            .run(stock_nuevo, item.codigo)
+          db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stock_nuevo, item.codigo)
         }
 
         const movId = uuidv4()
         db.prepare(`INSERT INTO movimientos_stock
-          (id,producto_id,codigo,descripcion,tipo,cantidad,stock_anterior,stock_nuevo,motivo,referencia)
+          (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia)
           VALUES (?,?,?,?,?,?,?,?,?,?)`
         ).run(movId, item.codigo, item.codigo, item.descripcion, 'entrada',
           item.cantidad, stock_anterior, stock_nuevo, `Recepción ${oc.numero}`, oc.id)
@@ -86,11 +90,14 @@ const recibirOC = (req, res) => {
 
 const getStockConMovimientos = (req, res) => {
   try {
-    const p = db.prepare('SELECT * FROM productos WHERE codigo = ?').get(req.params.codigo)
-    if (!p) return res.status(404).json({ error: 'Producto no encontrado' })
+    const codigo = req.params.codigo
+    const p = db.prepare(
+      'SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(marca) AS marca, MAX(categoria) AS categoria, MAX(costo_unidad_neto) AS precio_compra, MAX(precio_venta_neto) AS precio_venta, MAX(COALESCE(stock_actual,0)) AS stock_actual, MAX(COALESCE(stock_minimo,5)) AS stock_minimo FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
+    ).get(codigo)
+    if (!p) return res.status(404).json({ error: 'Producto no encontrado en maestro de precios' })
     const movimientos = db.prepare(
       'SELECT * FROM movimientos_stock WHERE codigo = ? ORDER BY created_at DESC'
-    ).all(req.params.codigo)
+    ).all(codigo)
     res.json({ producto: p, movimientos })
   } catch (err) {
     res.status(500).json({ error: err.message })

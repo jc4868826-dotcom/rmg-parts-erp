@@ -1891,6 +1891,25 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('finanzas_rol_v1')
     console.log('✅ Migración finanzas_rol_v1 — rol finanzas habilitado en usuarios')
   }
+
+  // Migration 41: lista_precios_stock_v1 — añadir stock_actual + stock_minimo a lista_precios
+  const m41 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('lista_precios_stock_v1')
+  if (!m41) {
+    const lpCols = db.prepare('PRAGMA table_info(lista_precios)').all().map(c => c.name)
+    if (!lpCols.includes('stock_actual')) db.exec('ALTER TABLE lista_precios ADD COLUMN stock_actual INTEGER DEFAULT 0')
+    if (!lpCols.includes('stock_minimo')) db.exec('ALTER TABLE lista_precios ADD COLUMN stock_minimo INTEGER DEFAULT 5')
+    // Migrar stock desde productos donde el codigo coincida con codigo_sku
+    try {
+      db.exec(`
+        UPDATE lista_precios
+        SET stock_actual = COALESCE((SELECT p.stock_actual FROM productos p WHERE p.codigo = lista_precios.codigo_sku), 0),
+            stock_minimo = COALESCE((SELECT p.stock_minimo FROM productos p WHERE p.codigo = lista_precios.codigo_sku), 5)
+        WHERE codigo_sku IS NOT NULL
+      `)
+    } catch (_) {}
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_stock_v1')
+    console.log('✅ Migración lista_precios_stock_v1 — stock_actual y stock_minimo añadidos a lista_precios, datos migrados desde productos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
