@@ -482,8 +482,111 @@ const enviarEmailOC = async (req, res) => {
   }
 }
 
+const getImpactoEliminacion = (req, res) => {
+  try {
+    const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
+
+    const recepciones = db.prepare('SELECT id FROM recepciones_oc WHERE oc_id = ?').all(oc.id)
+
+    const movimientosStock = db.prepare(
+      "SELECT * FROM movimientos_stock WHERE referencia = ? AND motivo = 'recepcion_oc' AND tipo = 'entrada'"
+    ).all(oc.numero)
+
+    const compraVinculada = db.prepare(
+      'SELECT id, numero_oc, numero_factura, estado FROM compras WHERE oc_id = ?'
+    ).get(oc.id)
+
+    const advertencias = []
+    if (movimientosStock.length > 0) {
+      advertencias.push(`Se revertirá el stock de ${movimientosStock.length} producto(s) que ingresaron con esta OC.`)
+    }
+    if (compraVinculada) {
+      advertencias.push(`Existe una compra vinculada${compraVinculada.numero_factura ? ` (Factura: ${compraVinculada.numero_factura})` : ''}. La compra NO se eliminará, quedará desvinculada.`)
+    }
+    const estadosConStock = ['RECIBIDA', 'RECIBIDA_PARCIAL', 'recibida', 'Recibida_Bodega', 'Recibida_Parcial']
+    if (estadosConStock.includes(oc.estado)) {
+      advertencias.push(`La OC estaba en estado ${oc.estado}. Verifica que el stock físico en bodega también haya sido corregido.`)
+    }
+
+    res.json({
+      oc: { id: oc.id, numero: oc.numero, estado: oc.estado, proveedor: oc.proveedor, total: oc.total },
+      tiene_recepciones: recepciones.length > 0,
+      movimientos_stock: movimientosStock.map(m => ({
+        codigo: m.codigo, descripcion: m.descripcion, cantidad: m.cantidad, fecha: m.created_at,
+      })),
+      tiene_compra_vinculada: !!compraVinculada,
+      compra_id: compraVinculada?.id || null,
+      puede_eliminar: true,
+      advertencias,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const deleteOC = (req, res) => {
+  try {
+    const { confirmado } = req.body || {}
+    if (!confirmado) return res.status(400).json({ error: 'Requiere confirmación: envía { confirmado: true }' })
+
+    const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
+
+    const movimientosEntrada = db.prepare(
+      "SELECT * FROM movimientos_stock WHERE referencia = ? AND motivo = 'recepcion_oc' AND tipo = 'entrada'"
+    ).all(oc.numero)
+
+    const compraVinculada = db.prepare('SELECT id FROM compras WHERE oc_id = ?').get(oc.id)
+
+    const stockRevertido = []
+
+    const ejecutar = db.transaction(() => {
+      // 1. Revertir stock línea por línea
+      for (const mov of movimientosEntrada) {
+        const prod = db.prepare(
+          'SELECT codigo_sku, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
+        ).get(mov.codigo)
+        if (!prod) continue
+
+        const stockAnterior = prod.stock_actual
+        const stockNuevo    = Math.max(0, stockAnterior - mov.cantidad)
+        db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stockNuevo, mov.codigo)
+        try {
+          db.prepare(`INSERT INTO movimientos_stock
+            (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia)
+            VALUES (?,?,?,?,?,?,?,?,?,?)`)
+            .run(uuidv4(), mov.codigo, mov.codigo, mov.descripcion, 'ajuste', -mov.cantidad,
+              stockAnterior, stockNuevo, `Reversión OC eliminada: ${oc.numero}`, oc.numero)
+        } catch (_) {}
+        stockRevertido.push({ codigo: mov.codigo, descripcion: mov.descripcion, cantidad_revertida: mov.cantidad })
+      }
+
+      // 2. Desvincular compra (no borrar)
+      if (compraVinculada) {
+        try { db.prepare('UPDATE compras SET oc_id = NULL WHERE oc_id = ?').run(oc.id) } catch (_) {}
+      }
+
+      // 3. Borrar OC — CASCADE elimina oc_items, recepciones_oc, recepciones_oc_lineas, oc_historial
+      db.prepare('DELETE FROM ordenes_compra WHERE id = ?').run(oc.id)
+    })
+
+    ejecutar()
+
+    res.json({
+      success: true,
+      mensaje: `OC ${oc.numero} eliminada. Stock revertido en ${stockRevertido.length} producto(s).`,
+      stock_revertido: stockRevertido,
+      compra_desvinculada: !!compraVinculada,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 module.exports = {
   getOCs, getOC, createOC, updateOC, patchEstadoOC,
   registrarRecepcionOC, getRecepcionesOC, getPendientesFacturar,
   generarPdfOC, enviarEmailOC,
+  getImpactoEliminacion, deleteOC,
 }

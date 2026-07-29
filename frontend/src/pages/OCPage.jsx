@@ -6,7 +6,7 @@ import { formatCLP, formatFecha } from '@utils/format'
 import {
   Plus, X, Search, ChevronLeft, Send, CheckCircle, XCircle, Truck,
   PackageCheck, FileText, Mail, ClipboardList, History, RotateCcw,
-  ExternalLink, Package,
+  ExternalLink, Package, Trash2, AlertTriangle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@context/AuthContext'
@@ -163,6 +163,7 @@ export default function OCPage() {
   const [recepcionActiva, setRecepcionActiva] = useState(false)
   const [recepcionLineas, setRecepcionLineas] = useState([])
   const [recepcionObs, setRecepcionObs] = useState('')
+  const [ocAEliminar, setOcAEliminar]   = useState(null)   // { id, numero } para el modal
 
   // Queries
   const { data: ocs = [], isLoading } = useQuery({
@@ -225,6 +226,27 @@ export default function OCPage() {
     mutationFn: ({ id, body }) => api.post(`/oc/${id}/enviar-email`, body).then(r => r.data),
     onSuccess: () => { toast.success('OC enviada por email'); setEmailModal(false) },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al enviar email'),
+  })
+
+  const { data: impactoData, isLoading: loadingImpacto } = useQuery({
+    queryKey: ['oc-impacto', ocAEliminar?.id],
+    queryFn: () => api.get(`/oc/${ocAEliminar.id}/impacto-eliminacion`).then(r => r.data),
+    enabled: !!ocAEliminar,
+    staleTime: 0,
+    retry: false,
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id) => api.delete(`/oc/${id}`, { data: { confirmado: true } }).then(r => r.data),
+    onSuccess: (data) => {
+      invalidate()
+      qc.invalidateQueries({ queryKey: ['oc-pendientes-facturar'] })
+      toast.success(data.mensaje || 'OC eliminada')
+      if (data.compra_desvinculada) toast('Compra desvinculada — revísala en Compras', { icon: '⚠️' })
+      setOcAEliminar(null)
+      if (vista === 'detalle') { setVista('lista'); setOcId(null) }
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar OC'),
   })
 
   // Helpers
@@ -327,7 +349,10 @@ export default function OCPage() {
                   <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(oc.total)}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{(oc.items || []).length} líneas</td>
                   <td className="px-4 py-3">
-                    <button onClick={e => { e.stopPropagation(); abrirDetalle(oc) }} className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blue)' }}>Ver →</button>
+                    <div className="flex gap-1.5">
+                      <button onClick={e => { e.stopPropagation(); abrirDetalle(oc) }} className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blue)' }}>Ver →</button>
+                      <button onClick={e => { e.stopPropagation(); setOcAEliminar({ id: oc.id, numero: oc.numero }) }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }} title="Eliminar OC"><Trash2 size={13}/></button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -516,6 +541,14 @@ export default function OCPage() {
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
               style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.3)' }}>
               <ExternalLink size={13}/> Ir a Compras para facturar
+            </button>
+          )}
+          {/* Delete always visible */}
+          {oc && (
+            <button onClick={() => setOcAEliminar({ id: oc.id, numero: oc.numero })}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
+              style={{ background: 'rgba(224,90,78,0.1)', color: 'var(--rmg-red)', border: '1px solid rgba(224,90,78,0.25)' }}>
+              <Trash2 size={13}/> Eliminar
             </button>
           )}
         </div>
@@ -818,6 +851,78 @@ export default function OCPage() {
                 onClick={() => emailMut.mutate({ id: oc.id, body: emailForm })}
                 className="btn-primary flex items-center gap-1.5 disabled:opacity-50">
                 <Mail size={14}/> {emailMut.isPending ? 'Enviando…' : 'Enviar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmar eliminación */}
+      {ocAEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle size={20} style={{ color: 'var(--rmg-red)' }} />
+              <h2 className="font-bold text-base" style={{ color: 'var(--rmg-red)' }}>
+                Eliminar {ocAEliminar.numero}
+              </h2>
+            </div>
+
+            <p className="text-sm mb-4" style={{ color: 'var(--rmg-muted)' }}>
+              Esta acción no se puede deshacer.
+            </p>
+
+            {loadingImpacto ? (
+              <div className="py-6 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Calculando impacto…</div>
+            ) : impactoData ? (
+              <div className="space-y-3">
+                {impactoData.movimientos_stock?.length > 0 && (
+                  <div className="rounded-lg p-3" style={{ background: 'rgba(224,90,78,0.08)', border: '1px solid rgba(224,90,78,0.2)' }}>
+                    <div className="flex items-center gap-1.5 font-semibold text-sm mb-2" style={{ color: 'var(--rmg-red)' }}>
+                      <AlertTriangle size={14}/> STOCK SERÁ REVERTIDO
+                    </div>
+                    <div className="space-y-1">
+                      {impactoData.movimientos_stock.map((m, i) => (
+                        <div key={i} className="text-xs flex justify-between" style={{ color: 'var(--rmg-off)' }}>
+                          <span className="font-mono" style={{ color: 'var(--rmg-blt)' }}>{m.codigo}</span>
+                          <span className="truncate mx-2" style={{ color: 'var(--rmg-muted)' }}>{m.descripcion}</span>
+                          <span className="font-bold flex-shrink-0" style={{ color: 'var(--rmg-red)' }}>−{m.cantidad} unid.</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {impactoData.tiene_compra_vinculada && (
+                  <div className="rounded-lg p-3" style={{ background: 'rgba(244,162,60,0.08)', border: '1px solid rgba(244,162,60,0.2)' }}>
+                    <div className="font-semibold text-sm mb-1" style={{ color: 'var(--rmg-gold)' }}>
+                      ⚠ COMPRA VINCULADA
+                    </div>
+                    <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                      Existe una compra asociada a esta OC. La compra <strong>NO</strong> se eliminará, pero quedará desvinculada. Revísala en el módulo Compras.
+                    </p>
+                  </div>
+                )}
+
+                {impactoData.movimientos_stock?.length === 0 && !impactoData.tiene_compra_vinculada && (
+                  <div className="rounded-lg p-3" style={{ background: 'rgba(45,201,138,0.06)', border: '1px solid rgba(45,201,138,0.15)' }}>
+                    <div className="text-sm" style={{ color: 'var(--rmg-teal)' }}>
+                      ✓ Sin impacto en stock ni compras vinculadas.
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            <div className="flex gap-3 justify-end mt-5">
+              <button onClick={() => setOcAEliminar(null)} className="btn-secondary" disabled={deleteMut.isPending}>Cancelar</button>
+              <button
+                disabled={loadingImpacto || deleteMut.isPending}
+                onClick={() => deleteMut.mutate(ocAEliminar.id)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                style={{ background: 'rgba(224,90,78,0.15)', color: 'var(--rmg-red)', border: '1px solid rgba(224,90,78,0.3)' }}>
+                <Trash2 size={14}/>
+                {deleteMut.isPending ? 'Eliminando…' : 'Confirmar eliminación'}
               </button>
             </div>
           </div>

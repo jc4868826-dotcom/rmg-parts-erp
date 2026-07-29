@@ -1934,6 +1934,43 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_architecture_v1')
     console.log('✅ Migración oc_architecture_v1 — oc_historial, compra_id en OC, origen+proveedor_id en compras')
   }
+
+  // Migration 43: oc_orphan_stock_correction_v1 — revertir stock de OCs eliminadas sin reversión
+  const m43 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('oc_orphan_stock_correction_v1')
+  if (!m43) {
+    try {
+      const orphaned = db.prepare(`
+        SELECT ms.* FROM movimientos_stock ms
+        WHERE ms.motivo = 'recepcion_oc' AND ms.tipo = 'entrada'
+          AND ms.referencia NOT IN (SELECT numero FROM ordenes_compra WHERE numero IS NOT NULL)
+      `).all()
+
+      let corrected = 0
+      for (const mov of orphaned) {
+        const prod = db.prepare(
+          'SELECT codigo_sku, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
+        ).get(mov.codigo)
+        if (prod) {
+          const stockAnterior = prod.stock_actual
+          const stockNuevo    = Math.max(0, stockAnterior - mov.cantidad)
+          db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stockNuevo, mov.codigo)
+          try {
+            db.prepare(`INSERT INTO movimientos_stock
+              (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia)
+              VALUES (?,?,?,?,?,?,?,?,?,?)`)
+              .run(uuidv4(), mov.codigo, mov.codigo, mov.descripcion, 'ajuste', -mov.cantidad,
+                stockAnterior, stockNuevo, 'Corrección: OC eliminada sin reversión de stock', mov.referencia)
+          } catch (_) {}
+          corrected++
+          console.log(`✅ Corregido: SKU ${mov.codigo} — revertidas ${mov.cantidad} unids (OC: ${mov.referencia})`)
+        }
+      }
+      console.log(`✅ Migración oc_orphan_stock_correction_v1 — ${corrected} movimientos huérfanos corregidos de ${orphaned.length} detectados`)
+    } catch (e) {
+      console.warn('⚠️ oc_orphan_stock_correction_v1 error:', e.message)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_orphan_stock_correction_v1')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
