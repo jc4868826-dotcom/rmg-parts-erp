@@ -1910,6 +1910,30 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_stock_v1')
     console.log('✅ Migración lista_precios_stock_v1 — stock_actual y stock_minimo añadidos a lista_precios, datos migrados desde productos')
   }
+
+  // Migration 42: oc_architecture_v1 — oc_historial + compra_id en OC + origen/proveedor_id en compras
+  const m42 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('oc_architecture_v1')
+  if (!m42) {
+    db.exec(`CREATE TABLE IF NOT EXISTS oc_historial (
+      id TEXT PRIMARY KEY,
+      oc_id TEXT REFERENCES ordenes_compra(id) ON DELETE CASCADE,
+      fecha_evento TEXT DEFAULT (datetime('now')),
+      usuario_id TEXT,
+      usuario_nombre TEXT,
+      estado_anterior TEXT,
+      estado_nuevo TEXT,
+      tipo_evento TEXT,
+      detalle TEXT
+    )`)
+    const ocCols42 = db.prepare('PRAGMA table_info(ordenes_compra)').all().map(c => c.name)
+    if (!ocCols42.includes('compra_id')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN compra_id INTEGER')
+    if (!ocCols42.includes('observaciones')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN observaciones TEXT')
+    const comprasCols42 = db.prepare('PRAGMA table_info(compras)').all().map(c => c.name)
+    if (!comprasCols42.includes('origen'))       db.exec("ALTER TABLE compras ADD COLUMN origen TEXT DEFAULT 'directa'")
+    if (!comprasCols42.includes('proveedor_id')) db.exec('ALTER TABLE compras ADD COLUMN proveedor_id TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_architecture_v1')
+    console.log('✅ Migración oc_architecture_v1 — oc_historial, compra_id en OC, origen+proveedor_id en compras')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

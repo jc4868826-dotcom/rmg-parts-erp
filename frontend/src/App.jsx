@@ -26,7 +26,7 @@ import ConfiguracionPage from '@pages/ConfiguracionPage'
 import GastosPage       from '@pages/GastosPage'
 import AgendaPage       from '@pages/AgendaPage'
 import ProveedoresPage  from '@pages/ProveedoresPage'
-import ComprasPage      from '@pages/ComprasPage'
+import OCPage           from '@pages/OCPage'
 import BodegasPage      from '@pages/BodegasPage'
 import CxCPage          from '@pages/CxCPage'
 import CxPPage          from '@pages/CxPPage'
@@ -101,7 +101,7 @@ export default function App() {
               <Route path="reportes"            element={<ReportesPage />} />
               <Route path="config"              element={<ConfiguracionPage />} />
               <Route path="proveedores"        element={<ProveedoresPage />} />
-              <Route path="compras"            element={<ComprasPage />} />
+              <Route path="compras"            element={<OCPage />} />
               <Route path="bodegas"            element={<BodegasPage />} />
               <Route path="cxc"                element={<CxCPage />} />
               <Route path="cxp"                element={<CxPPage />} />

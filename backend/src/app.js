@@ -101,6 +101,7 @@ app.use('/api/notas-venta',            require('./routes/notasVenta'));    // No
 app.use('/api/ventas',                 require('./routes/ventas'));          // ERP Ventas
 app.use('/api/edr',                    require('./routes/edr'));             // Estado de Resultados
 app.use('/api/campanas',            require('./routes/campanas'));  // Módulo Campañas
+app.use('/api/oc',                  require('./routes/oc'));          // Órdenes de Compra (módulo independiente)
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {

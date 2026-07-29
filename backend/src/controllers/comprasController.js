@@ -254,25 +254,28 @@ const getComprasList = (req, res) => {
 
 const createCompra = (req, res) => {
   try {
-    const { fecha, proveedor, numero_oc, numero_factura, estado, fecha_vencimiento, notas, items = [],
-            oc_id, forma_pago, cuenta_bancaria, fecha_pago } = req.body
+    const { fecha, proveedor, proveedor_id, numero_oc, numero_factura, estado, fecha_vencimiento, notas, items = [],
+            oc_id, forma_pago, cuenta_bancaria, fecha_pago, origen } = req.body
     if (!fecha || !proveedor) return res.status(400).json({ error: 'fecha y proveedor son requeridos' })
 
     let oc = null
     if (oc_id) {
       oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(oc_id)
       if (!oc) return res.status(400).json({ error: 'OC no encontrada' })
-      if (oc.pagada) return res.status(400).json({ error: 'La OC ya está pagada' })
     }
 
-    const total = items.reduce((s, i) => s + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
-    const hoy = new Date().toISOString().split('T')[0]
+    const total    = items.reduce((s, i) => s + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
+    const hoy      = new Date().toISOString().split('T')[0]
+    const origenFinal = origen || (oc_id ? 'oc' : 'directa')
 
     const doCreate = db.transaction(() => {
-      db.prepare('INSERT INTO compras (fecha, proveedor, numero_oc, numero_factura, total, estado, fecha_vencimiento, notas, oc_id, forma_pago, cuenta_bancaria, fecha_pago) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-        .run(fecha, proveedor, numero_oc || null, numero_factura || null, total, estado || 'Borrador',
-             fecha_vencimiento || null, notas || null, oc_id || null,
-             forma_pago || 'Transferencia', cuenta_bancaria || null, fecha_pago || null)
+      db.prepare(`INSERT INTO compras
+        (fecha, proveedor, proveedor_id, numero_oc, numero_factura, total, estado,
+         fecha_vencimiento, notas, oc_id, forma_pago, cuenta_bancaria, fecha_pago, origen)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(fecha, proveedor, proveedor_id || null, numero_oc || null, numero_factura || null,
+          total, estado || 'Borrador', fecha_vencimiento || null, notas || null, oc_id || null,
+          forma_pago || 'Transferencia', cuenta_bancaria || null, fecha_pago || null, origenFinal)
       const newId = db.prepare('SELECT last_insert_rowid() as id').get().id
       for (const item of items) {
         const sub = Number(item.costo_unitario || 0) * Number(item.cantidad || 0)
@@ -280,12 +283,16 @@ const createCompra = (req, res) => {
           .run(newId, item.sku || '', item.descripcion || '', Number(item.cantidad || 0), Number(item.costo_unitario || 0), sub)
       }
       if (oc) {
-        db.prepare("UPDATE ordenes_compra SET pagada = 1, estado = 'pagada', updated_at = datetime('now') WHERE id = ?").run(oc_id)
-        db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla = 'ordenes_compra' AND origen_id = ?").run(oc_id)
+        // Link OC back to this compra (financial cycle begins)
+        try { db.prepare("UPDATE ordenes_compra SET compra_id = ?, updated_at = datetime('now') WHERE id = ?").run(newId, oc_id) } catch (_) {}
+      }
+      // If compra is created directly in Pagada, register flujo_caja immediately
+      const estadoFinal = estado || 'Borrador'
+      if (estadoFinal === 'Pagada') {
         try {
           db.prepare('INSERT INTO caja_movimientos (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria) VALUES (?,?,?,?,?,?,?,?,?,?)')
-            .run('egreso', 'Compra', `OC ${oc.numero} · ${oc.proveedor}`, total || oc.total,
-                 hoy, fecha_pago || hoy, 'confirmado', 'ordenes_compra', oc_id, cuenta_bancaria || null)
+            .run('egreso', 'Compra', oc ? `OC ${oc.numero} · ${oc.proveedor}` : `Compra · ${proveedor}`, total,
+              hoy, fecha_pago || hoy, 'confirmado', 'compras', String(newId), cuenta_bancaria || null)
         } catch (_) {}
       }
       return newId

@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, X, Pencil, Trash2, ShoppingBag, Send, PackageCheck, CreditCard, ChevronRight, Search } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ShoppingBag, Send, PackageCheck, CreditCard, ChevronRight, Search, ChevronDown, ChevronUp, ExternalLink, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const MES_ACTUAL = new Date().toISOString().slice(0, 7)
@@ -39,9 +40,9 @@ const ESTADO_STYLE = {
 const ESTADOS_EDIT = ['Borrador', 'Enviada', 'Recibida', 'Pagada', 'Anulada']
 const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, costo_unitario: 0 }
 const FORM_INIT = {
-  fecha: HOY, proveedor: 'Cristian Hughes', numero_oc: '', numero_factura: '',
+  fecha: HOY, proveedor: 'Cristian Hughes', proveedor_id: null, numero_oc: '', numero_factura: '',
   estado: 'Borrador', fecha_vencimiento: '', notas: '', items: [{ ...ITEM_INIT }],
-  oc_id: null, forma_pago: 'Transferencia', cuenta_bancaria: '', fecha_pago: HOY,
+  oc_id: null, origen: 'directa', forma_pago: 'Transferencia', cuenta_bancaria: '', fecha_pago: HOY,
 }
 
 // ── SKU item row — same search pattern as CotizacionForm ────────────────────
@@ -159,10 +160,13 @@ function SkuItemRow({ item, idx, onUpdate, onRemove, showRemove }) {
 
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function ComprasErpPage() {
-  const [mes, setMes]           = useState(MES_ACTUAL)
-  const [showForm, setShowForm] = useState(false)
-  const [editando, setEditando] = useState(null)
-  const [form, setForm]         = useState(FORM_INIT)
+  const navigate = useNavigate()
+  const [mes, setMes]                   = useState(MES_ACTUAL)
+  const [showForm, setShowForm]         = useState(false)
+  const [editando, setEditando]         = useState(null)
+  const [form, setForm]                 = useState(FORM_INIT)
+  const [origenSelector, setOrigenSelector] = useState('directa') // 'directa' | 'oc'
+  const [showOcPendientes, setShowOcPendientes] = useState(false)
   const qc = useQueryClient()
 
   const { data: compras = [], isLoading } = useQuery({
@@ -174,6 +178,12 @@ export default function ComprasErpPage() {
     queryKey: ['oc-disponibles', form.proveedor],
     queryFn: () => api.get('/compras/oc-disponibles', { params: { proveedor: form.proveedor } }).then(r => r.data),
     enabled: showForm && !!form.proveedor && form.proveedor !== 'Otro',
+    staleTime: 30_000,
+  })
+
+  const { data: ocsPendientes = [] } = useQuery({
+    queryKey: ['oc-pendientes-facturar'],
+    queryFn: () => api.get('/oc/pendientes-facturar').then(r => r.data),
     staleTime: 30_000,
   })
 
@@ -193,8 +203,17 @@ export default function ComprasErpPage() {
       ...f,
       oc_id: oc.id,
       numero_oc: oc.numero,
+      proveedor: oc.proveedor || f.proveedor,
+      proveedor_id: oc.proveedor_id || null,
+      origen: 'oc',
       items: ocItems.length ? ocItems : [{ ...ITEM_INIT }],
     }))
+  }
+
+  const generarDesdeOC = (oc) => {
+    handleSelectOC(oc)
+    setOrigenSelector('oc')
+    setShowForm(true)
   }
 
   const crearMut = useMutation({
@@ -275,6 +294,62 @@ export default function ComprasErpPage() {
         <input type="month" className="rmg-input text-xs py-1.5 w-36" value={mes} onChange={e => setMes(e.target.value)} />
       </div>
 
+      {/* ── OC Pendientes de Facturar ── */}
+      {ocsPendientes.length > 0 && (
+        <div className="rmg-card overflow-hidden" style={{ border: '1px solid rgba(45,201,138,0.2)' }}>
+          <button onClick={() => setShowOcPendientes(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors">
+            <div className="flex items-center gap-2">
+              <FileText size={15} style={{ color: 'var(--rmg-teal)' }} />
+              <span className="font-semibold text-sm" style={{ color: 'var(--rmg-teal)' }}>
+                OC Pendientes de Facturar
+              </span>
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)' }}>
+                {ocsPendientes.length}
+              </span>
+            </div>
+            {showOcPendientes ? <ChevronUp size={15} style={{ color: 'var(--rmg-muted)' }} /> : <ChevronDown size={15} style={{ color: 'var(--rmg-muted)' }} />}
+          </button>
+          {showOcPendientes && (
+            <div className="border-t" style={{ borderColor: 'rgba(45,201,138,0.15)' }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(56,182,255,0.06)' }}>
+                    {['N° OC','Proveedor','Fecha recepción','Total OC','Acción'].map(h => (
+                      <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ocsPendientes.map(oc => (
+                    <tr key={oc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                      <td className="px-4 py-2.5 font-mono font-bold text-xs" style={{ color: 'var(--rmg-blt)' }}>{oc.numero}</td>
+                      <td className="px-4 py-2.5 font-medium" style={{ color: 'var(--rmg-off)' }}>{oc.proveedor}</td>
+                      <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{oc.fecha_entrega ? formatFecha(oc.fecha_entrega) : '—'}</td>
+                      <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(oc.total)}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex gap-2">
+                          <button onClick={() => navigate('/compras')}
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded"
+                            style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blue)', border: '1px solid rgba(56,182,255,0.2)' }}>
+                            <ExternalLink size={11}/> Ver OC
+                          </button>
+                          <button onClick={() => generarDesdeOC(oc)}
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded font-semibold"
+                            style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.25)' }}>
+                            <Plus size={11}/> Generar Compra
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         <div className="rmg-card p-4">
@@ -297,7 +372,38 @@ export default function ComprasErpPage() {
       {/* ── Formulario nueva compra ── */}
       {showForm && (
         <div className="rmg-card p-5 animate-fade-in">
-          <h2 className="font-bold mb-4">Registrar compra</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold">Registrar compra</h2>
+            {/* Origin selector */}
+            <div className="flex gap-2">
+              {['directa', 'oc'].map(o => (
+                <button key={o} type="button" onClick={() => { setOrigenSelector(o); if (o === 'directa') setForm(f => ({ ...f, oc_id: null, origen: 'directa' })) }}
+                  className="text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                  style={origenSelector === o
+                    ? { background: 'rgba(56,182,255,0.15)', color: 'var(--rmg-blue)', border: '1px solid rgba(56,182,255,0.3)' }
+                    : { background: 'transparent', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  {o === 'directa' ? 'Compra directa' : 'Desde OC'}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Origin: OC selector */}
+          {origenSelector === 'oc' && (
+            <div className="mb-4 p-3 rounded-lg" style={{ background: 'rgba(56,182,255,0.05)', border: '1px solid rgba(56,182,255,0.15)' }}>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Seleccionar OC recibida</label>
+              <select className="rmg-input text-sm w-full" value={form.oc_id || ''} onChange={e => {
+                if (!e.target.value) { setForm(f => ({ ...f, oc_id: null })); return }
+                const oc = ocsPendientes.find(o => o.id === e.target.value)
+                if (oc) handleSelectOC(oc)
+              }}>
+                <option value="">— Seleccionar OC pendiente —</option>
+                {ocsPendientes.map(o => (
+                  <option key={o.id} value={o.id}>{o.numero} · {o.proveedor} · {formatCLP(o.total)} [RECIBIDA]</option>
+                ))}
+              </select>
+              {form.oc_id && <div className="text-xs mt-1.5 font-semibold" style={{ color: 'var(--rmg-teal)' }}>✓ OC {form.numero_oc} vinculada — proveedor e ítems prellenados</div>}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
@@ -470,7 +576,13 @@ export default function ComprasErpPage() {
                         className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(c.fecha)}</td>
                         <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>{c.proveedor}</td>
-                        <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>{c.numero_oc || '—'}</td>
+                        <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>
+                          {c.oc_id ? (
+                            <button onClick={() => navigate('/compras')} className="flex items-center gap-1 font-semibold" style={{ color: 'var(--rmg-blt)' }} title="Ver OC">
+                              {c.numero_oc || 'OC'} <ExternalLink size={10}/>
+                            </button>
+                          ) : (c.numero_oc || '—')}
+                        </td>
                         <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>{c.numero_factura || '—'}</td>
                         <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(c.total)}</td>
                         <td className="px-4 py-3">
