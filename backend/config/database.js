@@ -1993,6 +1993,16 @@ function runMigrations() {
     }
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('cxp_orphan_cleanup_v1')
   }
+
+  // Migration 45: lista_precios_iva_cols_v1 — añadir costo_compra y precio_venta (con IVA) a lista_precios
+  const m45 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('lista_precios_iva_cols_v1')
+  if (!m45) {
+    const lpCols = db.prepare('PRAGMA table_info(lista_precios)').all().map(c => c.name)
+    if (!lpCols.includes('costo_compra')) db.exec('ALTER TABLE lista_precios ADD COLUMN costo_compra REAL')
+    if (!lpCols.includes('precio_venta')) db.exec('ALTER TABLE lista_precios ADD COLUMN precio_venta REAL')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_iva_cols_v1')
+    console.log('✅ Migración lista_precios_iva_cols_v1 — columnas costo_compra y precio_venta añadidas')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

@@ -1,5 +1,6 @@
 const router = require('express').Router()
 const { db } = require('../../config/database')
+const { authenticate, requireRole } = require('../middleware/auth')
 const fs = require('fs')
 const path = require('path')
 
@@ -22,7 +23,6 @@ router.get('/buscar', (req, res) => {
     const terms = q.trim().split(/\s+/).filter(t => t.length >= 2)
     if (terms.length === 0) return res.json([])
 
-    // Each term must match at least one field (AND between terms, OR between fields)
     const conditions = terms.map(() =>
       `(descripcion       LIKE ? COLLATE NOCASE OR
         producto_generico LIKE ? COLLATE NOCASE OR
@@ -39,8 +39,10 @@ router.get('/buscar', (req, res) => {
     const rows = db.prepare(`
       SELECT
         codigo_sku, descripcion, producto_generico, marca, proveedor,
-        presentacion, tipo_envase, costo_unidad_neto, precio_venta_neto,
-        categoria, segmento_negocio
+        presentacion, tipo_envase, categoria, segmento_negocio,
+        costo_unidad_neto, precio_venta_neto,
+        costo_compra, precio_venta,
+        stock_actual, stock_minimo
       FROM lista_precios
       WHERE ${conditions}
       GROUP BY codigo_sku
@@ -48,9 +50,7 @@ router.get('/buscar', (req, res) => {
       LIMIT 200
     `).all(...params)
 
-    // Enrich with Vistony catalog matches not already covered by ERP results
     const normTerms = terms.map(_norm)
-    const erpDescriptions = new Set(rows.map(r => _norm(r.descripcion)))
 
     const vistonyMatches = vistonyData.filter(v => {
       const hay = _norm(v.nombre) + ' ' + _norm(v.aplicacion) + ' ' + _norm(v.sae_viscosidad)
@@ -60,10 +60,8 @@ router.get('/buscar', (req, res) => {
     const extraRows = []
     for (const v of vistonyMatches) {
       const normNombre = _norm(v.nombre)
-      // Skip if an ERP row already covers this product
       const alreadyCovered = rows.some(r => _norm(r.descripcion).includes(normNombre) || normNombre.includes(_norm(r.descripcion).split(' ')[0]))
       if (alreadyCovered) continue
-      // Try to find a loose ERP match by product name keyword
       const erpMatch = rows.find(r => _norm(r.descripcion).includes(normNombre.split(' ')[0]))
       if (!erpMatch) {
         extraRows.push({
@@ -74,10 +72,10 @@ router.get('/buscar', (req, res) => {
           proveedor: 'VISTONY',
           presentacion: v.presentaciones || null,
           tipo_envase: null,
-          costo_unidad_neto: null,
-          precio_venta_neto: null,
-          categoria: null,
-          segmento_negocio: null,
+          costo_unidad_neto: null, precio_venta_neto: null,
+          costo_compra: null, precio_venta: null,
+          categoria: null, segmento_negocio: null,
+          stock_actual: null, stock_minimo: null,
           nota: 'Consultar disponibilidad',
           sae_viscosidad: v.sae_viscosidad || null,
         })
@@ -94,6 +92,89 @@ router.get('/', (_req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM lista_precios ORDER BY proveedor, categoria, ranking_compra').all()
     res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/lista-precios/import — reemplaza toda la lista preservando stock
+// Body: { items: [{ segmento_negocio, prioridad_consumo, categoria, producto_generico,
+//   proveedor, marca, ranking_compra, codigo_sku, descripcion, presentacion,
+//   tipo_envase, unidades_por_pack, costo_compra, precio_venta, margen_clp }] }
+router.post('/import', authenticate, requireRole('admin'), (req, res) => {
+  try {
+    const { items } = req.body
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items debe ser un array no vacío' })
+    }
+
+    const doImport = db.transaction(() => {
+      // Preservar stock por codigo_sku (tomar el máximo si hay varias filas por SKU)
+      const stockMap = {}
+      for (const row of db.prepare('SELECT codigo_sku, stock_actual, stock_minimo FROM lista_precios').all()) {
+        const prev = stockMap[row.codigo_sku]
+        if (!prev || (row.stock_actual || 0) > (prev.stock_actual || 0)) {
+          stockMap[row.codigo_sku] = { stock_actual: row.stock_actual || 0, stock_minimo: row.stock_minimo || 5 }
+        }
+      }
+
+      db.prepare('DELETE FROM lista_precios').run()
+
+      const stmt = db.prepare(`
+        INSERT INTO lista_precios
+          (segmento_negocio, prioridad_consumo, categoria, producto_generico,
+           proveedor, marca, ranking_compra, codigo_sku, descripcion,
+           presentacion, tipo_envase, unidades_por_pack,
+           costo_compra, precio_venta,
+           costo_unidad_neto, precio_venta_neto,
+           costo_pack_neto, margen_clp, margen_pct,
+           stock_actual, stock_minimo)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `)
+
+      let inserted = 0
+      for (const it of items) {
+        const sku      = String(it.codigo_sku || '').trim()
+        const costoIVA = Number(it.costo_compra) || 0
+        const ventaIVA = Number(it.precio_venta) || 0
+        const unids    = Number(it.unidades_por_pack) || 1
+        const costoNeto = Math.round(costoIVA / 1.19)
+        const ventaNeto = Math.round(ventaIVA / 1.19)
+        const margenClp = Math.round(ventaIVA - costoIVA)
+        const margenPct = costoIVA > 0 ? parseFloat(((ventaIVA - costoIVA) / costoIVA).toFixed(4)) : 0
+        const stock     = stockMap[sku] || { stock_actual: 0, stock_minimo: 5 }
+
+        stmt.run(
+          it.segmento_negocio || null,
+          Number(it.prioridad_consumo) || null,
+          it.categoria || null,
+          it.producto_generico || null,
+          it.proveedor || null,
+          it.marca || null,
+          Number(it.ranking_compra) || null,
+          sku,
+          it.descripcion || null,
+          it.presentacion || null,
+          it.tipo_envase || null,
+          unids,
+          costoIVA,
+          ventaIVA,
+          costoNeto,
+          ventaNeto,
+          costoNeto * unids,
+          margenClp,
+          margenPct,
+          stock.stock_actual,
+          stock.stock_minimo,
+        )
+        inserted++
+      }
+      return { inserted, stockPreserved: Object.keys(stockMap).length }
+    })
+
+    const result = doImport()
+    console.log(`[lista-precios/import] ${result.inserted} filas, ${result.stockPreserved} SKUs con stock preservado`)
+    res.json({ ok: true, ...result })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
