@@ -47,6 +47,38 @@ function detectarCategoria(items) {
   return 'Insumos automotrices y de mantención · Distribución directa desde bodega Santiago RM · Factura con IVA · Entrega 24-48 hrs.'
 }
 
+
+const BENEFICIOS_SKU = {
+  '1500007': 'Aromatizante de ambiente para habitáculo · Presentación final al cliente · Fragancia fresca y duradera',
+  '1400025': 'Protege y acondiciona plásticos, gomas y tapizados · Deja superficies con brillo natural · Aroma a fresa',
+  '1000748': 'Aceite sintético 5W30 API SN · Compatible con motores modernos · Protección contra desgaste y depósitos',
+  '1400054': 'Limpieza profunda de parabrisas y vidrios · Sin rayas · Mejora visibilidad en manejo',
+  '1200080': 'Refrigerante OAT orgánico al 33% · Protección contra corrosión · Compatible con todos los metales del motor',
+  '1300013': 'Líquido de frenos DOT-3 · Punto de ebullición alto · Esencial en revisión pre-entrega',
+  '1400165': 'Abrillantador y protector de carrocería · Efecto espejo de larga duración · Ideal para preparación vehicular',
+}
+
+const BENEFICIOS_CAT = {
+  lubricante: 'Lubricante certificado API · Protección del motor y reducción de desgaste',
+  quimico: 'Producto de cuidado y presentación vehicular · Línea Vistony certificada',
+  refrigerante: 'Refrigerante certificado · Protección del sistema de enfriamiento',
+  frenos: 'Líquido de frenos certificado · Seguridad activa del vehículo',
+  neumatico: 'Neumático homologado para uso en Chile · Distribución directa RMG Parts',
+  bateria: 'Batería de alto rendimiento · Garantía de fábrica incluida',
+}
+
+function getBeneficio(sku, descripcion) {
+  if (BENEFICIOS_SKU[String(sku || '')]) return BENEFICIOS_SKU[String(sku)]
+  const d = (descripcion || '').toLowerCase()
+  if (/aceite|lubric|5w|10w|15w|20w|80w|75w|grasa|gear oil/.test(d)) return BENEFICIOS_CAT.lubricante
+  if (/shampoo|cera|polish|silicone|desengras|brillo|lava auto|limpia|quitamanchas|ambientador|abrillantador/.test(d)) return BENEFICIOS_CAT.quimico
+  if (/refrigerante|coolant|antifreeze/.test(d)) return BENEFICIOS_CAT.refrigerante
+  if (/freno|brake|dof/.test(d)) return BENEFICIOS_CAT.frenos
+  if (/neumatico|neumático|llanta|tire|tyre/.test(d)) return BENEFICIOS_CAT.neumatico
+  if (/bateria|batería|battery|amperio/.test(d)) return BENEFICIOS_CAT.bateria
+  return 'Producto distribuido directamente por RMG Parts'
+}
+
 function imprimirCotizacion(c) {
   const fmt = (n) => Math.round(n || 0).toLocaleString('es-CL')
   const hoy = new Date()
@@ -104,9 +136,10 @@ function imprimirCotizacion(c) {
   tbody tr:nth-child(odd)  { background: #fff; }
   tbody td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; vertical-align: middle; }
   td.cod  { font-family: 'Courier New', monospace; font-size: 10px; color: #718096; white-space: nowrap; }
-  td.desc { font-weight: 600; color: #1a2035; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  td.r    { text-align: right; }
-  td.disc { text-align: center; color: #e53e3e; font-size: 10px; }
+  td.desc { font-weight: 600; color: #1a2035; }
+  td.desc .desc-name { display: block; }
+  td.desc .beneficio { display: block; font-size: 7.5px; color: #718096; font-style: italic; margin-top: 1px; font-weight: 400; line-height: 1.3; }
+  td.r    { text-align: right; white-space: nowrap; }
 
   /* Totales */
   .totales-wrap { display: flex; justify-content: flex-end; margin-bottom: 10px; }
@@ -186,6 +219,9 @@ function imprimirCotizacion(c) {
       <div class="info-label">Cliente</div>
       <div class="cliente-name">${c.cliente || '—'}</div>
       ${c.cliente_rut ? `<div class="info-row"><span class="key">RUT</span><span class="val">${c.cliente_rut}</span></div>` : ''}
+      ${c.cliente_email ? `<div class="info-row"><span class="key">Email</span><span class="val">${c.cliente_email}</span></div>` : ''}
+      ${c.cliente_telefono ? `<div class="info-row"><span class="key">Teléfono</span><span class="val">${c.cliente_telefono}</span></div>` : ''}
+      ${c.cliente_direccion ? `<div class="info-row"><span class="key">Dirección</span><span class="val" style="font-size:9.5px">${c.cliente_direccion}</span></div>` : ''}
       <div class="info-row"><span class="key">Condición de pago</span><span class="val">${c.condicion_pago || 'Contado'}</span></div>
     </div>
   </div>
@@ -201,25 +237,26 @@ function imprimirCotizacion(c) {
   <table>
     <thead>
       <tr>
-        <th style="width:28px">N°</th>
-        <th style="width:90px">Código</th>
+        <th style="width:26px">N°</th>
+        <th style="width:88px">Código</th>
         <th>Descripción</th>
-        <th class="r" style="width:50px">Cant.</th>
-        <th class="r" style="width:100px">P. Neto Unit.</th>
-        <th class="r" style="width:50px">Desc %</th>
-        <th class="r" style="width:105px">Subtotal Neto</th>
+        <th class="r" style="width:46px">Cant.</th>
+        <th class="r" style="width:108px">P. Neto Unit.</th>
+        <th class="r" style="width:108px">Subtotal</th>
       </tr>
     </thead>
     <tbody>
       ${(c.items || []).map((i, idx) => `
       <tr>
-        <td style="color:#718096;font-size:11px">${idx + 1}</td>
-        <td class="cod">${i.codigo || '—'}</td>
-        <td class="desc">${i.descripcion || '—'}</td>
-        <td class="r">${i.cantidad}</td>
-        <td class="r">$${fmt(i.precio_unitario)}</td>
-        <td class="disc">${(i.descuento_pct || 0) > 0 ? (i.descuento_pct) + '%' : '—'}</td>
-        <td class="r" style="font-weight:700">$${fmt(i.subtotal)}</td>
+        <td style="color:#718096;font-size:10px;vertical-align:top;padding-top:5px">${idx + 1}</td>
+        <td class="cod" style="vertical-align:top;padding-top:5px">${i.codigo || '—'}</td>
+        <td class="desc">
+          <span class="desc-name">${i.descripcion || '—'}</span>
+          <span class="beneficio">${getBeneficio(i.codigo, i.descripcion)}</span>
+        </td>
+        <td class="r" style="vertical-align:top;padding-top:5px">${i.cantidad}</td>
+        <td class="r" style="vertical-align:top;padding-top:5px">$${fmt(i.precio_unitario)}</td>
+        <td class="r" style="font-weight:700;vertical-align:top;padding-top:5px">$${fmt(i.subtotal)}</td>
       </tr>`).join('')}
     </tbody>
   </table>
@@ -227,12 +264,7 @@ function imprimirCotizacion(c) {
   <!-- TOTALES -->
   <div class="totales-wrap">
     <div class="totales-box">
-      <div class="tot-row">
-        <span class="tl">Subtotal Neto</span>
-        <span class="tr">$${fmt(c.neto)}</span>
-      </div>
-      ${tieneDescuento ? `<div class="tot-row desc"><span class="tl">Descuento</span><span class="tr">-$${fmt(descuentoTotal)}</span></div>` : ''}
-      <div class="tot-divider"></div>
+      ${tieneDescuento ? `<div class="tot-row desc"><span class="tl">Descuento aplicado</span><span class="tr">-$${fmt(descuentoTotal)}</span></div>` : ''}
       <div class="tot-neto">
         <span class="tl">Neto</span>
         <span class="tr">$${fmt(c.neto)}</span>
@@ -252,11 +284,9 @@ function imprimirCotizacion(c) {
   <div class="cond-grid">
     <div class="cond-box">
       <div class="cond-title">Condiciones comerciales</div>
-      <div class="cond-item">Precios en pesos chilenos, netos sin IVA</div>
-      <div class="cond-item">IVA 19% incluido en el total</div>
-      <div class="cond-item">Cotización válida por ${validezDias} días desde emisión</div>
-      <div class="cond-item">Sujeto a disponibilidad de stock</div>
-      <div class="cond-item">Despacho: ${plazo}</div>
+      <div class="cond-item">Precios netos sin IVA · IVA 19% incluido en total</div>
+      <div class="cond-item">Válida ${validezDias} días · Sujeto a stock disponible</div>
+      <div class="cond-item">Despacho ${plazo}</div>
     </div>
     <div class="cond-box">
       <div class="cond-title">Forma de pago</div>
