@@ -275,7 +275,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-black" style={{ fontFamily:'Inter Tight, sans-serif' }}>Dashboard Gerencial</h1>
           <p className="text-sm mt-0.5" style={{ color:'var(--rmg-muted)' }}>
-            {periodoLabel()} · {SEG_NAME[activo.segmento]} · RMG Auto Parts
+            {periodoLabel()} · {SEG_NAME[activo.segmento]} · RMG Parts
           </p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"

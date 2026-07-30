@@ -23,11 +23,11 @@ export default function WhatsAppPage() {
   const mensajesMock = {
     wa001: [
       { id: 'm1', direccion: 'entrante', contenido: 'hola', created_at: '2026-06-27T09:00:00Z' },
-      { id: 'm2', direccion: 'saliente', contenido: '🔩 RMG Auto Parts\n¡Hola! Somos distribuidores mayoristas de repuestos en Santiago RM.\n\n¿Qué tipo de cliente eres?\n• Taller mecánico\n• Flota / Empresa\n• Concesionario', created_at: '2026-06-27T09:00:05Z' },
+      { id: 'm2', direccion: 'saliente', contenido: '🔩 RMG Parts\n¡Hola! Somos distribuidores mayoristas de repuestos en Santiago RM.\n\n¿Qué tipo de cliente eres?\n• Taller mecánico\n• Flota / Empresa\n• Concesionario', created_at: '2026-06-27T09:00:05Z' },
       { id: 'm3', direccion: 'entrante', contenido: 'Taller mecánico', created_at: '2026-06-27T09:01:00Z' },
       { id: 'm4', direccion: 'saliente', contenido: '📦 Perfecto. ¿Qué línea necesitas cotizar?\n• Baterías\n• Lubricantes\n• Neumáticos', created_at: '2026-06-27T09:01:05Z' },
       { id: 'm5', direccion: 'entrante', contenido: 'Baterías', created_at: '2026-06-27T09:02:00Z' },
-      { id: 'm6', direccion: 'saliente', contenido: '📋 *COTIZACIÓN RMG AUTO PARTS*\n🔢 N° COT-2026-001\n\n• BATERIA YOKO 55AMP (x4) = $256.000\n• AUSTER 5W30 4LT (x10) = $155.000\n\nNeto: $411.000 · IVA: $78.090\n*TOTAL: $489.090*\n\n✅ Entrega 4–24 hrs RM\n💳 Crédito 30 días disponible\n\nResponde *CONFIRMAR* para generar pedido', created_at: '2026-06-27T09:05:00Z' },
+      { id: 'm6', direccion: 'saliente', contenido: '📋 *COTIZACIÓN RMG PARTS*\n🔢 N° COT-2026-001\n\n• BATERIA YOKO 55AMP (x4) = $256.000\n• AUSTER 5W30 4LT (x10) = $155.000\n\nNeto: $411.000 · IVA: $78.090\n*TOTAL: $489.090*\n\n✅ Entrega 4–24 hrs RM\n💳 Crédito 30 días disponible\n\nResponde *CONFIRMAR* para generar pedido', created_at: '2026-06-27T09:05:00Z' },
       { id: 'm7', direccion: 'entrante', contenido: 'CONFIRMAR', created_at: '2026-06-27T09:15:00Z' },
       { id: 'm8', direccion: 'saliente', contenido: '✅ ¡Pedido confirmado!\n📦 PED-2026-001 generado en sistema.\nDespacho en 4–24 hrs a Av. Matta 1234.\n\nGracias por tu preferencia, Carlos 🙌', created_at: '2026-06-27T09:15:10Z' },
     ],

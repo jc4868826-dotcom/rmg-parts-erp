@@ -53,7 +53,7 @@ export default function ConfigPage() {
   const { user } = useAuth()
 
   const [empresa, setEmpresa] = useState({
-    nombre:   'RMG Auto Parts',
+    nombre:   'RMG Parts',
     rut:      '76.XXX.XXX-X',
     direccion:'Santiago, RM, Chile',
     telefono: '+56 9 1234 5678',

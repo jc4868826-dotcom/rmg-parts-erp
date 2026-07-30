@@ -17,7 +17,7 @@ function VistaFactura({ pedido, cotizacion }) {
       {/* Cabecera */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 32, borderBottom: '2px solid #1b8fd4', paddingBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: '#050f1c', letterSpacing: 1 }}>RMG AUTO PARTS</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#050f1c', letterSpacing: 1 }}>RMG PARTS</div>
           <div style={{ fontSize: 11, color: '#555', marginTop: 4 }}>Distribuidora mayorista automotriz · Santiago RM</div>
           <div style={{ fontSize: 11, color: '#555' }}>contacto@rmgautoparts.cl · +56 9 XXXX XXXX</div>
         </div>
@@ -90,7 +90,7 @@ function VistaFactura({ pedido, cotizacion }) {
       {/* Pie */}
       <div style={{ borderTop: '1px solid #e0ecff', paddingTop: 16, fontSize: 10, color: '#888', display: 'flex', justifyContent: 'space-between' }}>
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>RMG Auto Parts — Distribuidora Mayorista Automotriz</div>
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>RMG Parts — Distribuidora Mayorista Automotriz</div>
           <div>Esta nota de venta no tiene valor tributario. Documento de referencia comercial.</div>
           <div>La factura oficial se emite mediante SII una vez confirmado el pago.</div>
         </div>

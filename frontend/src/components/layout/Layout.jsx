@@ -1,5 +1,5 @@
 /**
- * RMG Auto Parts — Layout Principal
+ * RMG Parts — Layout Principal
  * Sidebar · Header · Contenido · Notificaciones
  */
 
@@ -271,7 +271,7 @@ export default function Layout() {
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-3 border-b" style={{ borderColor: 'rgba(56, 182, 255, 0.1)', background: 'rgba(7, 21, 40, 0.6)' }}>
           <div className="text-sm font-medium" style={{ color: 'var(--rmg-muted)' }}>
-            RMG Auto Parts · Santiago RM · {new Date().toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
+            RMG Parts · Santiago RM · {new Date().toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </div>
           <div className="flex items-center gap-3">
             {/* Meta mensual */}

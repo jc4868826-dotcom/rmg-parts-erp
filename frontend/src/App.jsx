@@ -1,5 +1,5 @@
 /**
- * RMG Auto Parts — App Principal
+ * RMG Parts — App Principal
  * React Router · Autenticación · Módulos RMG OS
  */
 

@@ -1,5 +1,5 @@
 /**
- * RMG Auto Parts — Campañas
+ * RMG Parts — Campañas
  * Gestión de campañas de marketing con generación IA (ZARA)
  */
 
@@ -324,7 +324,7 @@ export default function CampanasPage() {
           <textarea
             className="rmg-input"
             rows={3}
-            placeholder={'Juan Carlos Contreras\nGerente Comercial\nRMG Auto Parts\n+56 9 XXXX XXXX\nwww.rmgparts.cl'}
+            placeholder={'Juan Carlos Contreras\nGerente Comercial\nRMG Parts\n+56 9 XXXX XXXX\nwww.rmgparts.cl'}
             value={form.firma}
             onChange={e => fld('firma')(e.target.value)}
             style={{ whiteSpace: 'pre-wrap' }}
@@ -591,7 +591,7 @@ export default function CampanasPage() {
                 <textarea
                   className="rmg-input"
                   rows={3}
-                  placeholder={'Juan Carlos Contreras\nGerente Comercial\nRMG Auto Parts'}
+                  placeholder={'Juan Carlos Contreras\nGerente Comercial\nRMG Parts'}
                   value={editModal.firma || ''}
                   onChange={e => setEditModal(p => ({ ...p, firma: e.target.value }))}
                   style={{ whiteSpace: 'pre-wrap' }}

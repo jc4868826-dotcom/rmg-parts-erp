@@ -1,5 +1,5 @@
 /**
- * RMG Auto Parts — Utilidades de Formato y Cálculo
+ * RMG Parts — Utilidades de Formato y Cálculo
  * CLP · Porcentajes · Márgenes B2B
  */
 

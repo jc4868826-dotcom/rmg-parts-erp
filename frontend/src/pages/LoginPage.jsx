@@ -108,7 +108,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-xs text-center mt-5" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          RMG Auto Parts · Distribución mayorista automotriz · Santiago RM
+          RMG Parts · Distribución mayorista automotriz · Santiago RM
         </p>
       </div>
     </div>
