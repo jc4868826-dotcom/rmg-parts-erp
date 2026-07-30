@@ -107,7 +107,7 @@ function imprimirCotizacion(c) {
 
   /* Header */
   .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; }
-  .logo-img { height: 48px; object-fit: contain; display: block; }
+  .logo-img { height: 86px; object-fit: contain; display: block; }
   .header-info { text-align: right; font-size: 11px; color: #4a5568; line-height: 1.6; }
   .header-info a { color: #0071BD; text-decoration: none; }
   .divider { height: 3px; background: linear-gradient(90deg, #0071BD 0%, #29AAE1 60%, #a0d8f1 100%); border-radius: 2px; margin-bottom: 12px; }
