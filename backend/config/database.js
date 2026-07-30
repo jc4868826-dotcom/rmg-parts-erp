@@ -1971,6 +1971,28 @@ function runMigrations() {
     }
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_orphan_stock_correction_v1')
   }
+
+  // Migration 44: cxp_orphan_cleanup_v1 — eliminar CxP huérfanos de OC-2026-003 (OC no existe)
+  const m44 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('cxp_orphan_cleanup_v1')
+  if (!m44) {
+    try {
+      const orphans = db.prepare(`
+        SELECT id, numero, proveedor, oc_numero, monto FROM facturas_cxp
+        WHERE oc_numero = 'OC-2026-003'
+          AND oc_id NOT IN (SELECT id FROM ordenes_compra)
+      `).all()
+      for (const f of orphans) {
+        db.prepare('DELETE FROM caja_movimientos WHERE origen_tabla = ? AND origen_id = ?')
+          .run('facturas_cxp', f.id)
+        db.prepare('DELETE FROM facturas_cxp WHERE id = ?').run(f.id)
+        console.log(`✅ CxP huérfano eliminado: ${f.numero} — ${f.proveedor} $${f.monto}`)
+      }
+      console.log(`✅ Migración cxp_orphan_cleanup_v1 — ${orphans.length} CxP huérfanos eliminados`)
+    } catch (e) {
+      console.warn('⚠️ cxp_orphan_cleanup_v1 error:', e.message)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('cxp_orphan_cleanup_v1')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

@@ -231,6 +231,22 @@ const pagarFactura = (req, res) => {
   }
 }
 
+const deleteCxP = (req, res) => {
+  try {
+    const f = db.prepare('SELECT * FROM facturas_cxp WHERE id = ?').get(req.params.id)
+    if (!f) return res.status(404).json({ error: 'Factura CxP no encontrada' })
+    if (f.estado === 'pagada') {
+      return res.status(400).json({ error: 'No se puede eliminar una factura ya pagada' })
+    }
+    db.prepare('DELETE FROM caja_movimientos WHERE origen_tabla = ? AND origen_id = ?')
+      .run('facturas_cxp', req.params.id)
+    db.prepare('DELETE FROM facturas_cxp WHERE id = ?').run(req.params.id)
+    res.json({ ok: true, eliminada: f })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 // ── Compras ERP (tabla simple, distinta de ordenes_compra) ─────────────────
 const getComprasList = (req, res) => {
   try {
@@ -991,4 +1007,4 @@ const enviarEmailOC = async (req, res) => {
   }
 }
 
-module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra, enviarAutorizacion, autorizarOC, rechazarOC, enviarProveedor, recibirBodega, autorizarPago, getPendientesWorkflow, getOcsDisponibles, recepcionParcial, getRecepciones, registrarFactura, generarPdfOC, enviarEmailOC }
+module.exports = { getProveedores, getProveedor, createProveedor, updateProveedor, getOrdenes, getOrden, createOrden, updateOrden, recibirOrden, enviarOrden, pagarOrden, deleteOrden, getCxP, pagarFactura, deleteCxP, getComprasList, createCompra, updateCompra, deleteCompra, cambiarEstadoCompra, enviarAutorizacion, autorizarOC, rechazarOC, enviarProveedor, recibirBodega, autorizarPago, getPendientesWorkflow, getOcsDisponibles, recepcionParcial, getRecepciones, registrarFactura, generarPdfOC, enviarEmailOC }

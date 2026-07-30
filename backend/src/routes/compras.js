@@ -39,7 +39,8 @@ router.post('/ordenes/:id/enviar-email', c.enviarEmailOC)
 
 // CxP
 router.get('/cxp',                 c.getCxP)
-router.post('/cxp/:id/pagar',      c.pagarFactura)
+router.post('/cxp/:id/pagar',      authenticate, c.pagarFactura)
+router.delete('/cxp/:id',          authenticate, c.deleteCxP)
 
 // Compras ERP (tabla simple, separada de ordenes_compra)
 router.get('/',           authenticate, c.getComprasList)
