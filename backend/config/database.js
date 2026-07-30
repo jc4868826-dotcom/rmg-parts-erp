@@ -2003,6 +2003,25 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_iva_cols_v1')
     console.log('✅ Migración lista_precios_iva_cols_v1 — columnas costo_compra y precio_venta añadidas')
   }
+
+  // Migration 46: lista_precios_neto_cols_v1 — añadir precio_neto/costo_neto y corregir netos
+  // El Excel ya trae valores neto; la migración anterior dividió erróneamente por 1.19
+  const m46 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('lista_precios_neto_cols_v1')
+  if (!m46) {
+    try {
+      const lpCols = db.prepare('PRAGMA table_info(lista_precios)').all().map(c => c.name)
+      if (!lpCols.includes('precio_neto')) db.exec('ALTER TABLE lista_precios ADD COLUMN precio_neto REAL')
+      if (!lpCols.includes('costo_neto'))  db.exec('ALTER TABLE lista_precios ADD COLUMN costo_neto REAL')
+      // costo_compra y precio_venta ya tienen el neto correcto (raw del Excel)
+      db.exec('UPDATE lista_precios SET precio_neto = precio_venta, costo_neto = costo_compra')
+      // costo_unidad_neto y precio_venta_neto fueron divididos por 1.19 erróneamente — corregir
+      db.exec('UPDATE lista_precios SET costo_unidad_neto = costo_compra, precio_venta_neto = precio_venta')
+    } catch (e) {
+      console.warn('⚠️ lista_precios_neto_cols_v1 error:', e.message)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_neto_cols_v1')
+    console.log('✅ Migración lista_precios_neto_cols_v1 — precio_neto/costo_neto añadidos, netos corregidos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

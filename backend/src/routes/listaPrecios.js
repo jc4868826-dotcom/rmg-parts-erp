@@ -40,6 +40,7 @@ router.get('/buscar', (req, res) => {
       SELECT
         codigo_sku, descripcion, producto_generico, marca, proveedor,
         presentacion, tipo_envase, categoria, segmento_negocio,
+        precio_neto, costo_neto,
         costo_unidad_neto, precio_venta_neto,
         costo_compra, precio_venta,
         stock_actual, stock_minimo
@@ -125,23 +126,22 @@ router.post('/import', authenticate, requireRole('admin'), (req, res) => {
           (segmento_negocio, prioridad_consumo, categoria, producto_generico,
            proveedor, marca, ranking_compra, codigo_sku, descripcion,
            presentacion, tipo_envase, unidades_por_pack,
+           precio_neto, costo_neto,
            costo_compra, precio_venta,
            costo_unidad_neto, precio_venta_neto,
            costo_pack_neto, margen_clp, margen_pct,
            stock_actual, stock_minimo)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `)
 
       let inserted = 0
       for (const it of items) {
-        const sku      = String(it.codigo_sku || '').trim()
-        const costoIVA = Number(it.costo_compra) || 0
-        const ventaIVA = Number(it.precio_venta) || 0
-        const unids    = Number(it.unidades_por_pack) || 1
-        const costoNeto = Math.round(costoIVA / 1.19)
-        const ventaNeto = Math.round(ventaIVA / 1.19)
-        const margenClp = Math.round(ventaIVA - costoIVA)
-        const margenPct = costoIVA > 0 ? parseFloat(((ventaIVA - costoIVA) / costoIVA).toFixed(4)) : 0
+        const sku       = String(it.codigo_sku || '').trim()
+        const costoNeto = Number(it.costo_compra) || 0   // Excel COSTO COMPRA ya es neto
+        const precioNeto = Number(it.precio_venta) || 0  // Excel PRECIO VTA ya es neto
+        const unids     = Number(it.unidades_por_pack) || 1
+        const margenClp = Math.round(precioNeto - costoNeto)
+        const margenPct = costoNeto > 0 ? parseFloat(((precioNeto - costoNeto) / costoNeto).toFixed(4)) : 0
         const stock     = stockMap[sku] || { stock_actual: 0, stock_minimo: 5 }
 
         stmt.run(
@@ -157,10 +157,12 @@ router.post('/import', authenticate, requireRole('admin'), (req, res) => {
           it.presentacion || null,
           it.tipo_envase || null,
           unids,
-          costoIVA,
-          ventaIVA,
+          precioNeto,
           costoNeto,
-          ventaNeto,
+          costoNeto,   // costo_compra = costo_neto
+          precioNeto,  // precio_venta = precio_neto
+          costoNeto,   // costo_unidad_neto = costo_neto (sin IVA, el Excel ya es neto)
+          precioNeto,  // precio_venta_neto = precio_neto
           costoNeto * unids,
           margenClp,
           margenPct,
