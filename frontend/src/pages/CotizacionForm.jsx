@@ -39,7 +39,7 @@ function ProductoSearch({ item, onSelect, initialQuery = '' }) {
   const handleClear = () => {
     setQuery('')
     setOpen(false)
-    onSelect({ codigo_sku: '', descripcion: '', precio_venta_neto: 0, presentacion: '' })
+    onSelect({ codigo_sku: '', descripcion: '', precio_neto: 0, precio_venta_neto: 0, presentacion: '' })
   }
 
   return (
@@ -75,7 +75,7 @@ function ProductoSearch({ item, onSelect, initialQuery = '' }) {
               style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo_sku}</span>
-                <span className="font-bold text-xs" style={{ color: 'var(--rmg-teal)' }}>{formatCLP(p.precio_venta_neto)}</span>
+                <span className="font-bold text-xs" style={{ color: 'var(--rmg-teal)' }}>{formatCLP(p.precio_neto || p.precio_venta_neto)}</span>
               </div>
               <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--rmg-off)' }}>{p.descripcion}</div>
               <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{p.marca} · {p.presentacion}</div>
@@ -92,14 +92,16 @@ export default function CotizacionForm() {
   const navigate = useNavigate()
   const isEdit = Boolean(id)
 
-  const [clienteId, setClienteId] = useState('')
-  const [condicion, setCondicion] = useState('Contado')
-  const [notas, setNotas]         = useState('')
-  const [items, setItems]         = useState([
+  const [clienteId, setClienteId]   = useState('')
+  const [condicion, setCondicion]   = useState('Contado')
+  const [plazoEntrega, setPlazo]    = useState('24-48 hrs · Santiago RM')
+  const [validezDias, setValidez]   = useState(15)
+  const [notas, setNotas]           = useState('')
+  const [items, setItems]           = useState([
     { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0 }
   ])
-  const [saving, setSaving]       = useState(false)
-  const [loaded, setLoaded]       = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [loaded, setLoaded]         = useState(false)
 
   const { data: clientes = [] } = useQuery({
     queryKey: ['clientes'],
@@ -117,6 +119,8 @@ export default function CotizacionForm() {
     if (cotizacion && !loaded) {
       setClienteId(cotizacion.cliente_id || '')
       setCondicion(cotizacion.condicion_pago || 'Contado')
+      setPlazo(cotizacion.plazo_entrega || '24-48 hrs · Santiago RM')
+      setValidez(cotizacion.validez_dias || 15)
       setNotas(cotizacion.notas || '')
       if (cotizacion.items?.length) {
         setItems(cotizacion.items.map(i => ({
@@ -154,7 +158,7 @@ export default function CotizacionForm() {
         ...next[i],
         codigo: p.codigo_sku || '',
         descripcion: p.descripcion || '',
-        precio_unitario: p.precio_venta_neto || 0,
+        precio_unitario: p.precio_neto || p.precio_venta_neto || 0,
       }
       return next
     })
@@ -164,7 +168,7 @@ export default function CotizacionForm() {
     e.preventDefault()
     setSaving(true)
     try {
-      const payload = { cliente_id: clienteId, items, condicion_pago: condicion, notas, ...totales }
+      const payload = { cliente_id: clienteId, items, condicion_pago: condicion, plazo_entrega: plazoEntrega, validez_dias: validezDias, notas, ...totales }
       if (isEdit) {
         await api.put(`/cotizaciones/${id}`, payload)
         toast.success('Cotización actualizada')
@@ -221,6 +225,16 @@ export default function CotizacionForm() {
                 <option>Crédito 60 días</option>
                 <option>Transferencia anticipada</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Tiempo de entrega</label>
+              <input className="rmg-input" placeholder="24-48 hrs · Santiago RM"
+                value={plazoEntrega} onChange={e => setPlazo(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Validez (días)</label>
+              <input className="rmg-input" type="number" min="1" max="90"
+                value={validezDias} onChange={e => setValidez(Number(e.target.value))} />
             </div>
           </div>
 

@@ -24,45 +24,257 @@ const ESTADO_STYLES = {
 
 const ESTADOS_COTIZACION = ['borrador', 'enviada', 'aprobada', 'rechazada', 'vencida']
 
+function detectarCategoria(items) {
+  const descs = (items || []).map(i => (i.descripcion || '').toLowerCase()).join(' ')
+  const hasQuimico   = /shampoo|cera|polish|silicone|desengras|brillo|lava auto|limpia|detailing|quitamanchas|ambientador/.test(descs)
+  const hasLubricant = /aceite|lubric|5w|10w|15w|20w|80w|75w|grasa|gear oil|motor oil/.test(descs)
+  const hasFreno     = /freno|brake|dof/.test(descs)
+  const hasNeumatico = /neumatico|neumático|llanta|tire|tyre/.test(descs)
+  const hasBateria   = /bateria|batería|battery|amperio|amp/.test(descs)
+
+  if (hasQuimico && (hasLubricant || hasFreno)) {
+    return 'Kit de mantención y presentación vehicular · Productos certificados línea Vistony · Ideales para talleres de posventa, preparación y entrega de vehículos. Entrega directa en su taller, factura con IVA, sin mínimo de compra.'
+  }
+  if (hasNeumatico) {
+    return 'Neumáticos Kumho / Double Star · Homologados para uso en Chile · Precio distribuidor · Despacho coordinado a su taller o bodega.'
+  }
+  if (hasBateria) {
+    return 'Baterías Yoko G&B / Platin · Garantía de fábrica · Precio distribuidor · Entrega inmediata stock disponible.'
+  }
+  if (hasLubricant) {
+    return 'Lubricantes industriales y automotrices línea Vistony · API certificados · Entrega en 24 hrs · Precio distribuidor mayorista directo.'
+  }
+  return 'Insumos automotrices y de mantención · Distribución directa desde bodega Santiago RM · Factura con IVA · Entrega 24-48 hrs.'
+}
+
 function imprimirCotizacion(c) {
-  const win = window.open('', '_blank', 'width=800,height=600')
-  win.document.write(`
-    <html><head><title>Cotización ${c.numero}</title>
-    <style>
-      body { font-family: Arial, sans-serif; padding: 32px; color: #1a1a2e; }
-      h1 { font-size: 22px; margin-bottom: 4px; }
-      .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
-      table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-      th { text-align: left; padding: 8px; border-bottom: 2px solid #ddd; font-size: 12px; text-transform: uppercase; color: #666; }
-      td { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; }
-      .total-row td { font-weight: bold; font-size: 15px; border-top: 2px solid #ddd; }
-      .right { text-align: right; }
-      .footer { margin-top: 32px; font-size: 11px; color: #999; }
-    </style></head><body>
-    <h1>RMG Auto Parts</h1>
-    <p class="sub">Cotización ${c.numero} · ${new Date().toLocaleDateString('es-CL')}</p>
-    <p><strong>Cliente:</strong> ${c.cliente || '—'}</p>
-    <p><strong>Condición de pago:</strong> ${c.condicion_pago || '—'}</p>
-    ${c.notas ? `<p><strong>Notas:</strong> ${c.notas}</p>` : ''}
-    <table>
-      <thead><tr><th>Código</th><th>Descripción</th><th class="right">Cant.</th><th class="right">P. Neto</th><th class="right">Subtotal</th></tr></thead>
-      <tbody>
-        ${(c.items || []).map(i => `<tr>
-          <td>${i.codigo || '—'}</td><td>${i.descripcion || '—'}</td>
-          <td class="right">${i.cantidad}</td>
-          <td class="right">$${i.precio_unitario?.toLocaleString('es-CL')}</td>
-          <td class="right">$${i.subtotal?.toLocaleString('es-CL')}</td>
-        </tr>`).join('')}
-      </tbody>
-      <tfoot>
-        <tr><td colspan="4" class="right">Neto</td><td class="right">$${c.neto?.toLocaleString('es-CL')}</td></tr>
-        <tr><td colspan="4" class="right">IVA (19%)</td><td class="right">$${c.iva?.toLocaleString('es-CL')}</td></tr>
-        <tr class="total-row"><td colspan="4" class="right">TOTAL</td><td class="right">$${c.total?.toLocaleString('es-CL')}</td></tr>
-      </tfoot>
-    </table>
-    <div class="footer">RMG Auto Parts · ventas@rmgautoparts.cl · Santiago, Chile</div>
-    </body></html>
-  `)
+  const fmt = (n) => Math.round(n || 0).toLocaleString('es-CL')
+  const hoy = new Date()
+  const fechaEmision = hoy.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const validezDias = c.validez_dias || 15
+  const fechaValidez = new Date(hoy.getTime() + validezDias * 86400000)
+    .toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const plazo = c.plazo_entrega || '24-48 hrs · Santiago RM'
+  const textoArg = detectarCategoria(c.items)
+  const tieneDescuento = (c.items || []).some(i => (i.descuento_pct || 0) > 0)
+  const descuentoTotal = (c.items || []).reduce((s, i) => {
+    const bruto = Math.round(i.cantidad * i.precio_unitario)
+    return s + (bruto - (i.subtotal || bruto))
+  }, 0)
+  const esCreditoCheque = (c.condicion_pago || '').toLowerCase().includes('crédito') || (c.condicion_pago || '').toLowerCase().includes('credito')
+
+  const win = window.open('', '_blank', 'width=850,height=700')
+  win.document.write(`<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="UTF-8">
+<title>Cotización ${c.numero}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a2035; background: #fff; font-size: 13px; line-height: 1.5; }
+  .page { max-width: 800px; margin: 0 auto; padding: 36px 40px 32px; }
+
+  /* Header */
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 18px; }
+  .logo-block { display: flex; flex-direction: column; gap: 2px; }
+  .logo-name { font-size: 26px; font-weight: 900; letter-spacing: -0.5px; color: #0071BD; }
+  .logo-tag  { font-size: 10px; font-weight: 600; color: #29AAE1; text-transform: uppercase; letter-spacing: 2px; }
+  .header-info { text-align: right; font-size: 12px; color: #4a5568; line-height: 1.7; }
+  .header-info a { color: #0071BD; text-decoration: none; }
+  .divider { height: 3px; background: linear-gradient(90deg, #0071BD 0%, #29AAE1 60%, #a0d8f1 100%); border-radius: 2px; margin-bottom: 22px; }
+
+  /* Bloques */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 18px; }
+  .info-box { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; }
+  .info-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #718096; margin-bottom: 8px; }
+  .info-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+  .info-row .key { color: #718096; }
+  .info-row .val { font-weight: 600; color: #1a2035; text-align: right; }
+  .cot-num { font-size: 18px; font-weight: 900; color: #0071BD; margin-bottom: 6px; }
+
+  /* Argumentación */
+  .arg-box { background: #ebf5fb; border-left: 4px solid #29AAE1; border-radius: 0 8px 8px 0; padding: 12px 16px; margin-bottom: 18px; font-size: 12px; color: #1a2035; line-height: 1.6; }
+  .arg-box strong { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #0071BD; margin-bottom: 4px; }
+
+  /* Tabla productos */
+  .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #718096; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  thead tr { background: #0071BD; color: #fff; }
+  thead th { padding: 9px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; text-align: left; }
+  thead th.r { text-align: right; }
+  tbody tr:nth-child(even) { background: #f7fafc; }
+  tbody tr:nth-child(odd)  { background: #fff; }
+  tbody td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 12px; vertical-align: middle; }
+  td.cod  { font-family: 'Courier New', monospace; font-size: 11px; color: #718096; white-space: nowrap; }
+  td.desc { font-weight: 600; color: #1a2035; }
+  td.r    { text-align: right; }
+  td.disc { text-align: center; color: #e53e3e; font-size: 11px; }
+
+  /* Totales */
+  .totales-wrap { display: flex; justify-content: flex-end; margin-bottom: 22px; }
+  .totales-box  { width: 300px; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+  .tot-row { display: flex; justify-content: space-between; padding: 7px 14px; font-size: 12px; border-bottom: 1px solid #e2e8f0; }
+  .tot-row .tl { color: #718096; }
+  .tot-row .tr { font-weight: 600; }
+  .tot-row.desc .tr { color: #e53e3e; }
+  .tot-divider { height: 2px; background: #e2e8f0; }
+  .tot-neto { display: flex; justify-content: space-between; padding: 7px 14px; font-size: 12px; border-bottom: 1px solid #e2e8f0; }
+  .tot-neto .tl { color: #718096; }
+  .tot-neto .tr { font-weight: 700; color: #1a2035; }
+  .tot-iva  { display: flex; justify-content: space-between; padding: 7px 14px; font-size: 12px; border-bottom: 2px solid #0071BD; }
+  .tot-iva .tl  { color: #718096; }
+  .tot-total { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #0071BD; }
+  .tot-total .tl { font-size: 13px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tot-total .tr { font-size: 20px; font-weight: 900; color: #fff; }
+
+  /* Condiciones */
+  .cond-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px; }
+  .cond-box  { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; }
+  .cond-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: #0071BD; margin-bottom: 10px; }
+  .cond-item { font-size: 11.5px; color: #2d3748; padding: 2.5px 0; display: flex; align-items: flex-start; gap: 6px; }
+  .cond-item::before { content: "✓"; color: #29AAE1; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .bank-item { font-size: 11.5px; color: #2d3748; padding: 2.5px 0; }
+  .bank-label { font-size: 10px; color: #718096; }
+
+  /* Footer */
+  .footer-div { height: 2px; background: linear-gradient(90deg, #0071BD, #29AAE1); border-radius: 2px; margin-bottom: 12px; }
+  .footer { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; color: #718096; }
+  .footer .left { font-style: italic; }
+  .footer .right { text-align: right; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { padding: 20px 24px; }
+  }
+</style>
+</head><body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo-block">
+      <div class="logo-name">RMG Auto Parts</div>
+      <div class="logo-tag">Distribución Mayorista B2B</div>
+    </div>
+    <div class="header-info">
+      <div><a href="mailto:ventas@rmgautoparts.cl">ventas@rmgautoparts.cl</a></div>
+      <div>+56 9 7448 8647</div>
+      <div>Santiago, Región Metropolitana</div>
+    </div>
+  </div>
+  <div class="divider"></div>
+
+  <!-- BLOQUE CLIENTE / COTIZACIÓN -->
+  <div class="two-col">
+    <div class="info-box">
+      <div class="info-label">Datos de la cotización</div>
+      <div class="cot-num">${c.numero}</div>
+      <div class="info-row"><span class="key">Fecha de emisión</span><span class="val">${fechaEmision}</span></div>
+      <div class="info-row"><span class="key">Válida hasta</span><span class="val">${fechaValidez}</span></div>
+      <div class="info-row"><span class="key">Tiempo de entrega</span><span class="val">${plazo}</span></div>
+    </div>
+    <div class="info-box">
+      <div class="info-label">Cliente</div>
+      <div style="font-size:15px;font-weight:800;color:#1a2035;margin-bottom:8px">${c.cliente || '—'}</div>
+      ${c.cliente_rut ? `<div class="info-row"><span class="key">RUT</span><span class="val">${c.cliente_rut}</span></div>` : ''}
+      <div class="info-row"><span class="key">Condición de pago</span><span class="val">${c.condicion_pago || 'Contado'}</span></div>
+    </div>
+  </div>
+
+  <!-- ARGUMENTACIÓN COMERCIAL -->
+  <div class="arg-box">
+    <strong>Por qué elegir RMG Auto Parts</strong>
+    ${textoArg}
+  </div>
+
+  <!-- TABLA PRODUCTOS -->
+  <div class="section-title">Detalle de productos</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:28px">N°</th>
+        <th style="width:90px">Código</th>
+        <th>Descripción</th>
+        <th class="r" style="width:50px">Cant.</th>
+        <th class="r" style="width:100px">P. Neto Unit.</th>
+        <th class="r" style="width:50px">Desc %</th>
+        <th class="r" style="width:105px">Subtotal Neto</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(c.items || []).map((i, idx) => `
+      <tr>
+        <td style="color:#718096;font-size:11px">${idx + 1}</td>
+        <td class="cod">${i.codigo || '—'}</td>
+        <td class="desc">${i.descripcion || '—'}</td>
+        <td class="r">${i.cantidad}</td>
+        <td class="r">$${fmt(i.precio_unitario)}</td>
+        <td class="disc">${(i.descuento_pct || 0) > 0 ? (i.descuento_pct) + '%' : '—'}</td>
+        <td class="r" style="font-weight:700">$${fmt(i.subtotal)}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+
+  <!-- TOTALES -->
+  <div class="totales-wrap">
+    <div class="totales-box">
+      <div class="tot-row">
+        <span class="tl">Subtotal Neto</span>
+        <span class="tr">$${fmt(c.neto)}</span>
+      </div>
+      ${tieneDescuento ? `<div class="tot-row desc"><span class="tl">Descuento</span><span class="tr">-$${fmt(descuentoTotal)}</span></div>` : ''}
+      <div class="tot-divider"></div>
+      <div class="tot-neto">
+        <span class="tl">Neto</span>
+        <span class="tr">$${fmt(c.neto)}</span>
+      </div>
+      <div class="tot-iva">
+        <span style="color:#718096">IVA (19%)</span>
+        <span>$${fmt(c.iva)}</span>
+      </div>
+      <div class="tot-total">
+        <span class="tl">TOTAL</span>
+        <span class="tr">$${fmt(c.total)}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONDICIONES COMERCIALES -->
+  <div class="cond-grid">
+    <div class="cond-box">
+      <div class="cond-title">Condiciones comerciales</div>
+      <div class="cond-item">Precios en pesos chilenos, netos sin IVA</div>
+      <div class="cond-item">IVA 19% incluido en el total</div>
+      <div class="cond-item">Cotización válida por ${validezDias} días desde emisión</div>
+      <div class="cond-item">Sujeto a disponibilidad de stock</div>
+      <div class="cond-item">Despacho: ${plazo}</div>
+    </div>
+    <div class="cond-box">
+      <div class="cond-title">Forma de pago</div>
+      ${esCreditoCheque
+        ? `<div class="cond-item">${c.condicion_pago} fecha factura</div>`
+        : `<div class="cond-item">Contado: transferencia bancaria o efectivo</div>`
+      }
+      <div style="margin-top:10px">
+        <div class="bank-label">Datos para transferencia</div>
+        <div class="bank-item"><strong>Banco de Chile</strong></div>
+        <div class="bank-item">Cta. Cte. N° 1781310106</div>
+        <div class="bank-item">RUT: 76.XXX.XXX-X · RMG Auto Parts SpA</div>
+        <div class="bank-item" style="color:#718096;font-size:10.5px">Enviar comprobante a ventas@rmgautoparts.cl</div>
+      </div>
+    </div>
+  </div>
+
+  ${c.notas ? `<div class="arg-box" style="background:#fffbeb;border-left-color:#f6ad55;margin-bottom:18px"><strong style="color:#b7791f">Notas</strong>${c.notas}</div>` : ''}
+
+  <!-- FOOTER -->
+  <div class="footer-div"></div>
+  <div class="footer">
+    <div class="left">RMG Auto Parts · Distribución mayorista B2B · Santiago RM</div>
+    <div class="right">Este documento es una cotización formal y no constituye factura</div>
+  </div>
+
+</div>
+</body></html>`)
   win.document.close()
   win.print()
 }

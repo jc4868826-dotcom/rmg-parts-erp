@@ -3,7 +3,12 @@ const { db, uuidv4 } = require('../../config/database')
 const withItems = (cot) => {
   if (!cot) return null
   const items = db.prepare('SELECT * FROM cotizacion_items WHERE cotizacion_id = ?').all(cot.id)
-  return { ...cot, items }
+  let cliente_rut = null
+  if (cot.cliente_id) {
+    const cl = db.prepare('SELECT rut, dv FROM clientes WHERE id = ?').get(cot.cliente_id)
+    if (cl?.rut) cliente_rut = cl.dv ? `${cl.rut}-${cl.dv}` : cl.rut
+  }
+  return { ...cot, items, cliente_rut }
 }
 
 const getAll = (req, res) => {
