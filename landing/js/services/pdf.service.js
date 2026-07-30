@@ -11,7 +11,7 @@ const PdfService = {
 
     doc.setFontSize(20);
     doc.setTextColor(11, 127, 224);
-    doc.text('RMG Auto Parts', 14, 20);
+    doc.text('RMG Parts', 14, 20);
 
     doc.setFontSize(11);
     doc.setTextColor(100, 100, 100);
@@ -54,7 +54,7 @@ const PdfService = {
 
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text('RMG Auto Parts · Santiago, Chile', 14, 285);
+    doc.text('RMG Parts · Santiago, Chile', 14, 285);
 
     doc.save(`cotizacion_${numero}.pdf`);
   }

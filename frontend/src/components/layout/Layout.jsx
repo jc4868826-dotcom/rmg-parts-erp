@@ -121,17 +121,14 @@ export default function Layout() {
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-5 border-b" style={{ borderColor: 'rgba(56, 182, 255, 0.1)' }}>
-          <div className="flex gap-1 flex-shrink-0">
-            <div className="w-2 h-5 rounded-sm" style={{ background: 'var(--rmg-blue)' }} />
-            <div className="w-2 h-5 rounded-sm" style={{ background: 'var(--rmg-teal)' }} />
-            <div className="w-2 h-5 rounded-sm" style={{ background: 'var(--rmg-purple)' }} />
-          </div>
-          {sidebarOpen && (
-            <div>
-              <div className="font-black text-base tracking-wider text-white">RMG</div>
-              <div className="text-xs font-medium" style={{ color: 'var(--rmg-muted)' }}>Auto Parts</div>
+          {sidebarOpen ? (
+            <img src="data:image/jpeg;base64,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" alt="RMG Parts" style={{ height: '36px', objectFit: 'contain' }} />
+          ) : (
+            <div className="flex gap-1 flex-shrink-0">
+              <div className="w-2 h-5 rounded-sm" style={{ background: 'var(--rmg-blue)' }} />
+              <div className="w-2 h-5 rounded-sm" style={{ background: 'var(--rmg-teal)' }} />
             </div>
-          )}
+          )} 
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="ml-auto p-1.5 rounded-lg transition-colors hover:bg-white/5"
