@@ -236,6 +236,30 @@ router.post('/:id/prospecto/:pid/reenviar', authenticate, async (req, res) => {
   }
 })
 
+// PUT /api/campanas/:id/prospecto/:pid/marcar-abierto — confirmación manual de apertura
+router.put('/:id/prospecto/:pid/marcar-abierto', authenticate, (req, res) => {
+  try {
+    const pc = db.prepare('SELECT id, campana_estado FROM pipeline_contactos WHERE id = ? AND campana_id = ?')
+      .get(req.params.pid, req.params.id)
+    if (!pc) return res.status(404).json({ error: 'Prospecto no encontrado en esta campaña' })
+    db.prepare(`
+      UPDATE pipeline_contactos
+      SET email_abierto = 1,
+          fecha_apertura = COALESCE(fecha_apertura, datetime('now')),
+          veces_abierto  = COALESCE(veces_abierto, 0) + 1,
+          campana_estado = CASE WHEN campana_estado = 'Enviado' THEN 'Abrió' ELSE campana_estado END
+      WHERE id = ?
+    `).run(req.params.pid)
+    const totalAbiertos = db.prepare(
+      "SELECT COUNT(*) as n FROM pipeline_contactos WHERE campana_id = ? AND email_abierto = 1"
+    ).get(req.params.id)?.n || 0
+    db.prepare('UPDATE campanas SET abiertos = ? WHERE id = ?').run(totalAbiertos, req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/campanas/generar — genera mensaje con IA (sin guardar)
 router.post('/generar', authenticate, async (req, res) => {
   try {

@@ -112,6 +112,12 @@ function PanelDetalle({ campana, onClose }) {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar estado'),
   })
 
+  const marcarAbiertoMut = useMutation({
+    mutationFn: (pid) => api.put(`/campanas/${campana.id}/prospecto/${pid}/marcar-abierto`).then(r => r.data),
+    onSuccess: () => { toast.success('Marcado como abierto'); refetch(); qc.invalidateQueries({ queryKey: ['campanas'] }) },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al marcar apertura'),
+  })
+
   const reenviarMut = useMutation({
     mutationFn: (pid) => api.post(`/campanas/${campana.id}/prospecto/${pid}/reenviar`).then(r => r.data),
     onSuccess: () => { toast.success('Email reenviado'); refetch() },
@@ -199,6 +205,13 @@ function PanelDetalle({ campana, onClose }) {
         </button>
       </div>
 
+      {/* Nota explicativa */}
+      <div style={{ padding: '6px 24px 8px', borderBottom: '0.5px solid rgba(56,182,255,0.05)', flexShrink: 0 }}>
+        <span style={{ fontSize: 11, color: '#435664', fontStyle: 'italic' }}>
+          👁 Apertura detectada por pixel de seguimiento · ✅ Respondido se marca manualmente
+        </span>
+      </div>
+
       {/* Tabla prospectos */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {isLoading ? (
@@ -271,6 +284,17 @@ function PanelDetalle({ campana, onClose }) {
                         onMouseLeave={e => e.currentTarget.style.background = 'rgba(56,182,255,0.1)'}
                       >
                         <Mail size={12} />
+                      </button>
+                      {/* Marcar abierto manualmente */}
+                      <button
+                        title="Marcar como Abrió (manual)"
+                        disabled={marcarAbiertoMut.isPending || p.email_abierto}
+                        onClick={() => marcarAbiertoMut.mutate(p.id)}
+                        style={{ display:'flex', alignItems:'center', justifyContent:'center', width:26, height:26, borderRadius:6, background: p.email_abierto ? 'rgba(41,170,225,0.2)' : 'rgba(41,170,225,0.08)', border:'0.5px solid rgba(41,170,225,0.3)', color:'#29AAE1', cursor: p.email_abierto ? 'default' : 'pointer', opacity: p.email_abierto ? 0.5 : 1 }}
+                        onMouseEnter={e => { if (!p.email_abierto) e.currentTarget.style.background = 'rgba(41,170,225,0.2)' }}
+                        onMouseLeave={e => { if (!p.email_abierto) e.currentTarget.style.background = 'rgba(41,170,225,0.08)' }}
+                      >
+                        <Eye size={12} />
                       </button>
                       {/* Marcar respondió */}
                       <button
