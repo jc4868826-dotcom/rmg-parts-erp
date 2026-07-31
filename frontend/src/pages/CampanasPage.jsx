@@ -99,10 +99,11 @@ function PanelDetalle({ campana, onClose }) {
   const qc = useQueryClient()
   const [filtro, setFiltro] = useState('Todos')
 
-  const { data: resumen, isLoading, refetch } = useQuery({
+  const { data: resumen, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['campana-resumen', campana.id],
     queryFn: () => api.get(`/campanas/${campana.id}/resumen`).then(r => r.data),
     staleTime: 30000,
+    retry: 1,
   })
 
   const estadoMut = useMutation({
@@ -204,6 +205,14 @@ function PanelDetalle({ campana, onClose }) {
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--rmg-muted)' }}>
             <Loader2 size={20} className="animate-spin" style={{ margin: '0 auto 8px' }} />
             <div style={{ fontSize: 13 }}>Cargando prospectos...</div>
+          </div>
+        ) : isError ? (
+          <div style={{ padding: 48, textAlign: 'center' }}>
+            <div style={{ fontSize: 13, color: '#e05a4e', marginBottom: 8 }}>Error al cargar prospectos</div>
+            <div style={{ fontSize: 11, color: 'var(--rmg-muted)', marginBottom: 16 }}>{error?.response?.data?.error || error?.message || 'Error desconocido'}</div>
+            <button onClick={() => refetch()} style={{ fontSize: 12, padding: '6px 16px', borderRadius: 7, background: 'rgba(56,182,255,0.1)', border: '0.5px solid rgba(56,182,255,0.3)', color: 'var(--rmg-blt)', cursor: 'pointer' }}>
+              Reintentar
+            </button>
           </div>
         ) : prospectosFiltrados.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--rmg-muted)', fontSize: 13 }}>

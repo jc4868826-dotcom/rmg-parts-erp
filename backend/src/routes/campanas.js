@@ -93,7 +93,7 @@ router.post('/:id/lanzar', authenticate, async (req, res) => {
         const mensajeBase = campana.mensaje_editado || campana.mensaje_generado || ''
         const mensajePersonalizado = mensajeBase
           .replace(/\{\{empresa\}\}/g, p.empresa || '')
-          .replace(/\{\{nombre\}\}/g,  p.nombre   || p.empresa || '')
+          .replace(/\{\{nombre\}\}/g,  p.nombre_contacto || p.empresa || '')
           .replace(/\{\{rubro\}\}/g,   p.rubro    || '')
         const textoFinal = campana.firma
           ? mensajePersonalizado + '\n\n' + campana.firma
@@ -137,10 +137,10 @@ router.get('/:id/resumen', authenticate, (req, res) => {
 
     const prospectos = tieneTracking
       ? db.prepare(
-          'SELECT id, empresa, nombre, email, rubro, campana_estado, email_abierto, fecha_apertura, veces_abierto FROM pipeline_contactos WHERE campana_id = ?'
+          'SELECT id, empresa, nombre_contacto AS nombre, email, rubro, campana_estado, email_abierto, fecha_apertura, veces_abierto FROM pipeline_contactos WHERE campana_id = ?'
         ).all(req.params.id)
       : db.prepare(
-          'SELECT id, empresa, nombre, email, rubro, campana_estado FROM pipeline_contactos WHERE campana_id = ?'
+          'SELECT id, empresa, nombre_contacto AS nombre, email, rubro, campana_estado FROM pipeline_contactos WHERE campana_id = ?'
         ).all(req.params.id)
 
     console.log(`[campanas/resumen] campana_id=${req.params.id} → ${prospectos.length} prospectos encontrados`)
@@ -217,7 +217,7 @@ router.post('/:id/prospecto/:pid/reenviar', authenticate, async (req, res) => {
     const mensajeBase = campana.mensaje_editado || campana.mensaje_generado || ''
     const mensajePersonalizado = mensajeBase
       .replace(/\{\{empresa\}\}/g, p.empresa || '')
-      .replace(/\{\{nombre\}\}/g,  p.nombre   || p.empresa || '')
+      .replace(/\{\{nombre\}\}/g,  p.nombre_contacto || p.empresa || '')
       .replace(/\{\{rubro\}\}/g,   p.rubro    || '')
     const textoFinal = campana.firma ? mensajePersonalizado + '\n\n' + campana.firma : mensajePersonalizado
     const htmlBody = textoFinal.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
