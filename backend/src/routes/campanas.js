@@ -65,6 +65,7 @@ router.post('/:id/lanzar', authenticate, async (req, res) => {
       "SELECT * FROM pipeline_contactos WHERE campana_id = ? AND (campana_estado IS NULL OR campana_estado = 'Sin enviar')"
     ).all(req.params.id)
 
+    console.log(`[campanas/lanzar] campana_id=${req.params.id} → ${prospectos.length} prospectos pendientes`)
     if (!prospectos.length) {
       return res.json({ enviados: 0, errores: [], mensaje: 'No hay prospectos pendientes de envío' })
     }
@@ -130,9 +131,19 @@ router.get('/:id/resumen', authenticate, (req, res) => {
     const campana = db.prepare('SELECT * FROM campanas WHERE id = ?').get(req.params.id)
     if (!campana) return res.status(404).json({ error: 'Campaña no encontrada' })
 
-    const prospectos = db.prepare(
-      'SELECT id, empresa, nombre, email, rubro, campana_estado, email_abierto, fecha_apertura, veces_abierto FROM pipeline_contactos WHERE campana_id = ?'
-    ).all(req.params.id)
+    // Detectar columnas de tracking disponibles (pueden no existir en DBs antiguas)
+    const pcCols = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+    const tieneTracking = pcCols.includes('email_abierto')
+
+    const prospectos = tieneTracking
+      ? db.prepare(
+          'SELECT id, empresa, nombre, email, rubro, campana_estado, email_abierto, fecha_apertura, veces_abierto FROM pipeline_contactos WHERE campana_id = ?'
+        ).all(req.params.id)
+      : db.prepare(
+          'SELECT id, empresa, nombre, email, rubro, campana_estado FROM pipeline_contactos WHERE campana_id = ?'
+        ).all(req.params.id)
+
+    console.log(`[campanas/resumen] campana_id=${req.params.id} → ${prospectos.length} prospectos encontrados`)
 
     const total_enviados  = prospectos.filter(p => p.campana_estado && p.campana_estado !== 'Sin enviar').length
     const total_abiertos  = prospectos.filter(p => p.email_abierto).length
@@ -153,9 +164,9 @@ router.get('/:id/resumen', authenticate, (req, res) => {
       email:          p.email,
       rubro:          p.rubro,
       estado_lead:    p.campana_estado || 'Sin enviar',
-      email_abierto:  p.email_abierto || 0,
-      fecha_apertura: p.fecha_apertura || null,
-      veces_abierto:  p.veces_abierto || 0,
+      email_abierto:  p.email_abierto  ?? 0,
+      fecha_apertura: p.fecha_apertura ?? null,
+      veces_abierto:  p.veces_abierto  ?? 0,
     }))
 
     res.json({

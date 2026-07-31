@@ -71,10 +71,16 @@ router.put('/asignar-campana', authenticate, (req, res) => {
     const { ids, campana_id, campana_nombre } = req.body
     if (!ids?.length || !campana_id) return res.status(400).json({ error: 'ids y campana_id requeridos' })
     const placeholders = ids.map(() => '?').join(',')
-    db.prepare(`UPDATE pipeline_contactos SET campana_id = ?, campana_nombre = ?, fecha_ultima_actualizacion = datetime('now') WHERE id IN (${placeholders})`)
+    // Resetear campana_estado y tracking para que el envío funcione correctamente en la nueva campaña
+    const pcCols = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+    const tieneTracking = pcCols.includes('email_abierto')
+    const trackingReset = tieneTracking
+      ? ", email_abierto = 0, fecha_apertura = NULL, veces_abierto = 0"
+      : ""
+    db.prepare(`UPDATE pipeline_contactos SET campana_id = ?, campana_nombre = ?, campana_estado = 'Sin enviar', campana_enviado_at = NULL${trackingReset}, fecha_ultima_actualizacion = datetime('now') WHERE id IN (${placeholders})`)
       .run(campana_id, campana_nombre || null, ...ids)
     const count = db.prepare(`SELECT COUNT(*) as n FROM pipeline_contactos WHERE campana_id = ?`).get(campana_id).n
-    db.prepare(`UPDATE campanas SET total_prospectos = ? WHERE id = ?`).run(count, campana_id)
+    try { db.prepare(`UPDATE campanas SET total_prospectos = ? WHERE id = ?`).run(count, campana_id) } catch(_) {}
     res.json({ ok: true, actualizados: ids.length, total_campana: count })
   } catch (err) {
     res.status(500).json({ error: err.message })
