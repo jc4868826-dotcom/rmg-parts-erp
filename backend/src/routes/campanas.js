@@ -97,11 +97,17 @@ router.post('/:id/lanzar', authenticate, async (req, res) => {
         const textoFinal = campana.firma
           ? mensajePersonalizado + '\n\n' + campana.firma
           : mensajePersonalizado
+        const htmlBody = textoFinal
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>')
+        const pixelUrl = `https://rmg-parts-erp.onrender.com/api/track/open/${campana.id}/${p.id}`
+        const htmlFinal = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#222;">${htmlBody}</div><img src="${pixelUrl}" width="1" height="1" style="display:none;" alt="" />`
         await transporter.sendMail({
-          from: '"RMG Auto Parts" <juancarlos.contreras@rmgautos.cl>',
+          from: '"RMG Parts" <juancarlos.contreras@rmgautos.cl>',
           to: p.email,
           subject: campana.asunto || campana.nombre,
           text: textoFinal,
+          html: htmlFinal,
         })
         db.prepare("UPDATE pipeline_contactos SET campana_estado = 'Enviado', campana_enviado_at = datetime('now') WHERE id = ?").run(p.id)
         enviados++
@@ -113,6 +119,107 @@ router.post('/:id/lanzar', authenticate, async (req, res) => {
     db.prepare("UPDATE campanas SET enviados = enviados + ?, estado = 'activa' WHERE id = ?").run(enviados, req.params.id)
 
     res.json({ ok: true, enviados, errores })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/campanas/:id/resumen
+router.get('/:id/resumen', authenticate, (req, res) => {
+  try {
+    const campana = db.prepare('SELECT * FROM campanas WHERE id = ?').get(req.params.id)
+    if (!campana) return res.status(404).json({ error: 'Campaña no encontrada' })
+
+    const prospectos = db.prepare(
+      'SELECT id, empresa, nombre, email, rubro, campana_estado, email_abierto, fecha_apertura, veces_abierto FROM pipeline_contactos WHERE campana_id = ?'
+    ).all(req.params.id)
+
+    const total_enviados  = prospectos.filter(p => p.campana_estado && p.campana_estado !== 'Sin enviar').length
+    const total_abiertos  = prospectos.filter(p => p.email_abierto).length
+    const total_respondidos = prospectos.filter(p => p.campana_estado === 'Respondió' || p.campana_estado === 'respondio').length
+
+    const tasa_apertura  = total_enviados > 0 ? Math.round((total_abiertos  / total_enviados) * 100) : 0
+    const tasa_respuesta = total_enviados > 0 ? Math.round((total_respondidos / total_enviados) * 100) : 0
+
+    const ORDEN_ESTADO = { 'Abrió': 0, 'Respondió': 1, 'respondio': 1, 'sin_respuesta': 2, 'Sin respuesta': 2, 'Enviado': 3, 'Sin enviar': 4 }
+    const ordenados = [...prospectos].sort((a, b) => {
+      const oa = ORDEN_ESTADO[a.campana_estado] ?? 5
+      const ob = ORDEN_ESTADO[b.campana_estado] ?? 5
+      return oa - ob
+    }).map(p => ({
+      id:             p.id,
+      empresa:        p.empresa,
+      nombre:         p.nombre,
+      email:          p.email,
+      rubro:          p.rubro,
+      estado_lead:    p.campana_estado || 'Sin enviar',
+      email_abierto:  p.email_abierto || 0,
+      fecha_apertura: p.fecha_apertura || null,
+      veces_abierto:  p.veces_abierto || 0,
+    }))
+
+    res.json({
+      id: campana.id, nombre: campana.nombre, estado: campana.estado,
+      segmento: campana.segmento, rubro: campana.rubro, canal: campana.canal,
+      total_enviados, total_abiertos, total_respondidos,
+      tasa_apertura, tasa_respuesta,
+      prospectos: ordenados,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PATCH /api/campanas/:id/prospecto/:pid/estado — cambio rápido de estado
+router.patch('/:id/prospecto/:pid/estado', authenticate, (req, res) => {
+  try {
+    const { estado } = req.body
+    if (!estado) return res.status(400).json({ error: 'estado requerido' })
+    db.prepare("UPDATE pipeline_contactos SET campana_estado = ? WHERE id = ? AND campana_id = ?")
+      .run(estado, req.params.pid, req.params.id)
+    if (estado === 'Respondió' || estado === 'respondio') {
+      const total_respondidos = db.prepare(
+        "SELECT COUNT(*) as n FROM pipeline_contactos WHERE campana_id = ? AND (campana_estado = 'Respondió' OR campana_estado = 'respondio')"
+      ).get(req.params.id)?.n || 0
+      db.prepare('UPDATE campanas SET respondidos = ? WHERE id = ?').run(total_respondidos, req.params.id)
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/campanas/:id/prospecto/:pid/reenviar — reenvía email a un prospecto
+router.post('/:id/prospecto/:pid/reenviar', authenticate, async (req, res) => {
+  try {
+    const campana = db.prepare('SELECT * FROM campanas WHERE id = ?').get(req.params.id)
+    if (!campana) return res.status(404).json({ error: 'Campaña no encontrada' })
+    const p = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ? AND campana_id = ?').get(req.params.pid, req.params.id)
+    if (!p) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    if (!p.email) return res.status(400).json({ error: 'Prospecto sin email' })
+
+    const nodemailer = require('nodemailer')
+    const transporter = nodemailer.createTransport({
+      host: 'mail.rmgautos.cl', port: 465, secure: true,
+      auth: { user: 'juancarlos.contreras@rmgautos.cl', pass: process.env.SMTP_PASS },
+    })
+    const mensajeBase = campana.mensaje_editado || campana.mensaje_generado || ''
+    const mensajePersonalizado = mensajeBase
+      .replace(/\{\{empresa\}\}/g, p.empresa || '')
+      .replace(/\{\{nombre\}\}/g,  p.nombre   || p.empresa || '')
+      .replace(/\{\{rubro\}\}/g,   p.rubro    || '')
+    const textoFinal = campana.firma ? mensajePersonalizado + '\n\n' + campana.firma : mensajePersonalizado
+    const htmlBody = textoFinal.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+    const pixelUrl = `https://rmg-parts-erp.onrender.com/api/track/open/${campana.id}/${p.id}`
+    const htmlFinal = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#222;">${htmlBody}</div><img src="${pixelUrl}" width="1" height="1" style="display:none;" alt="" />`
+
+    await transporter.sendMail({
+      from: '"RMG Parts" <juancarlos.contreras@rmgautos.cl>',
+      to: p.email, subject: campana.asunto || campana.nombre,
+      text: textoFinal, html: htmlFinal,
+    })
+    db.prepare("UPDATE pipeline_contactos SET campana_estado = 'Enviado', campana_enviado_at = datetime('now') WHERE id = ?").run(p.id)
+    res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

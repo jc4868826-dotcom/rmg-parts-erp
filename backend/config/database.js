@@ -2022,6 +2022,17 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_neto_cols_v1')
     console.log('✅ Migración lista_precios_neto_cols_v1 — precio_neto/costo_neto añadidos, netos corregidos')
   }
+
+  // Migration campana_tracking_v1 — apertura de emails en pipeline_contactos
+  const mCampanaTrack = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('campana_tracking_v1')
+  if (!mCampanaTrack) {
+    const pcColsT = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+    try { if (!pcColsT.includes('email_abierto'))  db.exec("ALTER TABLE pipeline_contactos ADD COLUMN email_abierto INTEGER DEFAULT 0") } catch(_) {}
+    try { if (!pcColsT.includes('fecha_apertura')) db.exec("ALTER TABLE pipeline_contactos ADD COLUMN fecha_apertura TEXT") } catch(_) {}
+    try { if (!pcColsT.includes('veces_abierto'))  db.exec("ALTER TABLE pipeline_contactos ADD COLUMN veces_abierto INTEGER DEFAULT 0") } catch(_) {}
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('campana_tracking_v1')
+    console.log('✅ Migración campana_tracking_v1 — email_abierto/fecha_apertura/veces_abierto en pipeline_contactos')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
