@@ -70,6 +70,7 @@ const remove = (req, res) => {
   try {
     const g = db.prepare('SELECT * FROM gastos WHERE id = ?').get(req.params.id)
     if (!g) return res.status(404).json({ error: 'Gasto no encontrado' })
+    db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla = 'gastos' AND origen_id = ?").run(req.params.id)
     db.prepare('DELETE FROM gastos WHERE id = ?').run(req.params.id)
     res.json({ ok: true })
   } catch (err) {

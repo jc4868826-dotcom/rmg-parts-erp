@@ -343,6 +343,7 @@ const deleteCompra = (req, res) => {
   try {
     const c = db.prepare('SELECT * FROM compras WHERE id = ?').get(req.params.id)
     if (!c) return res.status(404).json({ error: 'Compra no encontrada' })
+    db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla = 'compras' AND CAST(origen_id AS TEXT) = CAST(? AS TEXT)").run(req.params.id)
     db.prepare('DELETE FROM compras WHERE id = ?').run(req.params.id)
     res.json({ ok: true })
   } catch (err) {
@@ -616,6 +617,7 @@ const deleteOrden = (req, res) => {
         db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla='ordenes_compra' AND origen_id=?").run(o.id)
         const comprasRecs = db.prepare('SELECT id FROM compras WHERE numero_oc = ?').all(o.numero)
         for (const c of comprasRecs) {
+          db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla='compras' AND CAST(origen_id AS TEXT)=CAST(? AS TEXT)").run(c.id)
           db.prepare('DELETE FROM compra_items WHERE compra_id = ?').run(c.id)
         }
         db.prepare('DELETE FROM compras WHERE numero_oc = ?').run(o.numero)
