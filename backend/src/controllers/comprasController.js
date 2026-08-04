@@ -624,6 +624,15 @@ const deleteOrden = (req, res) => {
         try { db.prepare('DELETE FROM facturas_cxp WHERE oc_id = ?').run(o.id) } catch (_) {}
       }
 
+      // Facturas proveedor vinculadas (estado Facturada) — cascade caja + registro
+      try {
+        const fps = db.prepare('SELECT id FROM facturas_proveedor WHERE oc_id = ?').all(o.id)
+        for (const fp of fps) {
+          db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla='facturas_proveedor' AND origen_id=?").run(fp.id)
+        }
+        db.prepare('DELETE FROM facturas_proveedor WHERE oc_id = ?').run(o.id)
+      } catch (_) {}
+
       db.prepare('DELETE FROM oc_items WHERE oc_id = ?').run(o.id)
       db.prepare('DELETE FROM ordenes_compra WHERE id = ?').run(o.id)
     })

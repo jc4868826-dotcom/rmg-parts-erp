@@ -3,6 +3,24 @@ const c = require('../controllers/flujoCajaController')
 const { authenticate } = require('../middleware/auth')
 const { db } = require('../../config/database')
 
+// TEMP: eliminar caja id=13 + su facturas_proveedor (sin auth)
+router.post('/fix-vistony', (req, res) => {
+  try {
+    const entrada = db.prepare('SELECT * FROM caja_movimientos WHERE id = 13').get()
+    if (!entrada) return res.json({ ok: true, msg: 'id=13 ya no existe' })
+    const fpId = entrada.origen_id
+    let fpEliminada = null
+    if (fpId) {
+      fpEliminada = db.prepare('SELECT * FROM facturas_proveedor WHERE id = ?').get(fpId)
+      db.prepare('DELETE FROM facturas_proveedor WHERE id = ?').run(fpId)
+    }
+    db.prepare('DELETE FROM caja_movimientos WHERE id = 13').run()
+    res.json({ ok: true, caja_eliminada: entrada, facturas_proveedor_eliminada: fpEliminada })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // TEMP: desglose del saldo_actual para diagnóstico (sin auth)
 router.get('/debug-saldo', (req, res) => {
   try {
