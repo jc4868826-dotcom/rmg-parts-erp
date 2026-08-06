@@ -2068,7 +2068,7 @@ async function initDB() {
 
   let sqlJsDb
   if (fs.existsSync(DB_PATH)) {
-    sqlJsDb = new SQL.Database(fs.readFileSync(DB_PATH))
+    try { sqlJsDb = new SQL.Database(fs.readFileSync(DB_PATH)) } catch(e) { console.warn("DB corrupta, creando nueva:", e.message); sqlJsDb = new SQL.Database() }
   } else {
     sqlJsDb = new SQL.Database()
   }
