@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
-import { Tag, X, Package } from 'lucide-react'
+import { Tag, X, Package, Download } from 'lucide-react'
 
 function formatCLP(v) {
   if (v == null) return '—'
@@ -56,6 +56,21 @@ export default function ListaPreciosPage() {
 
   const hayFiltros = busqueda || filtroProveedor || filtroCategoria || filtroSegmento
 
+  async function descargarExcel() {
+    const token = localStorage.getItem('rmg_token')
+    const res = await fetch(api.defaults.baseURL + '/lista-precios/descargar-excel', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Lista_Precios_RMG_${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
   // Artículos únicos: un registro por SKU, precio más bajo
   const articulosUnicos = useMemo(() => {
     const map = {}
@@ -84,6 +99,9 @@ export default function ListaPreciosPage() {
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Precios RMG por producto · {filas.length} registros totales</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={descargarExcel} className="btn-secondary flex items-center gap-1.5 text-xs">
+            <Download size={14}/> Descargar Excel
+          </button>
           <Tag size={18} style={{ color: 'var(--rmg-blue)' }}/>
         </div>
       </div>

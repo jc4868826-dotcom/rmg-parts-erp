@@ -3,6 +3,7 @@ const { db } = require('../../config/database')
 const { authenticate, requireRole } = require('../middleware/auth')
 const fs = require('fs')
 const path = require('path')
+const XLSX = require('xlsx')
 
 let vistonyData = []
 try {
@@ -177,6 +178,65 @@ router.post('/import', authenticate, requireRole('admin'), (req, res) => {
     const result = doImport()
     console.log(`[lista-precios/import] ${result.inserted} filas, ${result.stockPreserved} SKUs con stock preservado`)
     res.json({ ok: true, ...result })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/lista-precios/descargar-excel — descarga toda la lista como xlsx
+router.get('/descargar-excel', authenticate, (req, res) => {
+  try {
+    const filas = db.prepare('SELECT * FROM lista_precios ORDER BY categoria, descripcion').all()
+    const fecha = new Date().toISOString().slice(0, 10)
+
+    const filaEncabezado = [
+      'Código SKU', 'Descripción', 'Familia / Categoría', 'Proveedor',
+      'Presentación', 'Tipo Envase', 'Segmento',
+      'Precio Neto Compra (sin IVA)', 'Precio Neto Venta (sin IVA)', 'Margen %',
+    ]
+
+    const datosFilas = filas.map(f => {
+      const costo  = Math.round(f.costo_unidad_neto || 0)
+      const precio = Math.round(f.precio_venta_neto || 0)
+      const margen = precio > 0
+        ? ((precio - costo) / precio * 100).toFixed(1) + '%'
+        : '—'
+      return [
+        f.codigo_sku    || '',
+        f.descripcion   || '',
+        f.categoria     || '',
+        f.proveedor     || '',
+        f.presentacion  || '',
+        f.tipo_envase   || '',
+        f.segmento_negocio || '',
+        costo,
+        precio,
+        margen,
+      ]
+    })
+
+    const notaPie = [['* Todos los precios son NETOS SIN IVA']]
+
+    const ws = XLSX.utils.aoa_to_sheet([filaEncabezado, ...datosFilas, [], ...notaPie])
+
+    // Anchos de columna
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 45 }, { wch: 28 }, { wch: 18 },
+      { wch: 14 }, { wch: 12 }, { wch: 14 },
+      { wch: 24 }, { wch: 24 }, { wch: 10 },
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Lista de Precios RMG')
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="Lista_Precios_RMG_${fecha}.xlsx"`,
+      'Content-Length': buffer.length,
+    })
+    res.send(buffer)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
