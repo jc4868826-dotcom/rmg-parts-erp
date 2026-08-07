@@ -2068,14 +2068,23 @@ async function initDB() {
 
   let sqlJsDb
   if (fs.existsSync(DB_PATH)) {
-    try { try { sqlJsDb = new SQL.Database(fs.readFileSync(DB_PATH)) } catch(e) { console.warn("DB corrupta, creando nueva:", e.message); sqlJsDb = new SQL.Database() } } catch(e) { console.warn("DB corrupta, creando nueva:", e.message); sqlJsDb = new SQL.Database() }
+    try { sqlJsDb = new SQL.Database(fs.readFileSync(DB_PATH)) } catch(e) { console.warn("DB corrupta, creando nueva:", e.message); sqlJsDb = new SQL.Database() }
   } else {
     sqlJsDb = new SQL.Database()
   }
 
   db._db = sqlJsDb
   db.pragma('foreign_keys = ON')
-  initSchema()
+  try {
+    initSchema()
+  } catch(schemaErr) {
+    if (schemaErr.message && schemaErr.message.includes('malformed')) {
+      console.warn('DB corrupta en initSchema, recreando...', schemaErr.message)
+      sqlJsDb = new SQL.Database()
+      db._db = sqlJsDb
+      initSchema()
+    } else { throw schemaErr }
+  }
   runMigrations()
   seedData()
 }
