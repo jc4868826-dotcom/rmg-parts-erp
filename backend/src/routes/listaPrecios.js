@@ -182,4 +182,75 @@ router.post('/import', authenticate, requireRole('admin'), (req, res) => {
   }
 })
 
+// POST /api/lista-precios/upsert-vistony — actualiza precios Vistony sin tocar otros proveedores
+// Body: { items: [{ codigo_sku, descripcion, presentacion, categoria,
+//   costo_unidad_neto, precio_venta_neto }] }
+router.post('/upsert-vistony', authenticate, requireRole('admin'), (req, res) => {
+  try {
+    const { items } = req.body
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items debe ser un array no vacío' })
+    }
+
+    const doUpsert = db.transaction(() => {
+      const stmtUpdate = db.prepare(`
+        UPDATE lista_precios SET
+          costo_unidad_neto = ?, precio_venta_neto = ?,
+          costo_compra = ?, precio_venta = ?,
+          costo_neto = ?, precio_neto = ?,
+          margen_clp = ?, margen_pct = ?,
+          descripcion = ?, presentacion = ?, categoria = ?
+        WHERE codigo_sku = ?
+      `)
+
+      const stmtInsert = db.prepare(`
+        INSERT INTO lista_precios
+          (codigo_sku, descripcion, presentacion, categoria,
+           proveedor, marca,
+           costo_unidad_neto, precio_venta_neto,
+           costo_compra, precio_venta,
+           costo_neto, precio_neto,
+           margen_clp, margen_pct,
+           stock_actual, stock_minimo)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,5)
+      `)
+
+      const stmtExists = db.prepare('SELECT id FROM lista_precios WHERE codigo_sku = ? LIMIT 1')
+
+      let updated = 0, inserted = 0, ignored = 0
+
+      for (const it of items) {
+        const sku    = String(it.codigo_sku || '').trim()
+        const costo  = Number(it.costo_unidad_neto) || 0
+        const precio = Number(it.precio_venta_neto) || 0
+
+        if (!sku || (costo === 0 && precio === 0)) { ignored++; continue }
+
+        const margenClp = Math.round(precio - costo)
+        const margenPct = costo > 0 ? parseFloat(((precio - costo) / costo).toFixed(4)) : 0
+        const desc = it.descripcion || null
+        const pres = it.presentacion || null
+        const cat  = it.categoria || null
+
+        const exists = stmtExists.get(sku)
+        if (exists) {
+          stmtUpdate.run(costo, precio, costo, precio, costo, precio, margenClp, margenPct, desc, pres, cat, sku)
+          updated++
+        } else {
+          stmtInsert.run(sku, desc, pres, cat, 'Vistony', 'Vistony', costo, precio, costo, precio, costo, precio, margenClp, margenPct)
+          inserted++
+        }
+      }
+
+      return { updated, inserted, ignored }
+    })
+
+    const result = doUpsert()
+    console.log(`[lista-precios/upsert-vistony] updated=${result.updated} inserted=${result.inserted} ignored=${result.ignored}`)
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 module.exports = router
