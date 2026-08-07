@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -67,8 +67,9 @@ const NAV_SECTIONS = [
       { to: '/campanas',     icon: Megaphone,       label: 'Campañas',        badge: null },
       { to: '/whatsapp',     icon: MessageCircle,   label: 'Bot WhatsApp',    badge: '5' },
       { to: '/reportes',     icon: BarChart3,       label: 'Reportes',        badge: null },
-      { to: '/config',             icon: Settings,        label: 'Configuración',    badge: null },
+      { to: '/config',             icon: Settings,        label: 'Configuración',      badge: null },
       { to: '/configurar-landing', icon: LayoutTemplate,  label: 'Configurar Landing', badge: null },
+      { to: '/backups',            icon: Shield,          label: 'Respaldos',          badge: null, adminOnly: true },
     ],
   },
 ]
@@ -149,7 +150,7 @@ export default function Layout() {
                 </div>
               )}
               <div className="space-y-0.5">
-                {section.items.map(({ to, icon: Icon, label, badge }) => {
+                {section.items.filter(item => !item.adminOnly || user?.rol === 'admin').map(({ to, icon: Icon, label, badge }) => {
                   const badgeValue = badge === 'prospeccion'
                     ? (prospeccionCount !== null ? String(prospeccionCount) : null)
                     : badge === 'oc'

@@ -23,7 +23,19 @@ class SQLiteWrapper {
 
   _save() {
     if (this._inTx) return
-    fs.writeFileSync(DB_PATH, Buffer.from(this._db.export()))
+    const buffer = Buffer.from(this._db.export())
+    if (buffer.length < 100) {
+      console.error('⚠️ DB export inválido (buffer < 100 bytes), guardado cancelado')
+      return
+    }
+    const tmp = DB_PATH + '.tmp'
+    try {
+      fs.writeFileSync(tmp, buffer)
+      fs.renameSync(tmp, DB_PATH)
+    } catch (e) {
+      console.error('⚠️ Error guardando DB:', e.message)
+      try { fs.unlinkSync(tmp) } catch (_) {}
+    }
   }
 
   pragma(str) {
@@ -2066,9 +2078,16 @@ async function initDB() {
     }
   }
 
+  const backupSvc = require('../src/services/backupService')
+
   let sqlJsDb
   if (fs.existsSync(DB_PATH)) {
-    try { sqlJsDb = new SQL.Database(fs.readFileSync(DB_PATH)) } catch(e) { console.warn("DB corrupta, creando nueva:", e.message); sqlJsDb = new SQL.Database() }
+    try {
+      sqlJsDb = new SQL.Database(fs.readFileSync(DB_PATH))
+    } catch(e) {
+      console.warn('⚠️ DB corrupta, intentando restaurar desde backup...', e.message)
+      sqlJsDb = tryRestoreFromBackup(backupSvc, SQL)
+    }
   } else {
     sqlJsDb = new SQL.Database()
   }
@@ -2079,14 +2098,30 @@ async function initDB() {
     initSchema()
   } catch(schemaErr) {
     if (schemaErr.message && schemaErr.message.includes('malformed')) {
-      console.warn('DB corrupta en initSchema, recreando...', schemaErr.message)
-      sqlJsDb = new SQL.Database()
+      console.warn('⚠️ DB corrupta en initSchema, restaurando desde backup...', schemaErr.message)
+      sqlJsDb = tryRestoreFromBackup(backupSvc, SQL)
       db._db = sqlJsDb
       initSchema()
     } else { throw schemaErr }
   }
   runMigrations()
   seedData()
+
+  // Inicializar servicio de backup con acceso a la DB y al constructor SQL
+  backupSvc.init(db, SQL)
+}
+
+function tryRestoreFromBackup(backupSvc, SQL) {
+  const backups = backupSvc.listBackups()
+  for (const bk of backups) {
+    try {
+      const db = new SQL.Database(fs.readFileSync(bk.path))
+      console.log(`✅ DB restaurada desde backup: ${bk.filename}`)
+      return db
+    } catch { console.warn(`❌ Backup ${bk.filename} también corrupto, probando siguiente...`) }
+  }
+  console.warn('❌ Sin backups válidos, creando DB nueva')
+  return new SQL.Database()
 }
 
 module.exports = { db, initDB, uuidv4, extractClusterKey, parseVolumenLitros }
