@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -55,7 +55,8 @@ const NAV_SECTIONS = [
   {
     label: 'Operaciones',
     items: [
-      { to: '/catalogo',     icon: Package,         label: 'Catálogo',        badge: null },
+      { to: '/catalogo',        icon: Package,         label: 'Catálogo',        badge: null },
+      { to: '/asesor-productos', icon: Search,          label: 'Asesor Vistony',  badge: null },
       { to: '/proveedores',  icon: Building2,       label: 'Proveedores',     badge: null },
       { to: '/compras',      icon: Truck,           label: 'OC',              badge: 'oc' },
       { to: '/bodegas',      icon: Warehouse,       label: 'Bodegas',         badge: null },
