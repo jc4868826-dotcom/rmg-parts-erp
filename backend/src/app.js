@@ -104,6 +104,7 @@ app.use('/api/campanas',            require('./routes/campanas'));  // Módulo C
 app.use('/api/track',               require('./routes/track'));     // Email tracking pixel (público)
 app.use('/api/oc',                  require('./routes/oc'));          // Órdenes de Compra (módulo independiente)
 app.use('/api/backup',              require('./routes/backup'));      // Backup automático y manual
+app.use('/api/asesor',              require('./routes/asesor'));      // Asesor de Productos Vistony
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {
