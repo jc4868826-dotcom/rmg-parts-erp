@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const router  = express.Router();
+const { db }  = require('../../config/database');
 
 const CATALOG = [
   {n:"ATTOM S310",t:"Motor gasolina",s:"SAE 5W-30/5W-40/10W-40",d:"Premium 100% sintético con Starpoly. Para vehículos modernos turbocargados con inyección electrónica. Protección desde el arranque, ahorro combustible.",p:"1L · 1Gal · 5Gal"},
@@ -150,14 +151,22 @@ FORMATO DE RESPUESTA (JSON puro):
     const clean = text.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
 
-    const enriched = (parsed.productos || []).map(p => {
-      const found = CATALOG.find(c =>
-        c.n.toLowerCase() === p.nombre.toLowerCase() ||
-        c.n.toLowerCase().includes(p.nombre.toLowerCase().split(' ')[0]) ||
-        p.nombre.toLowerCase().includes(c.n.toLowerCase().split(' ')[0])
-      );
-      return { ...p, catalog: found || null };
-    }).filter(p => p.catalog);
+    const seen = new Set();
+    const enriched = (parsed.productos || [])
+      .map(p => {
+        const found = CATALOG.find(c =>
+          c.n.toLowerCase() === p.nombre.toLowerCase() ||
+          c.n.toLowerCase().includes(p.nombre.toLowerCase().split(' ')[0]) ||
+          p.nombre.toLowerCase().includes(c.n.toLowerCase().split(' ')[0])
+        );
+        return { ...p, catalog: found || null };
+      })
+      .filter(p => {
+        if (!p.catalog) return false;
+        if (seen.has(p.catalog.n)) return false;
+        seen.add(p.catalog.n);
+        return true;
+      });
 
     return res.json({
       giro_detectado: parsed.giro_detectado,
@@ -168,6 +177,48 @@ FORMATO DE RESPUESTA (JSON puro):
   } catch (err) {
     console.error('[asesor] error:', err);
     return res.status(500).json({ error: 'Error interno', detail: err.message });
+  }
+});
+
+// POST /api/asesor/precios — devuelve precio_venta_neto de lista_precios para una lista de nombres
+router.post('/precios', (req, res) => {
+  const { nombres } = req.body;
+  if (!Array.isArray(nombres) || nombres.length === 0) {
+    return res.status(400).json({ error: 'nombres requerido' });
+  }
+
+  try {
+    const stmt = db.prepare(`
+      SELECT descripcion, precio_venta_neto
+      FROM lista_precios
+      WHERE UPPER(descripcion) LIKE UPPER(?)
+      ORDER BY precio_venta_neto DESC
+      LIMIT 1
+    `);
+
+    const resultados = {};
+    for (const nombre of nombres) {
+      // Intentar primero con las 2 primeras palabras (ej: "ATTOM S310"), luego solo la primera
+      const palabras = nombre.trim().split(/\s+/);
+      const terminos = palabras.length >= 2
+        ? [`%${palabras[0]} ${palabras[1]}%`, `%${palabras[0]}%`]
+        : [`%${palabras[0]}%`];
+
+      let row = null;
+      for (const termino of terminos) {
+        row = stmt.get(termino);
+        if (row && row.precio_venta_neto) break;
+      }
+
+      resultados[nombre] = row && row.precio_venta_neto
+        ? { precio_venta: row.precio_venta_neto, descripcion: row.descripcion }
+        : null;
+    }
+
+    return res.json({ precios: resultados });
+  } catch (err) {
+    console.error('[asesor/precios] error:', err);
+    return res.status(500).json({ error: 'Error consultando precios', detail: err.message });
   }
 });
 
