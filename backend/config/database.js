@@ -23,14 +23,14 @@ class SQLiteWrapper {
 
   _save() {
     if (this._inTx) return
-    const buffer = Buffer.from(this._db.export())
-    if (buffer.length < 100) {
+    const data = this._db.export()   // Uint8Array — fs.writeFileSync lo acepta directamente
+    if (data.length < 100) {
       console.error('⚠️ DB export inválido (buffer < 100 bytes), guardado cancelado')
       return
     }
     const tmp = DB_PATH + '.tmp'
     try {
-      fs.writeFileSync(tmp, buffer)
+      fs.writeFileSync(tmp, data)
       fs.renameSync(tmp, DB_PATH)
     } catch (e) {
       console.error('⚠️ Error guardando DB:', e.message)

@@ -1,7 +1,10 @@
 const router   = require('express').Router()
+const fs       = require('fs')
 const { authenticate, requireRole } = require('../middleware/auth')
 const svc      = require('../services/backupService')
 const { db }   = require('../../config/database')
+
+const DB_PATH = process.env.DB_PATH || '/var/data/rmg_parts.db'
 
 const admin = [authenticate, requireRole('admin')]
 
@@ -35,14 +38,16 @@ router.post('/create', ...admin, (req, res) => {
 // GET /api/backup/download-current
 router.get('/download-current', ...admin, (req, res) => {
   try {
-    const data   = db._db.export()
-    const buffer = Buffer.from(data)
+    if (!fs.existsSync(DB_PATH)) {
+      return res.status(404).json({ error: 'Archivo DB no encontrado en disco' })
+    }
+    const stat = fs.statSync(DB_PATH)
     res.set({
       'Content-Type':        'application/x-sqlite3',
       'Content-Disposition': 'attachment; filename="rmg_parts_live.db"',
-      'Content-Length':      buffer.length,
+      'Content-Length':      stat.size,
     })
-    res.send(buffer)
+    fs.createReadStream(DB_PATH).pipe(res)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 

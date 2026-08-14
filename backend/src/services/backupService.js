@@ -60,29 +60,29 @@ function listBackups() {
 // ─── createBackup ─────────────────────────────────────────────────────────────
 
 function createBackup(prefix = 'rmg_backup') {
-  if (!_db || !_db._db) throw new Error('DB no inicializada')
   ensureDir()
+
+  // El archivo en disco está siempre sincronizado: _save() se llama tras cada write.
+  // copyFileSync copia a nivel de OS sin cargar nada en RAM — evita OOM.
+  if (!fs.existsSync(DB_PATH)) throw new Error('Archivo DB no encontrado en disco')
+
+  const stat = fs.statSync(DB_PATH)
+  if (stat.size < 100) throw new Error('Export inválido: archivo DB demasiado pequeño')
 
   const filename = `${prefix}_${getTimestamp()}.db`
   const filepath = path.join(BACKUP_DIR, filename)
 
-  const data   = _db._db.export()
-  const buffer = Buffer.from(data)
-
-  if (buffer.length < 100) throw new Error('Export inválido: buffer demasiado pequeño')
-
-  // Escritura atómica: .tmp → rename
   const tmp = filepath + '.tmp'
-  fs.writeFileSync(tmp, buffer)
+  fs.copyFileSync(DB_PATH, tmp)
   fs.renameSync(tmp, filepath)
 
-  const sizeKB = Math.round(buffer.length / 1024)
+  const sizeKB = Math.round(stat.size / 1024)
   console.log(`✅ Backup creado: ${filename} (${sizeKB} KB)`)
 
   pruneOldBackups()
   _nextBackupTime = new Date(Date.now() + BACKUP_INTERVAL)
 
-  return { filename, filepath, size: buffer.length, sizeHuman: formatSize(buffer.length), date: new Date().toISOString() }
+  return { filename, filepath, size: stat.size, sizeHuman: formatSize(stat.size), date: new Date().toISOString() }
 }
 
 // ─── pruneOldBackups ─────────────────────────────────────────────────────────
@@ -108,18 +108,16 @@ function restoreFromBackup(filename) {
   if (!fs.existsSync(filepath)) throw new Error(`Backup no encontrado: ${filename}`)
   if (!_db || !_SQL) throw new Error('Servicio de backup no inicializado')
 
-  const buffer      = fs.readFileSync(filepath)
-  const newSqlJsDb  = new _SQL.Database(buffer)
+  const buffer     = fs.readFileSync(filepath)
+  const newSqlJsDb = new _SQL.Database(buffer)
 
   const oldSqlJsDb = _db._db
   _db._db = newSqlJsDb
   try { oldSqlJsDb.close() } catch (_) {}
 
-  // Guardar al disco con escritura atómica
-  const data    = newSqlJsDb.export()
-  const buf     = Buffer.from(data)
-  const tmp     = DB_PATH + '.tmp'
-  fs.writeFileSync(tmp, buf)
+  // Copiar el archivo de backup al DB_PATH — sin export() extra en RAM
+  const tmp = DB_PATH + '.tmp'
+  fs.copyFileSync(filepath, tmp)
   fs.renameSync(tmp, DB_PATH)
 
   console.log(`⚠️ DB restaurada desde backup: ${filename}`)
