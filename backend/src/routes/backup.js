@@ -6,7 +6,7 @@ const { db }   = require('../../config/database')
 
 const DB_PATH = process.env.DB_PATH || '/var/data/rmg_parts.db'
 
-const admin = [authenticate, requireRole('admin')]
+const admin = [authenticate, requireRole(['gerente', 'administrador'])]
 
 // GET /api/backup/list
 router.get('/list', ...admin, (req, res) => {

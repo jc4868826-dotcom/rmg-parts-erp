@@ -10,18 +10,18 @@ router.get('/skus', authenticate, c.getSkus)
 router.get('/clusters', authenticate, c.getClusters)
 
 // POST /api/pricing/proveedores-sku — agregar / editar proveedor de un SKU
-router.post('/proveedores-sku', authenticate, requireRole('admin'), c.upsertProveedorSku)
+router.post('/proveedores-sku', authenticate, requireRole(['gerente', 'administrador']), c.upsertProveedorSku)
 
 // PUT /api/pricing/proveedores-sku/:id/activar — cambiar proveedor activo
-router.put('/proveedores-sku/:id/activar', authenticate, requireRole('admin'), c.activarProveedorSku)
+router.put('/proveedores-sku/:id/activar', authenticate, requireRole(['gerente', 'administrador']), c.activarProveedorSku)
 
 // DELETE /api/pricing/proveedores-sku/:id — borrar proveedor inactivo
-router.delete('/proveedores-sku/:id', authenticate, requireRole('admin'), c.deleteProveedorSku)
+router.delete('/proveedores-sku/:id', authenticate, requireRole(['gerente', 'administrador']), c.deleteProveedorSku)
 
 // POST /api/pricing/clusters — crear / actualizar precio de mercado de un cluster
-router.post('/clusters', authenticate, requireRole('admin'), c.upsertCluster)
+router.post('/clusters', authenticate, requireRole(['gerente', 'administrador']), c.upsertCluster)
 
 // POST /api/pricing/reindex — re-calcular cluster_key de todos los SKUs
-router.post('/reindex', authenticate, requireRole('admin'), c.reindexClusters)
+router.post('/reindex', authenticate, requireRole(['gerente', 'administrador']), c.reindexClusters)
 
 module.exports = router

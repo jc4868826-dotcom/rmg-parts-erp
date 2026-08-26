@@ -28,7 +28,7 @@ const RESET_TABLES = [
   'clientes',
 ]
 
-router.post('/reset-db', authenticate, requireRole('admin'), (req, res) => {
+router.post('/reset-db', authenticate, requireRole('gerente'), (req, res) => {
   const { confirm } = req.body
   if (confirm !== 'RESET_RMG_DB') {
     return res.status(400).json({

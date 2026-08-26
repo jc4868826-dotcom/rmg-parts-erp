@@ -2045,6 +2045,56 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('campana_tracking_v1')
     console.log('✅ Migración campana_tracking_v1 — email_abierto/fecha_apertura/veces_abierto en pipeline_contactos')
   }
+
+  // Migration 42: perfiles_v1 — modelo de 3 perfiles (gerente / administrador / vendedor)
+  // Reemplaza el set anterior (admin, ventas, bodega, cliente, gerente, finanzas):
+  //   admin, finanzas  -> administrador (acceso total, sin autorizaciones)
+  //   gerente          -> gerente       (acceso total + autorizaciones)
+  //   ventas, bodega, cliente, y cualquier otro valor -> vendedor (resto)
+  const mPerfiles = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('perfiles_v1')
+  if (!mPerfiles) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS usuarios_perfiles_v1 (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        nombre TEXT NOT NULL,
+        telefono TEXT,
+        rol TEXT DEFAULT 'vendedor' CHECK(rol IN ('gerente','administrador','vendedor')),
+        activo INTEGER DEFAULT 1,
+        ultimo_acceso TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      INSERT OR IGNORE INTO usuarios_perfiles_v1
+        (id, email, password_hash, nombre, telefono, rol, activo, ultimo_acceso, created_at, updated_at)
+      SELECT
+        id, email, password_hash, nombre, telefono,
+        CASE rol
+          WHEN 'gerente' THEN 'gerente'
+          WHEN 'admin'   THEN 'administrador'
+          WHEN 'finanzas' THEN 'administrador'
+          ELSE 'vendedor'
+        END,
+        activo, ultimo_acceso, created_at, updated_at
+      FROM usuarios;
+      DROP TABLE usuarios;
+      ALTER TABLE usuarios_perfiles_v1 RENAME TO usuarios;
+    `)
+    // Red de seguridad: asegura al menos un gerente y un administrador activos
+    const hasGerentePerfiles = db.prepare("SELECT COUNT(*) as n FROM usuarios WHERE rol = 'gerente'").get().n
+    if (!hasGerentePerfiles) {
+      db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
+        .run(uuidv4(), 'gerente@rmgautoparts.cl', bcrypt.hashSync('gerente2026', 10), 'Gerente RMG', '+56 9 0000 0002', 'gerente')
+    }
+    const hasAdminPerfiles = db.prepare("SELECT COUNT(*) as n FROM usuarios WHERE rol = 'administrador'").get().n
+    if (!hasAdminPerfiles) {
+      db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
+        .run(uuidv4(), 'admin@rmgautoparts.cl', bcrypt.hashSync('rmg2026', 10), 'Administrador RMG', '+56 9 1234 5678', 'administrador')
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('perfiles_v1')
+    console.log('✅ Migración perfiles_v1 — usuarios migrados a 3 perfiles: gerente / administrador / vendedor')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
@@ -2054,7 +2104,7 @@ function seedData() {
 
   db.transaction(() => {
     db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
-      .run('a1b2c3d4-0000-0000-0000-000000000001', 'admin@rmgautoparts.cl', bcrypt.hashSync('rmg2026', 10), 'Administrador RMG', '+56 9 1234 5678', 'admin')
+      .run('a1b2c3d4-0000-0000-0000-000000000001', 'admin@rmgautoparts.cl', bcrypt.hashSync('rmg2026', 10), 'Administrador RMG', '+56 9 1234 5678', 'administrador')
     db.prepare(`INSERT INTO usuarios (id, email, password_hash, nombre, telefono, rol) VALUES (?,?,?,?,?,?)`)
       .run('a1b2c3d4-0000-0000-0000-000000000002', 'gerente@rmgautoparts.cl', bcrypt.hashSync('gerente2026', 10), 'Gerente RMG', '+56 9 0000 0002', 'gerente')
   })()

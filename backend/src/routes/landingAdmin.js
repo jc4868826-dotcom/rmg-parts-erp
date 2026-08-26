@@ -9,7 +9,7 @@ const { db }  = require('../../config/database')
 const { authenticate, requireRole } = require('../middleware/auth')
 const { uploadLanding } = require('../middleware/upload')
 
-const guard = [authenticate, requireRole('admin')]
+const guard = [authenticate, requireRole(['gerente', 'administrador'])]
 
 // Excluye foto_base64 de las respuestas de lista (puede pesar MBs), pero las mantiene
 // en GET individuales para que el admin pueda mostrar preview.

@@ -23,13 +23,13 @@ router.get('/:codigo', productosController.getOne);
 // GET /api/productos/:codigo/precio/:segmento — Precio según segmento cliente
 router.get('/:codigo/precio/:segmento', authenticate, productosController.getPrecioSegmento);
 
-// POST /api/productos — Crear producto (solo admin)
-router.post('/', authenticate, requireRole('admin'), productosController.create);
+// POST /api/productos — Crear producto (gerente/administrador)
+router.post('/', authenticate, requireRole(['gerente', 'administrador']), productosController.create);
 
-// PUT /api/productos/:codigo — Actualizar producto (solo admin)
-router.put('/:codigo', authenticate, requireRole('admin'), productosController.update);
+// PUT /api/productos/:codigo — Actualizar producto (gerente/administrador)
+router.put('/:codigo', authenticate, requireRole(['gerente', 'administrador']), productosController.update);
 
-// PATCH /api/productos/:codigo/stock — Ajuste de stock
-router.patch('/:codigo/stock', authenticate, requireRole(['admin', 'bodega']), productosController.updateStock);
+// PATCH /api/productos/:codigo/stock — Ajuste de stock (cualquier usuario autenticado)
+router.patch('/:codigo/stock', authenticate, productosController.updateStock);
 
 module.exports = router;

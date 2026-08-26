@@ -4,7 +4,7 @@ import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
 import {
   Building2, Users, Plug, Check, Plus, X,
-  Shield, Eye, EyeOff, SlidersHorizontal, ChevronLeft, ChevronRight
+  Shield, Eye, EyeOff, SlidersHorizontal, ChevronLeft, ChevronRight, KeyRound
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -21,32 +21,30 @@ const ESTADO_STYLES = {
   mock:      { color: 'var(--rmg-gold)',  bg: 'rgba(244,162,60,0.12)',  label: '◌ Mock local'     },
   pendiente: { color: 'rgba(90,143,168,0.9)', bg: 'rgba(255,255,255,0.08)', label: '○ No configurado' },
 }
-const ROLES = ['admin', 'vendedor', 'bodeguero']
+// 3 perfiles: gerente (acceso total + autorizaciones) · administrador (acceso total, sin autorizaciones) · vendedor (resto)
+const ROLES = ['gerente', 'administrador', 'vendedor']
+const ROL_LABEL = { gerente: 'Gerente', administrador: 'Administrador', vendedor: 'Vendedor' }
 const ROL_STYLES = {
-  admin:     { bg: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blt)'    },
-  vendedor:  { bg: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)'   },
-  bodeguero: { bg: 'rgba(159,90,253,0.12)', color: 'var(--rmg-purple)' },
+  gerente:       { bg: 'rgba(159,90,253,0.12)', color: 'var(--rmg-purple)' },
+  administrador: { bg: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blt)'    },
+  vendedor:      { bg: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)'   },
 }
 const PERMISOS = [
-  { modulo: 'Dashboard',     admin: true,  vendedor: true,  bodeguero: false },
-  { modulo: 'Catálogo',      admin: true,  vendedor: true,  bodeguero: true  },
-  { modulo: 'Clientes',      admin: true,  vendedor: true,  bodeguero: false },
-  { modulo: 'Pipeline CRM',  admin: true,  vendedor: true,  bodeguero: false },
-  { modulo: 'Cotizaciones',  admin: true,  vendedor: true,  bodeguero: false },
-  { modulo: 'Pedidos',       admin: true,  vendedor: true,  bodeguero: true  },
-  { modulo: 'Gastos',        admin: true,  vendedor: false, bodeguero: false },
-  { modulo: 'Inventario',    admin: true,  vendedor: false, bodeguero: true  },
-  { modulo: 'Agenda',        admin: true,  vendedor: true,  bodeguero: false },
-  { modulo: 'Bot WhatsApp',  admin: true,  vendedor: true,  bodeguero: false },
-  { modulo: 'Reportes',      admin: true,  vendedor: false, bodeguero: false },
-  { modulo: 'Configuración', admin: true,  vendedor: false, bodeguero: false },
+  { modulo: 'Dashboard',      gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Catálogo',       gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Clientes',       gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Pipeline CRM',   gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Cotizaciones',   gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Pedidos',        gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Inventario',     gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Agenda',         gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Bot WhatsApp',   gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Gastos',         gerente: true,  administrador: true,  vendedor: false },
+  { modulo: 'Reportes',       gerente: true,  administrador: true,  vendedor: false },
+  { modulo: 'Configuración',  gerente: true,  administrador: true,  vendedor: false },
+  { modulo: 'Autorizaciones (OC / cotizaciones)', gerente: true, administrador: false, vendedor: false },
 ]
-const USUARIOS_INIT = [
-  { id: 'u1', nombre: 'Gerente RMG',   email: 'admin@rmgautoparts.cl',  rol: 'admin',     activo: true },
-  { id: 'u2', nombre: 'Joaquín Pérez', email: 'jperez@rmgautoparts.cl', rol: 'vendedor',  activo: true },
-  { id: 'u3', nombre: 'Manuel Rojas',  email: 'mrojas@rmgautoparts.cl', rol: 'bodeguero', activo: true },
-]
-const FORM_INIT = { nombre: '', email: '', rol: 'vendedor', activo: true }
+const FORM_INIT = { nombre: '', email: '', password: '', telefono: '', rol: 'vendedor' }
 
 // ─── Componentes auxiliares ───────────────────────────────
 const Field = ({ label, children }) => (
@@ -87,22 +85,59 @@ export default function ConfiguracionPage() {
   })
   const handleSaveEmpresa = () => toast.success('Datos de empresa guardados')
 
-  // ── Usuarios ─────────────────────────────────────────────
-  const [usuarios, setUsuarios]   = useState(USUARIOS_INIT)
-  const [showForm, setShowForm]   = useState(false)
-  const [form, setForm]           = useState(FORM_INIT)
+  // ── Usuarios (API real — sin datos simulados) ─────────────
+  const qc = useQueryClient()
+
+  const { data: usuarios = [], isLoading: usuariosLoading } = useQuery({
+    queryKey: ['usuarios'],
+    queryFn: () => api.get('/usuarios').then(r => r.data),
+  })
+
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm]         = useState(FORM_INIT)
+  const [pwEditId, setPwEditId] = useState(null)
+  const [pwValue, setPwValue]   = useState('')
+
+  const createUserMut = useMutation({
+    mutationFn: (data) => api.post('/usuarios', data).then(r => r.data),
+    onSuccess: (nuevo) => {
+      qc.invalidateQueries(['usuarios'])
+      setForm(FORM_INIT)
+      setShowForm(false)
+      toast.success(`Usuario ${nuevo.nombre} creado`)
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al crear usuario'),
+  })
+
+  const updateUserMut = useMutation({
+    mutationFn: ({ id, ...data }) => api.put(`/usuarios/${id}`, data).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries(['usuarios']),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar usuario'),
+  })
+
+  const setPasswordMut = useMutation({
+    mutationFn: ({ id, password }) => api.put(`/usuarios/${id}/password`, { password }).then(r => r.data),
+    onSuccess: () => {
+      toast.success('Contraseña actualizada')
+      setPwEditId(null)
+      setPwValue('')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al actualizar contraseña'),
+  })
 
   const handleAddUser = () => {
     if (!form.nombre.trim() || !form.email.trim()) { toast.error('Nombre y email son obligatorios'); return }
-    setUsuarios(prev => [...prev, { ...form, id: `u${Date.now()}` }])
-    setForm(FORM_INIT)
-    setShowForm(false)
-    toast.success(`Usuario ${form.nombre} agregado`)
+    if (!form.password || form.password.length < 8) { toast.error('La contraseña debe tener al menos 8 caracteres'); return }
+    createUserMut.mutate(form)
   }
-  const toggleActivo = (id) => setUsuarios(prev => prev.map(u => u.id === id ? { ...u, activo: !u.activo } : u))
 
-  // ── Parámetros del negocio (API → DB) ────────────────────
-  const qc = useQueryClient()
+  const toggleActivo = (u) => updateUserMut.mutate({ id: u.id, activo: !u.activo })
+  const handleChangeRol = (u, rol) => updateUserMut.mutate({ id: u.id, rol })
+
+  const handleSavePassword = (id) => {
+    if (!pwValue || pwValue.length < 8) { toast.error('La contraseña debe tener al menos 8 caracteres'); return }
+    setPasswordMut.mutate({ id, password: pwValue })
+  }
 
   const mesHoy = () => new Date().toISOString().slice(0, 7)
   const generarMeses = () => {
@@ -246,23 +281,31 @@ export default function ConfiguracionPage() {
                   <input className="rmg-input" placeholder="email@rmgautoparts.cl" type="email" value={form.email}
                     onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
                 </Field>
+                <Field label="Contraseña">
+                  <input className="rmg-input" placeholder="Mínimo 8 caracteres" type="password" value={form.password}
+                    onChange={e => setForm(p => ({ ...p, password: e.target.value }))} />
+                </Field>
                 <Field label="Rol">
                   <select className="rmg-input" value={form.rol} onChange={e => setForm(p => ({ ...p, rol: e.target.value }))}>
-                    {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                    {ROLES.map(r => <option key={r} value={r}>{ROL_LABEL[r]}</option>)}
                   </select>
                 </Field>
-                <div className="flex items-end">
-                  <button onClick={handleAddUser} className="btn-primary w-full flex items-center justify-center gap-2">
-                    <Check size={14} /> Crear usuario
+                <div className="col-span-2 flex items-center justify-end">
+                  <button onClick={handleAddUser} disabled={createUserMut.isPending}
+                    className="btn-primary flex items-center justify-center gap-2 px-6 disabled:opacity-50">
+                    <Check size={14} /> {createUserMut.isPending ? 'Creando...' : 'Crear usuario'}
                   </button>
                 </div>
               </div>
             )}
 
+            {usuariosLoading ? (
+              <div className="p-8 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando usuarios…</div>
+            ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Nombre', 'Email', 'Rol', 'Estado', ''].map(h => (
+                  {['Nombre', 'Email', 'Rol', 'Estado', 'Contraseña', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
                 </tr>
@@ -281,16 +324,49 @@ export default function ConfiguracionPage() {
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{u.email}</td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                        style={{ background: ROL_STYLES[u.rol]?.bg, color: ROL_STYLES[u.rol]?.color }}>
-                        {u.rol}
-                      </span>
+                      <select
+                        className="text-xs font-semibold px-2 py-1 rounded-full border-0"
+                        style={{ background: ROL_STYLES[u.rol]?.bg, color: ROL_STYLES[u.rol]?.color }}
+                        value={u.rol}
+                        onChange={e => handleChangeRol(u, e.target.value)}
+                      >
+                        {ROLES.map(r => <option key={r} value={r}>{ROL_LABEL[r]}</option>)}
+                      </select>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: u.activo ? 'var(--rmg-teal)' : 'var(--rmg-muted)' }}>
                       {u.activo ? '● Activo' : '○ Inactivo'}
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => toggleActivo(u.id)}
+                      {pwEditId === u.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="password"
+                            autoFocus
+                            className="rmg-input text-xs py-1 px-2"
+                            style={{ width: 130 }}
+                            placeholder="Nueva contraseña"
+                            value={pwValue}
+                            onChange={e => setPwValue(e.target.value)}
+                          />
+                          <button onClick={() => handleSavePassword(u.id)} disabled={setPasswordMut.isPending}
+                            className="p-1.5 rounded-lg hover:bg-white/5" style={{ color: 'var(--rmg-teal)' }} title="Guardar">
+                            <Check size={14} />
+                          </button>
+                          <button onClick={() => { setPwEditId(null); setPwValue('') }}
+                            className="p-1.5 rounded-lg hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }} title="Cancelar">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setPwEditId(u.id); setPwValue('') }}
+                          className="text-xs px-2.5 py-1 rounded-lg transition-colors hover:bg-white/5 flex items-center gap-1.5"
+                          style={{ color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <KeyRound size={12} /> Cambiar
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => toggleActivo(u)}
                         className="text-xs px-2.5 py-1 rounded-lg transition-colors hover:bg-white/5"
                         style={{ color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
                         {u.activo ? 'Desactivar' : 'Activar'}
@@ -300,6 +376,7 @@ export default function ConfiguracionPage() {
                 ))}
               </tbody>
             </table>
+            )}
           </div>
 
           <div className="rmg-card overflow-hidden">
@@ -315,7 +392,7 @@ export default function ConfiguracionPage() {
                     {ROLES.map(r => (
                       <th key={r} className="px-6 py-3 text-center" style={{ minWidth: 110 }}>
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                          style={{ background: ROL_STYLES[r]?.bg, color: ROL_STYLES[r]?.color }}>{r}</span>
+                          style={{ background: ROL_STYLES[r]?.bg, color: ROL_STYLES[r]?.color }}>{ROL_LABEL[r]}</span>
                       </th>
                     ))}
                   </tr>

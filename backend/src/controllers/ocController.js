@@ -65,10 +65,12 @@ const TRANSICIONES = {
   Rechazada:          ['CREADA', 'ANULADA'],
 }
 
+// Autorizar/rechazar una OC es una "autorización" — solo el perfil gerente puede hacerlo.
+// Anular es una acción administrativa (no compromete pago) — gerente o administrador.
 const ROLES_REQUERIDOS = {
-  AUTORIZADA: ['admin', 'finanzas'],
-  RECHAZADA:  ['admin', 'finanzas'],
-  ANULADA:    ['admin'],
+  AUTORIZADA: ['gerente'],
+  RECHAZADA:  ['gerente'],
+  ANULADA:    ['gerente', 'administrador'],
 }
 
 const TIPO_EVENTO = {
@@ -209,7 +211,7 @@ const patchEstadoOC = (req, res) => {
     const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
 
-    const { nuevo_estado, motivo_rechazo, usuario_id, usuario_nombre, rol_usuario } = req.body
+    const { nuevo_estado, motivo_rechazo, usuario_id, usuario_nombre } = req.body
     if (!nuevo_estado) return res.status(400).json({ error: 'nuevo_estado es requerido' })
 
     const estadoActual    = oc.estado
@@ -220,8 +222,9 @@ const patchEstadoOC = (req, res) => {
       })
     }
 
+    // Rol verificado desde el token (req.user), nunca desde un valor que envíe el cliente en el body.
     const rolesNecesarios = ROLES_REQUERIDOS[nuevo_estado]
-    if (rolesNecesarios && rol_usuario && !rolesNecesarios.includes(rol_usuario)) {
+    if (rolesNecesarios && !rolesNecesarios.includes(req.user?.rol)) {
       return res.status(403).json({ error: `Solo ${rolesNecesarios.join('/')} puede cambiar a ${nuevo_estado}` })
     }
 

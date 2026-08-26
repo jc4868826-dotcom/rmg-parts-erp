@@ -4,8 +4,8 @@ import { useAuth } from '@context/AuthContext'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
-  const [email, setEmail]       = useState('admin@rmgautoparts.cl')
-  const [password, setPassword] = useState('rmg2026')
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading]   = useState(false)
   const { login } = useAuth()
   const navigate  = useNavigate()
@@ -40,16 +40,8 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-sm px-4">
 
         {/* Logo */}
-        <div className="flex items-center gap-3 justify-center mb-8">
-          <div className="flex gap-1.5">
-            <div className="w-3 h-10 rounded-sm" style={{ background: 'var(--rmg-blue)' }} />
-            <div className="w-3 h-10 rounded-sm" style={{ background: 'var(--rmg-teal)' }} />
-            <div className="w-3 h-10 rounded-sm" style={{ background: 'var(--rmg-purple)' }} />
-          </div>
-          <div>
-            <div className="font-black text-3xl tracking-wider text-white" style={{ fontFamily: 'Inter Tight, sans-serif' }}>RMG</div>
-            <div className="text-xs font-semibold tracking-widest" style={{ color: 'var(--rmg-muted)' }}>AUTO PARTS</div>
-          </div>
+        <div className="flex items-center justify-center mb-8">
+          <img src="/logo-rmg.png" alt="RMG Parts" style={{ height: '52px', width: 'auto', objectFit: 'contain' }} />
         </div>
 
         {/* Panel semitransparente con blur */}
@@ -100,11 +92,6 @@ export default function LoginPage() {
               {loading ? 'Ingresando...' : 'Ingresar al sistema'}
             </button>
           </form>
-
-          <div className="mt-5 p-3 rounded-lg text-xs" style={{ background: 'rgba(56,182,255,0.06)', border: '1px solid rgba(56,182,255,0.12)' }}>
-            <div className="font-semibold mb-1" style={{ color: 'var(--rmg-blt)' }}>Credenciales de prueba</div>
-            <div style={{ color: 'var(--rmg-muted)' }}>admin@rmgautoparts.cl · rmg2026</div>
-          </div>
         </div>
 
         <p className="text-xs text-center mt-5" style={{ color: 'rgba(255,255,255,0.3)' }}>

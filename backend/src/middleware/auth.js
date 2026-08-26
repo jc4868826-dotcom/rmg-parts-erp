@@ -1,6 +1,6 @@
 /**
  * RMG Auto Parts — Middleware de Autenticación
- * JWT · Roles: admin | ventas | bodega | cliente
+ * JWT · Perfiles: gerente (acceso total + autorizaciones) | administrador (acceso total, sin autorizaciones) | vendedor (resto)
  */
 
 const jwt = require('jsonwebtoken');

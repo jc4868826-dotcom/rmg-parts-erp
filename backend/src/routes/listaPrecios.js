@@ -103,7 +103,7 @@ router.get('/', (_req, res) => {
 // Body: { items: [{ segmento_negocio, prioridad_consumo, categoria, producto_generico,
 //   proveedor, marca, ranking_compra, codigo_sku, descripcion, presentacion,
 //   tipo_envase, unidades_por_pack, costo_compra, precio_venta, margen_clp }] }
-router.post('/import', authenticate, requireRole('admin'), (req, res) => {
+router.post('/import', authenticate, requireRole(['gerente', 'administrador']), (req, res) => {
   try {
     const { items } = req.body
     if (!Array.isArray(items) || items.length === 0) {
@@ -245,7 +245,7 @@ router.get('/descargar-excel', authenticate, (req, res) => {
 // POST /api/lista-precios/upsert-vistony — actualiza precios Vistony sin tocar otros proveedores
 // Body: { items: [{ codigo_sku, descripcion, presentacion, categoria,
 //   costo_unidad_neto, precio_venta_neto }] }
-router.post('/upsert-vistony', authenticate, requireRole('admin'), (req, res) => {
+router.post('/upsert-vistony', authenticate, requireRole(['gerente', 'administrador']), (req, res) => {
   try {
     const { items } = req.body
     if (!Array.isArray(items) || items.length === 0) {
