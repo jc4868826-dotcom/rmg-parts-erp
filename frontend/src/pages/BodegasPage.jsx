@@ -14,7 +14,7 @@ const TIPO_STYLES = {
   ajuste:  { label: 'Ajuste',   color: 'var(--rmg-gold)',   bg: 'rgba(244,162,60,0.12)',  icon: RefreshCw },
 }
 
-const AJUSTE_INIT = { codigo: '', cantidad: 0, motivo: '', presentacion: '', unidades_por_pack: null, signo: 1 }
+const AJUSTE_INIT = { codigo: '', cantidad: 0, motivo: '', presentacion: '', unidades_por_pack: null, modo: 'entrada' }
 
 // critico: no se vende hace >60 días (capital inmovilizado). bajo: se vende pero
 // queda poco stock (<5 und). agotado: no queda nada. ok: rota bien, stock sano.
@@ -65,12 +65,25 @@ export default function BodegasPage() {
     onError: () => toast.error('Error al ajustar stock'),
   })
 
+  // Stock real (unidades) por SKU, según el sistema — se usa para calcular la
+  // diferencia cuando el ajuste es "fijar stock exacto" (conteo físico).
+  const stockPorCodigo = useMemo(() => new Map(stock.map(p => [p.codigo, p.stock_actual])), [stock])
+  const stockActualDelAjuste = stockPorCodigo.get(ajuste.codigo) || 0
+
   const handleAjuste = (e) => {
     e.preventDefault()
     if (!ajuste.codigo) { toast.error('Ingresa o busca el código del producto'); return }
-    if (!ajuste.cantidad) { toast.error('Ingresa una cantidad'); return }
     if (!ajuste.motivo) { toast.error('Describe el motivo del ajuste'); return }
-    ajustarMut.mutate({ codigo: ajuste.codigo, motivo: ajuste.motivo, cantidad: ajuste.signo * Number(ajuste.cantidad) })
+
+    let cantidadDelta
+    if (ajuste.modo === 'fijar') {
+      cantidadDelta = Number(ajuste.cantidad) - stockActualDelAjuste
+      if (cantidadDelta === 0) { toast.error('El stock real ingresado es igual al actual — no hay nada que ajustar'); return }
+    } else {
+      if (!ajuste.cantidad) { toast.error('Ingresa una cantidad'); return }
+      cantidadDelta = (ajuste.modo === 'salida' ? -1 : 1) * Number(ajuste.cantidad)
+    }
+    ajustarMut.mutate({ codigo: ajuste.codigo, motivo: ajuste.motivo, cantidad: cantidadDelta })
   }
 
   const categorias = useMemo(() => [...new Set(stock.map(p => p.categoria).filter(Boolean))].sort(), [stock])
@@ -196,7 +209,15 @@ export default function BodegasPage() {
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Buscar producto</label>
               <ProductoSearch
                 initialQuery={ajuste.codigo}
-                onSelect={p => setAjuste(a => ({ ...a, codigo: p.codigo_sku || '', presentacion: p.presentacion || '', unidades_por_pack: p.unidades_por_pack || null }))}
+                onSelect={p => setAjuste(a => {
+                  const codigo = p.codigo_sku || ''
+                  const stockSku = stockPorCodigo.get(codigo) || 0
+                  return {
+                    ...a, codigo,
+                    presentacion: p.presentacion || '', unidades_por_pack: p.unidades_por_pack || null,
+                    cantidad: a.modo === 'fijar' ? stockSku : a.cantidad,
+                  }
+                })}
               />
               {ajuste.unidades_por_pack > 1 && (
                 <p className="text-[10px] mt-1" style={{ color: 'var(--rmg-muted)' }}>
@@ -208,22 +229,37 @@ export default function BodegasPage() {
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Código SKU *</label>
               <input className="rmg-input font-mono" placeholder="Ej: 352420" value={ajuste.codigo}
                 onChange={e => setAjuste(a => ({ ...a, codigo: e.target.value }))} required/>
+              {ajuste.codigo && (
+                <p className="text-[10px] mt-1" style={{ color: 'var(--rmg-muted)' }}>Stock actual en el sistema: <strong>{stockActualDelAjuste} und</strong></p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Tipo de ajuste *</label>
-              <select className="rmg-input" value={ajuste.signo} onChange={e => setAjuste(a => ({ ...a, signo: Number(e.target.value) }))}>
-                <option value={1}>+ Entrada (suma stock)</option>
-                <option value={-1}>− Merma / baja (resta stock)</option>
+              <select className="rmg-input" value={ajuste.modo} onChange={e => {
+                const modo = e.target.value
+                setAjuste(a => ({ ...a, modo, cantidad: modo === 'fijar' ? (stockPorCodigo.get(a.codigo) || 0) : 0 }))
+              }}>
+                <option value="entrada">+ Entrada (suma stock)</option>
+                <option value="salida">− Merma / baja (resta stock)</option>
+                <option value="fijar">= Fijar stock exacto (conteo físico)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cantidad *</label>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>
+                {ajuste.modo === 'fijar' ? 'Stock real contado *' : 'Cantidad *'}
+              </label>
               <CantidadPresentacion
                 unidadesPorPack={ajuste.unidades_por_pack}
                 presentacion={ajuste.presentacion}
                 cantidad={ajuste.cantidad}
                 onChange={v => setAjuste(a => ({ ...a, cantidad: v }))}
               />
+              {ajuste.modo === 'fijar' && ajuste.codigo && (
+                <p className="text-[10px] mt-1 font-semibold" style={{ color: Number(ajuste.cantidad) - stockActualDelAjuste === 0 ? 'var(--rmg-muted)' : (Number(ajuste.cantidad) - stockActualDelAjuste > 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)') }}>
+                  {stockActualDelAjuste} und → {Number(ajuste.cantidad) || 0} und
+                  {' '}({Number(ajuste.cantidad) - stockActualDelAjuste > 0 ? '+' : ''}{Number(ajuste.cantidad) - stockActualDelAjuste} und)
+                </p>
+              )}
             </div>
             <div className="md:col-span-4">
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Motivo *</label>
@@ -238,7 +274,7 @@ export default function BodegasPage() {
             </div>
           </form>
           <p className="text-xs mt-3" style={{ color: 'var(--rmg-muted)' }}>
-            Busca el producto para ver su presentación (si viene en cajas, ingresa cajas + sueltas) y elige si el ajuste suma o resta stock.
+            Busca el producto para ver su presentación (si viene en cajas, ingresa cajas + sueltas). "Fijar stock exacto" es para cuando cuentas físicamente la bodega: ingresas el total real y el sistema calcula la diferencia solo — útil para corregir SKU cuyo stock quedó mal registrado antes de que la conversión caja→unidad existiera.
           </p>
         </div>
       )}
