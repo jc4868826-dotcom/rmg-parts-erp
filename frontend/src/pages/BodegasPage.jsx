@@ -313,12 +313,9 @@ export default function BodegasPage() {
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   {[
                     ['SKU', undefined],
-                    ['Marca / Descripción', undefined],
-                    ['Presentación', 'Cómo viene el producto (ej: caja de 12 unidades)'],
-                    ['Cantidad', 'Cajas / packs completos que hay en bodega'],
-                    ['Stock unitario', 'Total en unidades sueltas: cantidad de cajas × unidades por caja, más sueltas'],
-                    ['Precio presentación', 'Precio de costo y de venta por caja/pack completo'],
-                    ['Precio unitario', 'Precio de costo y de venta por unidad suelta'],
+                    ['Producto', undefined],
+                    ['Stock', 'Unidades reales en bodega (fuente única de verdad). Debajo, cómo se arma con la presentación del SKU.'],
+                    ['Precio (costo / venta)', 'Precio unitario — el que usa el sistema para vender. Debajo, el equivalente por caja/pack.'],
                     ['Valorización', 'Valor total del stock actual a precio de costo y de venta'],
                     ['Últ. venta', undefined],
                     ['Estado', undefined],
@@ -332,7 +329,7 @@ export default function BodegasPage() {
                 {loadingStock
                   ? Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                        {Array.from({ length: 11 }).map((_, j) => (
+                        {Array.from({ length: 8 }).map((_, j) => (
                           <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                         ))}
                       </tr>
@@ -356,39 +353,28 @@ export default function BodegasPage() {
                             <div className="text-xs mt-0.5 max-w-xs truncate" style={{ color: 'var(--rmg-muted)' }}>{p.descripcion}</div>
                             <div className="text-[10px] mt-0.5 capitalize" style={{ color: 'var(--rmg-muted)' }}>{p.categoria}</div>
                           </td>
-                          <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>
-                            {p.unidades_por_pack > 1 ? `${p.presentacion || 'Caja'} × ${p.unidades_por_pack}` : (p.presentacion || '—')}
-                          </td>
-                          <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>
-                            {p.unidades_por_pack > 1 ? (
-                              <>
-                                <span className="font-semibold">{p.cajas_completas}</span> caja(s)
-                                {p.unidades_sueltas > 0 && <div className="text-[10px]" style={{ color: 'var(--rmg-muted)' }}>+ {p.unidades_sueltas} suelta(s)</div>}
-                              </>
-                            ) : '—'}
-                          </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
                               <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(15, 35, 60,0.06)', minWidth: 60 }}>
                                 <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: alertInfo.color }}/>
                               </div>
-                              <span className="font-bold w-10 text-right" style={{ color: alertInfo.color }}>{p.stock_actual}</span>
+                              <span className="font-bold whitespace-nowrap" style={{ color: alertInfo.color }}>{p.stock_actual} und</span>
                             </div>
-                            <div className="text-[10px] mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
-                              {p.unidades_por_pack > 1 ? `(${p.cajas_completas} × ${p.unidades_por_pack} + ${p.unidades_sueltas})` : `mín. ${p.stock_minimo}`}
+                            <div className="text-[10px] mt-0.5 whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>
+                              {p.unidades_por_pack > 1
+                                ? `= ${p.cajas_completas} caja(s) de ${p.unidades_por_pack}${p.unidades_sueltas > 0 ? ` + ${p.unidades_sueltas} suelta(s)` : ''}`
+                                : `mín. ${p.stock_minimo}`}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap">
-                            {p.unidades_por_pack > 1 ? (
-                              <>
-                                <div style={{ color: 'var(--rmg-blt)' }}>costo {formatCLP((p.precio_compra || 0) * p.unidades_por_pack)}</div>
-                                <div style={{ color: 'var(--rmg-teal)' }}>venta {formatCLP((p.precio_venta || 0) * p.unidades_por_pack)}</div>
-                              </>
-                            ) : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-xs whitespace-nowrap">
-                            <div style={{ color: 'var(--rmg-blt)' }}>costo {formatCLP(p.precio_compra || 0)}</div>
-                            <div style={{ color: 'var(--rmg-teal)' }}>venta {formatCLP(p.precio_venta || 0)}</div>
+                            <div style={{ color: 'var(--rmg-blt)' }}>
+                              costo {formatCLP(p.precio_compra || 0)}
+                              {p.unidades_por_pack > 1 && <span style={{ color: 'var(--rmg-muted)' }}> ({formatCLP((p.precio_compra || 0) * p.unidades_por_pack)}/caja)</span>}
+                            </div>
+                            <div style={{ color: 'var(--rmg-teal)' }}>
+                              venta {formatCLP(p.precio_venta || 0)}
+                              {p.unidades_por_pack > 1 && <span style={{ color: 'var(--rmg-muted)' }}> ({formatCLP((p.precio_venta || 0) * p.unidades_por_pack)}/caja)</span>}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap">
                             <div style={{ color: 'var(--rmg-blt)' }}>costo {formatCLP(p.valor_costo || 0)}</div>
