@@ -114,8 +114,12 @@ export default function BodegasPage() {
       'Cajas completas': p.cajas_completas ?? '',
       'Unidades sueltas': p.unidades_sueltas ?? '',
       'Stock mínimo': p.stock_minimo,
-      'Valor a costo': p.valor_costo || 0,
-      'Valor a venta': p.valor_venta || 0,
+      'Costo x unidad': p.precio_compra || 0,
+      'Costo x caja': p.unidades_por_pack > 1 ? (p.precio_compra || 0) * p.unidades_por_pack : '',
+      'Venta x unidad': p.precio_venta || 0,
+      'Venta x caja': p.unidades_por_pack > 1 ? (p.precio_venta || 0) * p.unidades_por_pack : '',
+      'Valor a costo (stock total)': p.valor_costo || 0,
+      'Valor a venta (stock total)': p.valor_venta || 0,
       'Días sin venta': p.dias_sin_venta ?? 'Nunca vendido',
       'Estado': p.alerta === 'agotado' ? 'AGOTADO' : p.alerta === 'critico' ? 'CRÍTICO' : p.alerta === 'bajo' ? 'BAJO' : 'OK',
     }))
@@ -308,7 +312,7 @@ export default function BodegasPage() {
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   {['SKU','Marca / Descripción','Cat.','Stock','Presentación','Valorización','Últ. venta','Estado',''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                    <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }} title={h === 'Valorización' ? 'Total del stock actual, y debajo el precio de referencia por unidad y por caja (costo / venta)' : undefined}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -360,6 +364,20 @@ export default function BodegasPage() {
                           <td className="px-4 py-3 text-xs whitespace-nowrap">
                             <div style={{ color: 'var(--rmg-blt)' }}>costo {formatCLP(p.valor_costo || 0)}</div>
                             <div style={{ color: 'var(--rmg-teal)' }}>venta {formatCLP(p.valor_venta || 0)}</div>
+                            <div className="text-[10px] mt-1 pt-1" style={{ borderTop: '1px dashed rgba(15,35,60,0.12)', color: 'var(--rmg-muted)' }}>
+                              <div>
+                                und <span style={{ color: 'var(--rmg-blt)' }}>{formatCLP(p.precio_compra || 0)}</span>
+                                {' / '}
+                                <span style={{ color: 'var(--rmg-teal)' }}>{formatCLP(p.precio_venta || 0)}</span>
+                              </div>
+                              {p.unidades_por_pack > 1 && (
+                                <div>
+                                  caja <span style={{ color: 'var(--rmg-blt)' }}>{formatCLP((p.precio_compra || 0) * p.unidades_por_pack)}</span>
+                                  {' / '}
+                                  <span style={{ color: 'var(--rmg-teal)' }}>{formatCLP((p.precio_venta || 0) * p.unidades_por_pack)}</span>
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: p.dias_sin_venta === null ? 'var(--rmg-muted)' : p.dias_sin_venta > 60 ? 'var(--rmg-red)' : 'var(--rmg-off)' }}>
                             {p.dias_sin_venta === null ? 'nunca' : `hace ${p.dias_sin_venta} d.`}
