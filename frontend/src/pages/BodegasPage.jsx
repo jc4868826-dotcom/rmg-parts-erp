@@ -34,6 +34,7 @@ export default function BodegasPage() {
   const [search, setSearch] = useState('')
   const [catFiltro, setCatFiltro] = useState('')
   const [alertaFiltro, setAlertaFiltro] = useState('')
+  const [verAgotados, setVerAgotados] = useState(false) // por defecto: bodega = lo que tengo, no el catálogo completo
   const [productoSeleccionado, setProductoSeleccionado] = useState(null)
 
   const { data: movimientos = [], isLoading: loadingMovs } = useQuery({
@@ -74,11 +75,15 @@ export default function BodegasPage() {
 
   const categorias = useMemo(() => [...new Set(stock.map(p => p.categoria).filter(Boolean))].sort(), [stock])
 
-  const valorTotalCosto = useMemo(() => stock.reduce((s, p) => s + (p.valor_costo || 0), 0), [stock])
-  const valorTotalVenta = useMemo(() => stock.reduce((s, p) => s + (p.valor_venta || 0), 0), [stock])
+  // "Bodega" es lo que efectivamente tengo — no el catálogo completo de precios.
+  const enBodega = useMemo(() => stock.filter(p => p.alerta !== 'agotado'), [stock])
+  const valorTotalCosto = useMemo(() => enBodega.reduce((s, p) => s + (p.valor_costo || 0), 0), [enBodega])
+  const valorTotalVenta = useMemo(() => enBodega.reduce((s, p) => s + (p.valor_venta || 0), 0), [enBodega])
 
   const stockFiltrado = useMemo(() => {
-    let data = stock
+    // Por defecto solo se ve lo que hay físicamente (stock > 0). Los SKU agotados
+    // solo aparecen si se activa "ver agotados" o si se filtra explícitamente por ese estado.
+    let data = (verAgotados || alertaFiltro === 'agotado') ? stock : enBodega
     if (search) {
       const q = search.toLowerCase()
       data = data.filter(p => p.codigo?.toLowerCase().includes(q) || p.descripcion?.toLowerCase().includes(q) || p.marca?.toLowerCase().includes(q))
@@ -86,7 +91,7 @@ export default function BodegasPage() {
     if (catFiltro) data = data.filter(p => p.categoria === catFiltro)
     if (alertaFiltro) data = data.filter(p => p.alerta === alertaFiltro)
     return data
-  }, [stock, search, catFiltro, alertaFiltro])
+  }, [stock, enBodega, search, catFiltro, alertaFiltro, verAgotados])
 
   const agotados = stock.filter(p => p.alerta === 'agotado').length
   const criticos = stock.filter(p => p.alerta === 'critico').length
@@ -145,7 +150,7 @@ export default function BodegasPage() {
       {/* Resumen compacto — un vistazo, sin tapar la lista de abajo */}
       <div className="rmg-card px-5 py-3 flex flex-wrap items-center gap-x-7 gap-y-3">
         {[
-          { label: 'SKU en bodega', value: stock.length, color: 'var(--rmg-blt)', icon: Package,       onClick: () => { setTab('stock'); setAlertaFiltro('') } },
+          { label: 'Productos en bodega', value: enBodega.length, color: 'var(--rmg-blt)', icon: Package, onClick: () => { setTab('stock'); setAlertaFiltro(''); setVerAgotados(false) } },
           { label: 'Agotado',       value: agotados,      color: '#94243a',        icon: AlertTriangle, onClick: () => { setTab('stock'); setAlertaFiltro('agotado') } },
           { label: 'Crítico',       value: criticos,      color: 'var(--rmg-red)', icon: AlertTriangle, onClick: () => { setTab('stock'); setAlertaFiltro('critico') } },
           { label: 'Bajo',          value: bajos,         color: 'var(--rmg-gold)', icon: Warehouse,    onClick: () => { setTab('stock'); setAlertaFiltro('bajo') } },
@@ -237,7 +242,7 @@ export default function BodegasPage() {
       {/* Tabs */}
       <div className="flex gap-1 border-b" style={{ borderColor: 'rgba(56,182,255,0.1)' }}>
         {[
-          { k: 'stock',        l: `Stock actual (${stock.length})` },
+          { k: 'stock',        l: `Stock actual (${enBodega.length})` },
           { k: 'movimientos',  l: `Movimientos (${movimientos.length})` },
         ].map(t => (
           <button key={t.k} onClick={() => setTab(t.k)}
@@ -264,14 +269,18 @@ export default function BodegasPage() {
               {categorias.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <select className="rmg-input w-auto" value={alertaFiltro} onChange={e => setAlertaFiltro(e.target.value)}>
-              <option value="">Todo el stock</option>
+              <option value="">Todo el stock disponible</option>
               <option value="agotado">✕ Agotado</option>
               <option value="critico">⚠ Crítico</option>
               <option value="bajo">↓ Bajo</option>
               <option value="ok">✓ OK</option>
             </select>
-            {(search || catFiltro || alertaFiltro) && (
-              <button onClick={() => { setSearch(''); setCatFiltro(''); setAlertaFiltro('') }}
+            <label className="flex items-center gap-1.5 text-xs px-1 cursor-pointer select-none" style={{ color: 'var(--rmg-muted)' }}>
+              <input type="checkbox" checked={verAgotados} onChange={e => setVerAgotados(e.target.checked)} />
+              Incluir SKU sin stock (catálogo completo)
+            </label>
+            {(search || catFiltro || alertaFiltro || verAgotados) && (
+              <button onClick={() => { setSearch(''); setCatFiltro(''); setAlertaFiltro(''); setVerAgotados(false) }}
                 className="text-xs px-3 py-1.5 rounded-lg"
                 style={{ background: 'rgba(15, 35, 60,0.06)', color: 'var(--rmg-muted)' }}>
                 Limpiar
@@ -283,9 +292,13 @@ export default function BodegasPage() {
               <Download size={12}/> Exportar Excel
             </button>
           </div>
-          {(catFiltro || alertaFiltro || search) && (
+          {(catFiltro || alertaFiltro || search) ? (
             <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
-              Mostrando {stockFiltrado.length} de {stock.length} productos
+              Mostrando {stockFiltrado.length} de {(verAgotados || alertaFiltro === 'agotado') ? stock.length : enBodega.length} productos
+            </p>
+          ) : (
+            <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+              {enBodega.length} productos con stock · {agotados} sin stock ocultos{stock.length ? ` de ${stock.length} SKU en el catálogo` : ''}
             </p>
           )}
 
