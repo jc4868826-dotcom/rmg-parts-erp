@@ -37,7 +37,7 @@ router.get('/buscar', (req, res) => {
       return [like, like, like, like, like]
     })
 
-    const rows = db.prepare(`
+    const rowsRaw = db.prepare(`
       SELECT
         codigo_sku, descripcion, producto_generico, marca, proveedor,
         presentacion, tipo_envase, unidades_por_pack, categoria, segmento_negocio,
@@ -51,6 +51,24 @@ router.get('/buscar', (req, res) => {
       ORDER BY ranking_compra ASC, descripcion ASC
       LIMIT 200
     `).all(...params)
+
+    // Para un SKU en caja/pack, el costo y precio guardados son los de LA CAJA
+    // completa (así viene del maestro del proveedor — el código CAJ12 trae el
+    // precio del display de 12, no el de una unidad suelta). Todo el sistema
+    // compra, cotiza y vende en unidades reales, así que acá se calcula el
+    // costo/precio POR UNIDAD dividiendo por el pack antes de entregarlo — y se
+    // conserva el valor de caja en los campos *_caja por si se necesita mostrar.
+    const PRICE_FIELDS = ['precio_neto', 'costo_neto', 'costo_unidad_neto', 'precio_venta_neto', 'costo_compra', 'precio_venta']
+    const rows = rowsRaw.map(r => {
+      const pack = Number(r.unidades_por_pack) > 1 ? Number(r.unidades_por_pack) : null
+      if (!pack) return r
+      const ajustada = { ...r }
+      for (const f of PRICE_FIELDS) {
+        ajustada[`${f}_caja`] = r[f]
+        ajustada[f] = (r[f] === null || r[f] === undefined) ? r[f] : r[f] / pack
+      }
+      return ajustada
+    })
 
     const normTerms = terms.map(_norm)
 

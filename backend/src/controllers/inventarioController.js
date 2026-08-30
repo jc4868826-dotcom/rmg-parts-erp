@@ -46,8 +46,17 @@ const getStock = (_req, res) => {
     const result = rows.map(p => {
       const pack         = p.unidades_por_pack > 1 ? p.unidades_por_pack : null
       const stockActual  = p.stock_actual || 0
-      const costo        = p.precio_compra || 0
-      const ventaUnit    = p.precio_venta || 0
+      // El costo/precio guardado en lista_precios para un SKU en caja/pack es el
+      // precio de LA CAJA completa (así viene del maestro del proveedor: el
+      // código CAJ12 trae el precio del display de 12, no el de una unidad
+      // suelta — ver "Lista RMG.pdf", donde el mismo producto tiene un código
+      // FRA aparte con precio de unidad). El sistema valoriza y vende en
+      // unidades reales, así que acá se calcula el costo/precio POR UNIDAD
+      // dividiendo por el pack; el valor de caja se conserva tal cual.
+      const costoCaja     = p.precio_compra || 0
+      const ventaCaja      = p.precio_venta || 0
+      const costo          = pack ? costoCaja / pack : costoCaja
+      const ventaUnit       = pack ? ventaCaja / pack : ventaCaja
       const fechaUltimaVenta = mapaUltimaSalida.get(p.codigo) || null
       const diasSinVenta = diasDesde(fechaUltimaVenta)
 
