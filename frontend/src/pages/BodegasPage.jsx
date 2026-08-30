@@ -142,47 +142,39 @@ export default function BodegasPage() {
         </button>
       </div>
 
-      {/* KPIs — estado del stock */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Resumen compacto — un vistazo, sin tapar la lista de abajo */}
+      <div className="rmg-card px-5 py-3 flex flex-wrap items-center gap-x-7 gap-y-3">
         {[
-          { label: 'Agotado',       value: agotados, color: '#94243a',          icon: AlertTriangle, sub: 'sin stock disponible', onClick: () => { setTab('stock'); setAlertaFiltro('agotado') } },
-          { label: 'Stock crítico', value: criticos, color: 'var(--rmg-red)',    icon: AlertTriangle, sub: `sin venta hace +60 días`, onClick: () => { setTab('stock'); setAlertaFiltro('critico') } },
-          { label: 'Stock bajo',    value: bajos,    color: 'var(--rmg-gold)',   icon: Warehouse,     sub: 'se vende y quedan <5 und', onClick: () => { setTab('stock'); setAlertaFiltro('bajo') } },
-          { label: 'SKU en bodega', value: stock.length, color: 'var(--rmg-blt)', icon: Package,      sub: 'productos con maestro',  onClick: () => { setTab('stock'); setAlertaFiltro('') } },
+          { label: 'SKU en bodega', value: stock.length, color: 'var(--rmg-blt)', icon: Package,       onClick: () => { setTab('stock'); setAlertaFiltro('') } },
+          { label: 'Agotado',       value: agotados,      color: '#94243a',        icon: AlertTriangle, onClick: () => { setTab('stock'); setAlertaFiltro('agotado') } },
+          { label: 'Crítico',       value: criticos,      color: 'var(--rmg-red)', icon: AlertTriangle, onClick: () => { setTab('stock'); setAlertaFiltro('critico') } },
+          { label: 'Bajo',          value: bajos,         color: 'var(--rmg-gold)', icon: Warehouse,    onClick: () => { setTab('stock'); setAlertaFiltro('bajo') } },
         ].map(k => {
           const Icon = k.icon
           return (
-            <div key={k.label} className="rmg-card p-4 cursor-pointer hover:bg-black/[0.02] transition-colors" onClick={k.onClick}>
-              <div className="flex items-start justify-between mb-2">
-                <div className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{k.label}</div>
-                <div className="p-1.5 rounded-lg" style={{ background: `${k.color}15` }}>
-                  <Icon size={14} style={{ color: k.color }}/>
-                </div>
+            <button key={k.label} type="button" onClick={k.onClick} className="flex items-center gap-2 text-left hover:opacity-75 transition-opacity">
+              <Icon size={15} style={{ color: k.color }}/>
+              <div>
+                <div className="font-black text-lg leading-none" style={{ fontFamily: 'Inter Tight, sans-serif', color: k.color }}>{k.value}</div>
+                <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{k.label}</div>
               </div>
-              <div className="font-black text-3xl" style={{ fontFamily: 'Inter Tight, sans-serif', color: k.color }}>{k.value}</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>{k.sub}</div>
-            </div>
+            </button>
           )
         })}
-      </div>
-
-      {/* KPIs — valorización del inventario */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="rmg-card p-4">
-          <div className="flex items-start justify-between mb-2">
-            <div className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Inventario a costo</div>
-            <div className="p-1.5 rounded-lg" style={{ background: 'rgba(21,104,184,0.1)' }}><Wallet size={14} style={{ color: 'var(--rmg-blt)' }}/></div>
+        <div className="hidden md:block flex-1" />
+        <div className="flex items-center gap-2">
+          <Wallet size={15} style={{ color: 'var(--rmg-blt)' }}/>
+          <div>
+            <div className="font-black text-lg leading-none" style={{ fontFamily: 'Inter Tight, sans-serif', color: 'var(--rmg-blt)' }}>{formatCLP(valorTotalCosto)}</div>
+            <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>valor a costo</div>
           </div>
-          <div className="font-black text-2xl" style={{ fontFamily: 'Inter Tight, sans-serif', color: 'var(--rmg-blt)' }}>{formatCLP(valorTotalCosto)}</div>
-          <div className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>lo que costó comprar el stock actual</div>
         </div>
-        <div className="rmg-card p-4">
-          <div className="flex items-start justify-between mb-2">
-            <div className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Inventario a precio de venta</div>
-            <div className="p-1.5 rounded-lg" style={{ background: 'rgba(45,201,138,0.1)' }}><TrendingUp size={14} style={{ color: 'var(--rmg-teal)' }}/></div>
+        <div className="flex items-center gap-2">
+          <TrendingUp size={15} style={{ color: 'var(--rmg-teal)' }}/>
+          <div>
+            <div className="font-black text-lg leading-none" style={{ fontFamily: 'Inter Tight, sans-serif', color: 'var(--rmg-teal)' }}>{formatCLP(valorTotalVenta)}</div>
+            <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>valor a venta</div>
           </div>
-          <div className="font-black text-2xl" style={{ fontFamily: 'Inter Tight, sans-serif', color: 'var(--rmg-teal)' }}>{formatCLP(valorTotalVenta)}</div>
-          <div className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>lo que factura si se vende todo el stock actual</div>
         </div>
       </div>
 
