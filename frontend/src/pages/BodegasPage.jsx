@@ -354,30 +354,11 @@ export default function BodegasPage() {
                             <div className="text-[10px] mt-0.5" style={{ color: 'var(--rmg-muted)' }}>mín. {p.stock_minimo}</div>
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>
-                            {p.unidades_por_pack > 1 ? (
-                              <>
-                                <div>{p.cajas_completas} caja(s) × {p.unidades_por_pack}</div>
-                                <div className="text-[10px]">+ {p.unidades_sueltas} sueltas</div>
-                              </>
-                            ) : (p.presentacion || '—')}
+                            {p.unidades_por_pack > 1 ? `${p.unidades_por_pack} und/caja` : (p.presentacion || '—')}
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap">
                             <div style={{ color: 'var(--rmg-blt)' }}>costo {formatCLP(p.valor_costo || 0)}</div>
                             <div style={{ color: 'var(--rmg-teal)' }}>venta {formatCLP(p.valor_venta || 0)}</div>
-                            <div className="text-[10px] mt-1 pt-1" style={{ borderTop: '1px dashed rgba(15,35,60,0.12)', color: 'var(--rmg-muted)' }}>
-                              <div>
-                                und <span style={{ color: 'var(--rmg-blt)' }}>{formatCLP(p.precio_compra || 0)}</span>
-                                {' / '}
-                                <span style={{ color: 'var(--rmg-teal)' }}>{formatCLP(p.precio_venta || 0)}</span>
-                              </div>
-                              {p.unidades_por_pack > 1 && (
-                                <div>
-                                  caja <span style={{ color: 'var(--rmg-blt)' }}>{formatCLP((p.precio_compra || 0) * p.unidades_por_pack)}</span>
-                                  {' / '}
-                                  <span style={{ color: 'var(--rmg-teal)' }}>{formatCLP((p.precio_venta || 0) * p.unidades_por_pack)}</span>
-                                </div>
-                              )}
-                            </div>
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: p.dias_sin_venta === null ? 'var(--rmg-muted)' : p.dias_sin_venta > 60 ? 'var(--rmg-red)' : 'var(--rmg-off)' }}>
                             {p.dias_sin_venta === null ? 'nunca' : `hace ${p.dias_sin_venta} d.`}
@@ -416,6 +397,36 @@ export default function BodegasPage() {
                 </div>
                 <button onClick={() => setProductoSeleccionado(null)} style={{ color: 'var(--rmg-muted)' }}><X size={16}/></button>
               </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 p-3 rounded-lg" style={{ background: 'rgba(15, 35, 60,0.03)' }}>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Stock (unidades)</div>
+                  <div className="text-lg font-bold" style={{ color: 'var(--rmg-off)' }}>{productoSeleccionado.stock_actual}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Presentación</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-off)' }}>
+                    {productoSeleccionado.unidades_por_pack > 1
+                      ? `${productoSeleccionado.cajas_completas} caja(s) × ${productoSeleccionado.unidades_por_pack} + ${productoSeleccionado.unidades_sueltas} sueltas`
+                      : (productoSeleccionado.presentacion || '—')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Costo</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-blt)' }}>
+                    {formatCLP(productoSeleccionado.precio_compra || 0)} / und
+                    {productoSeleccionado.unidades_por_pack > 1 && ` · ${formatCLP((productoSeleccionado.precio_compra || 0) * productoSeleccionado.unidades_por_pack)} / caja`}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Venta</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-teal)' }}>
+                    {formatCLP(productoSeleccionado.precio_venta || 0)} / und
+                    {productoSeleccionado.unidades_por_pack > 1 && ` · ${formatCLP((productoSeleccionado.precio_venta || 0) * productoSeleccionado.unidades_por_pack)} / caja`}
+                  </div>
+                </div>
+              </div>
+
               {movsProd.length === 0 ? (
                 <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin movimientos registrados para este SKU.</p>
               ) : (
