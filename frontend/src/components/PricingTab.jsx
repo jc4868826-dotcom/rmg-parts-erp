@@ -4,17 +4,17 @@ import api from "@utils/api";
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const clp = (n) => "$" + Math.round(n).toLocaleString("es-CL");
 
-// ─── Dark theme constants ─────────────────────────────────────────────────────
+// ─── Theme constants (nombre "DARK" heredado del tema anterior — hoy son valores claros) ──
 const DARK = {
-  surface: "#0a1a2e",
-  border: "rgba(56,182,255,0.15)",
-  borderLight: "rgba(56,182,255,0.1)",
-  textPrimary: "rgba(255,255,255,0.9)",
-  textSecondary: "rgba(90,143,168,0.8)",
-  textMuted: "rgba(90,143,168,0.7)",
-  inputBg: "rgba(255,255,255,0.06)",
-  rowHover: "rgba(255,255,255,0.04)",
-  headBg: "rgba(255,255,255,0.03)",
+  surface: "#ffffff",
+  border: "rgba(15,35,60,0.12)",
+  borderLight: "rgba(15,35,60,0.08)",
+  textPrimary: "rgba(22, 35, 58, 0.92)",
+  textSecondary: "rgba(51, 65, 85, 0.85)",
+  textMuted: "#64748b",
+  inputBg: "#ffffff",
+  rowHover: "rgba(15, 35, 60,0.04)",
+  headBg: "rgba(15, 35, 60,0.03)",
 };
 
 const LINEA_CONFIG = {
@@ -235,7 +235,7 @@ function ProveedoresPanel({ sku, colSpan, onAddProveedor, onRefresh }) {
 
   return (
     <tr>
-      <td colSpan={colSpan} style={{ padding: "0 0 8px 0", background: "rgba(255,255,255,0.02)" }}>
+      <td colSpan={colSpan} style={{ padding: "0 0 8px 0", background: "rgba(15, 35, 60,0.02)" }}>
         <div style={{ padding: "12px 16px", borderTop: "1px solid " + DARK.borderLight }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: DARK.textSecondary, letterSpacing: "0.04em" }}>
@@ -254,7 +254,7 @@ function ProveedoresPanel({ sku, colSpan, onAddProveedor, onRefresh }) {
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ background: "rgba(255,255,255,0.04)" }}>
+                <tr style={{ background: "rgba(15, 35, 60,0.04)" }}>
                   {["Proveedor", "Costo neto", "Condición", "Estado", ""].map(h => (
                     <th key={h} style={{ padding: "5px 10px", textAlign: h === "Costo neto" ? "right" : "left", color: DARK.textMuted, fontWeight: 500, borderBottom: "0.5px solid " + DARK.borderLight, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
@@ -269,7 +269,7 @@ function ProveedoresPanel({ sku, colSpan, onAddProveedor, onRefresh }) {
                     <td style={{ padding: "6px 10px" }}>
                       {pv.es_activo
                         ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "#e1f5ee", color: "#0f6e56", fontWeight: 600 }}>● Activo</span>
-                        : <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "rgba(255,255,255,0.05)", color: "rgba(90,143,168,0.9)" }}>Inactivo</span>
+                        : <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "rgba(15, 35, 60,0.05)", color: "rgba(90,143,168,0.9)" }}>Inactivo</span>
                       }
                     </td>
                     <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
@@ -345,7 +345,7 @@ function SkuRow({ sku, margenOverride, expanded, onToggle, onAddProveedor, onEdi
           ) : (
             <span
               onClick={e => { e.stopPropagation(); onEditCluster(sku); }}
-              style={{ fontSize: 11, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.07)", color: DARK.textSecondary, cursor: "pointer" }}
+              style={{ fontSize: 11, padding: "2px 7px", borderRadius: 12, background: "rgba(15, 35, 60,0.07)", color: DARK.textSecondary, cursor: "pointer" }}
               title="Agregar precio mercado"
             >
               Sin referencia
@@ -581,7 +581,7 @@ function ComparativaView({ clustersData, soloConRef, onToggleSoloConRef }) {
                   <td style={{ ...tdStyle(), fontSize: 12, color: DARK.textSecondary }}>
                     {c.mercado_avg !== null
                       ? <>{clp(c.mercado_min)} – {clp(c.mercado_max)}</>
-                      : <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 12, background: "rgba(255,255,255,0.07)", color: DARK.textSecondary }}>—</span>
+                      : <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 12, background: "rgba(15, 35, 60,0.07)", color: DARK.textSecondary }}>—</span>
                     }
                   </td>
                   <td style={{ ...tdStyle(), fontWeight: 500, color: c.diferencia_clp === null ? DARK.textMuted : difPctPos ? "#1baf7a" : difPctNeg ? "#e05c5c" : DARK.textPrimary }}>
@@ -833,7 +833,7 @@ export default function PricingTab() {
           const active = lineaFiltro === l;
           return (
             <button key={l} onClick={() => { setLineaFiltro(l); setMarcaFiltro("Todas"); }}
-              style={{ padding: "4px 14px", fontSize: 12, borderRadius: 20, border: `1px solid ${active && cfg ? cfg.color : DARK.border}`, background: active && cfg ? cfg.bg : active ? "rgba(255,255,255,0.08)" : "transparent", color: active && cfg ? cfg.text : active ? DARK.textPrimary : DARK.textSecondary, cursor: "pointer", fontFamily: "inherit", fontWeight: active ? 500 : 400 }}>
+              style={{ padding: "4px 14px", fontSize: 12, borderRadius: 20, border: `1px solid ${active && cfg ? cfg.color : DARK.border}`, background: active && cfg ? cfg.bg : active ? "rgba(15, 35, 60,0.08)" : "transparent", color: active && cfg ? cfg.text : active ? DARK.textPrimary : DARK.textSecondary, cursor: "pointer", fontFamily: "inherit", fontWeight: active ? 500 : 400 }}>
               {l === "Todas" ? "Todas" : cfg.label}
             </button>
           );
@@ -898,7 +898,7 @@ export default function PricingTab() {
                       <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12 }}>
                         {s.mercado_min && s.mercado_max
                           ? <span style={{ color: DARK.textSecondary }}>{clp(s.mercado_min)} – {clp(s.mercado_max)}</span>
-                          : <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 10, background: "rgba(255,255,255,0.07)", color: DARK.textSecondary }}>Sin ref.</span>
+                          : <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 10, background: "rgba(15, 35, 60,0.07)", color: DARK.textSecondary }}>Sin ref.</span>
                         }
                       </td>
                       <td style={{ padding: "8px 10px", textAlign: "center" }}>

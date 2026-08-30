@@ -157,7 +157,7 @@ export default function PedidosPage() {
             className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
             style={estadoFiltro === e.key
               ? { background: 'var(--rmg-blue)', color: '#fff' }
-              : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
+              : { background: 'rgba(15, 35, 60,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }
             }>{e.label}</button>
         ))}
       </div>
@@ -166,7 +166,7 @@ export default function PedidosPage() {
       <div className="rmg-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
               {['', 'N° Pedido', 'Cliente', 'Estado', 'Total', 'Condición pago', 'Entrega', 'Acciones'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
@@ -175,9 +175,9 @@ export default function PedidosPage() {
           <tbody>
             {isLoading
               ? Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                     {Array.from({ length: 8 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} /></td>
+                      <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>
                     ))}
                   </tr>
                 ))
@@ -185,7 +185,7 @@ export default function PedidosPage() {
                   const est = ESTADO_STYLES[p.estado] || ESTADO_STYLES.pendiente
                   const expanded = expandido[p.id]
                   return [
-                    <tr key={p.id} style={{ borderBottom: expanded ? 'none' : '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                    <tr key={p.id} style={{ borderBottom: expanded ? 'none' : '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
                       className="hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 w-8">
                         <button onClick={() => setExpandido(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
@@ -201,7 +201,7 @@ export default function PedidosPage() {
                           value={p.estado}
                           onChange={e => cambiarEstadoMut.mutate({ id: p.id, estado: e.target.value })}>
                           {Object.keys(ESTADO_STYLES).map(s => (
-                            <option key={s} value={s} style={{ background: '#0a1a2e', color: '#fff' }}>
+                            <option key={s} value={s} style={{ background: '#ffffff', color: '#16233a' }}>
                               {s.replace('_', ' ')}
                             </option>
                           ))}
@@ -225,7 +225,7 @@ export default function PedidosPage() {
                           )}
                           <button
                             onClick={() => setEditando({ ...p })}
-                            className="p-1.5 rounded hover:bg-white/5 transition-colors"
+                            className="p-1.5 rounded hover:bg-black/5 transition-colors"
                             style={{ color: 'var(--rmg-muted)' }}
                             title="Editar pedido">
                             <Pencil size={13}/>
@@ -241,7 +241,7 @@ export default function PedidosPage() {
                       </td>
                     </tr>,
                     expanded && (
-                      <tr key={`${p.id}-items`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <tr key={`${p.id}-items`} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         <td colSpan={8} className="px-8 py-3 space-y-3" style={{ background: 'rgba(56,182,255,0.02)' }}>
                           <PedidoItems pedidoId={p.id} />
                           <DocumentosPanel entidad="pedido" entidadId={p.id} titulo="Documentos del pedido" />
@@ -361,7 +361,7 @@ export default function PedidosPage() {
                       </thead>
                       <tbody>
                         {availableCots.map(c => (
-                          <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/[0.02]">
+                          <tr key={c.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }} className="hover:bg-white/[0.02]">
                             <td className="px-3 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{c.numero}</td>
                             <td className="px-3 py-2.5 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{c.estado}</td>
                             <td className="px-3 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total)}</td>
@@ -455,7 +455,7 @@ function PedidoItems({ pedidoId }) {
   return (
     <table className="w-full text-xs">
       <thead>
-        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <tr style={{ borderBottom: '1px solid rgba(15, 35, 60,0.06)' }}>
           {['Código', 'Descripción', 'Cant.', 'P. Neto', 'Desc %', 'Subtotal'].map(h => (
             <th key={h} className="text-left px-2 py-1 uppercase font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
           ))}
@@ -463,7 +463,7 @@ function PedidoItems({ pedidoId }) {
       </thead>
       <tbody>
         {data.items.map(item => (
-          <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+          <tr key={item.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.03)' }}>
             <td className="px-2 py-1.5 font-mono" style={{ color: 'var(--rmg-blt)' }}>{item.codigo_sku || item.codigo || '—'}</td>
             <td className="px-2 py-1.5" style={{ color: 'var(--rmg-off)' }}>{item.descripcion}</td>
             <td className="px-2 py-1.5 text-center">{item.cantidad}</td>

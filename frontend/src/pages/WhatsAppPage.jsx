@@ -67,9 +67,9 @@ export default function WhatsAppPage() {
           <div className="flex-1 overflow-y-auto">
             {isLoading
               ? Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="p-3 border-b animate-pulse" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-                    <div className="h-4 rounded mb-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                    <div className="h-3 rounded w-3/4" style={{ background: 'rgba(255,255,255,0.04)' }} />
+                  <div key={i} className="p-3 border-b animate-pulse" style={{ borderColor: 'rgba(15, 35, 60,0.04)' }}>
+                    <div className="h-4 rounded mb-1" style={{ background: 'rgba(15, 35, 60,0.06)' }} />
+                    <div className="h-3 rounded w-3/4" style={{ background: 'rgba(15, 35, 60,0.04)' }} />
                   </div>
                 ))
               : conversaciones.map(c => (
@@ -78,7 +78,7 @@ export default function WhatsAppPage() {
                     onClick={() => setConvSeleccionada(c.id)}
                     className="p-3 cursor-pointer transition-all border-b"
                     style={{
-                      borderColor: 'rgba(255,255,255,0.04)',
+                      borderColor: 'rgba(15, 35, 60,0.04)',
                       background: convSeleccionada === c.id ? 'rgba(27,143,212,0.12)' : 'transparent',
                       borderLeft: convSeleccionada === c.id ? '2px solid var(--rmg-blue)' : '2px solid transparent',
                     }}
@@ -111,7 +111,7 @@ export default function WhatsAppPage() {
             : (
               <>
                 {/* Header */}
-                <div className="px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <div className="px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   <div className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{conv?.nombre}</div>
                   <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{conv?.telefono}</div>
                 </div>
@@ -124,7 +124,7 @@ export default function WhatsAppPage() {
                         className="max-w-xs px-3 py-2 rounded-xl text-sm whitespace-pre-wrap"
                         style={m.direccion === 'saliente'
                           ? { background: 'var(--rmg-blue)', color: '#fff', borderRadius: '16px 16px 4px 16px' }
-                          : { background: 'rgba(255,255,255,0.07)', color: 'var(--rmg-off)', borderRadius: '16px 16px 16px 4px' }
+                          : { background: 'rgba(15, 35, 60,0.07)', color: 'var(--rmg-off)', borderRadius: '16px 16px 16px 4px' }
                         }
                       >
                         {m.contenido}

@@ -72,8 +72,8 @@ function ProductoSearch({ item, onSelect, initialQuery = '' }) {
           )}
           {resultados.map(p => (
             <button key={p.codigo_sku} type="button" onMouseDown={() => handleSelect(p)}
-              className="w-full text-left px-3 py-2.5 hover:bg-white/5 transition-colors border-b"
-              style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+              className="w-full text-left px-3 py-2.5 hover:bg-black/5 transition-colors border-b"
+              style={{ borderColor: 'rgba(15, 35, 60,0.04)' }}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo_sku}</span>
                 <span className="font-bold text-xs" style={{ color: 'var(--rmg-teal)' }}>{formatCLP(p.precio_neto || p.precio_venta_neto)}</span>
@@ -203,7 +203,7 @@ export default function CotizacionForm() {
     <div className="space-y-5 animate-fade-in max-w-4xl">
 
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/cotizaciones')} className="p-2 rounded-lg hover:bg-white/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
+        <button onClick={() => navigate('/cotizaciones')} className="p-2 rounded-lg hover:bg-black/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
           <ArrowLeft size={18} />
         </button>
         <div>
@@ -267,7 +267,7 @@ export default function CotizacionForm() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                     {['Buscar producto', 'Código', 'Descripción', 'Cant.', 'Precio neto', 'Desc %', 'Subtotal', ''].map(h => (
                       <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
@@ -277,7 +277,7 @@ export default function CotizacionForm() {
                   {items.map((item, i) => {
                     const subtotal = Math.round(item.cantidad * item.precio_unitario * (1 - item.descuento_pct / 100))
                     return (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         <td className="px-4 py-2 min-w-52">
                           <ProductoSearch item={item} initialQuery={item.codigo || ''} onSelect={(p) => handleProductoSelect(i, p)} />
                         </td>

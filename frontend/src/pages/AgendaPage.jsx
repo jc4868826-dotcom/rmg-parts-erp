@@ -162,14 +162,14 @@ export default function AgendaPage() {
 
           {/* Navegación mes */}
           <div className="flex items-center justify-between mb-5">
-            <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+            <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-black/5 transition-colors"
               style={{ color: 'var(--rmg-muted)' }}>
               <ChevronLeft size={18} />
             </button>
             <h2 className="font-black text-lg" style={{ fontFamily: 'Inter Tight, sans-serif' }}>
               {MESES[month]} {year}
             </h2>
-            <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+            <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-black/5 transition-colors"
               style={{ color: 'var(--rmg-muted)' }}>
               <ChevronRight size={18} />
             </button>
@@ -276,7 +276,7 @@ export default function AgendaPage() {
                           <div className="text-xs mt-1 ml-5" style={{ color: 'var(--rmg-muted)' }}>{ev.cliente}</div>
                         )}
                         {ev.notas && (
-                          <div className="text-xs mt-1 ml-5" style={{ color: 'rgba(255,255,255,0.65)' }}>{ev.notas}</div>
+                          <div className="text-xs mt-1 ml-5" style={{ color: 'rgba(15, 35, 60,0.65)' }}>{ev.notas}</div>
                         )}
                       </div>
                     )
@@ -297,7 +297,7 @@ export default function AgendaPage() {
                   const [, , d] = ev.fecha.split('-')
                   return (
                     <div key={ev.id} className="flex items-start gap-2.5 py-1.5"
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                       <div className="text-center flex-shrink-0 w-8">
                         <div className="text-xs font-bold" style={{ color: cfg.color }}>{String(Number(d))}</div>
                         <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{ev.hora.slice(0,5)}</div>

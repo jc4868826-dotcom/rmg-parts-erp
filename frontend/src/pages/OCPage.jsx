@@ -20,6 +20,15 @@ const FORM_INIT = {
   observaciones: '', items: [{ ...ITEM_INIT }],
 }
 const FACTURA_INIT = { numero_factura: '', fecha_factura: HOY, fecha_vencimiento_pago: '', monto_total: '', modo_pago: 'Transferencia' }
+const ACCION_FORM_INIT = { observaciones: '', cuenta_bancaria: '', forma_pago: '' }
+const MODO_PAGO_OPCIONES = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta débito/crédito']
+// Config de la "mini ventana" que se abre para cada transición de estado que requiere
+// datos adicionales antes de confirmar (no basta con solo cambiar el estado).
+const ACCION_META = {
+  autorizada:       { titulo: 'Autorizar orden de compra',   confirmLabel: 'Confirmar autorización', necesitaPago: false },
+  pago_autorizado:  { titulo: 'Autorizar pago de la OC',     confirmLabel: 'Autorizar pago',          necesitaPago: true },
+  pagada:           { titulo: 'Registrar pago de la OC',     confirmLabel: 'Marcar como pagada',      necesitaPago: true },
+}
 
 // Estados unificados (antes había dos convenciones de nombres — MAYUSCULAS en un
 // módulo y Mixtas en otro — sobre la misma tabla; ahora hay una sola).
@@ -53,7 +62,7 @@ const TIPO_EVENTO_ICON = {
 }
 
 function EstadoBadge({ estado }) {
-  const cfg = ESTADO_CFG[estado] || { label: estado, bg: 'rgba(255,255,255,0.08)', color: '#fff' }
+  const cfg = ESTADO_CFG[estado] || { label: estado, bg: 'rgba(15, 35, 60,0.08)', color: '#fff' }
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full${cfg.pulse ? ' animate-pulse' : ''}`}
       style={{ background: cfg.bg, color: cfg.color }}>
@@ -94,7 +103,7 @@ function SkuRow({ item, idx, onUpdate, onRemove, showRemove }) {
   const sub = Number(item.precio_unitario || 0) * Number(item.cantidad || 0)
 
   return (
-    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+    <tr style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
       <td className="px-3 py-2 min-w-52" ref={wrapRef} style={{ position: 'relative' }}>
         <div className="relative">
           <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--rmg-muted)' }} />
@@ -110,7 +119,7 @@ function SkuRow({ item, idx, onUpdate, onRemove, showRemove }) {
             {!isFetching && !resultados.length && <div className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>Sin resultados</div>}
             {resultados.map(p => (
               <button key={p.codigo_sku} type="button" onMouseDown={() => handleSelect(p)}
-                className="w-full text-left px-3 py-2 hover:bg-white/5 transition-colors border-b" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                className="w-full text-left px-3 py-2 hover:bg-black/5 transition-colors border-b" style={{ borderColor: 'rgba(15, 35, 60,0.04)' }}>
                 <div className="flex justify-between gap-2">
                   <span className="font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo_sku}</span>
                   <span className="font-bold text-xs" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(p.costo_unidad_neto)}</span>
@@ -166,6 +175,8 @@ export default function OCPage() {
   const [facturaActiva, setFacturaActiva] = useState(false)
   const [facturaForm, setFacturaForm]     = useState(FACTURA_INIT)
   const [ocEditando, setOcEditando]       = useState(null)   // id de la OC en edición, o null si es "nueva"
+  const [accionModal, setAccionModal]     = useState(null)   // estado destino ('autorizada' | 'pago_autorizado' | 'pagada') o null
+  const [accionForm, setAccionForm]       = useState(ACCION_FORM_INIT)
 
   // Queries
   const { data: ocs = [], isLoading } = useQuery({
@@ -213,11 +224,12 @@ export default function OCPage() {
   })
 
   const estadoMut = useMutation({
-    mutationFn: ({ id, nuevo_estado, motivo_rechazo }) =>
-      api.patch(`/oc/${id}/estado`, { nuevo_estado, motivo_rechazo, usuario_id: user?.id, usuario_nombre: user?.nombre, rol_usuario: rol }).then(r => r.data),
+    mutationFn: ({ id, nuevo_estado, motivo_rechazo, observaciones, cuenta_bancaria, forma_pago }) =>
+      api.patch(`/oc/${id}/estado`, { nuevo_estado, motivo_rechazo, observaciones, cuenta_bancaria, forma_pago, usuario_id: user?.id, usuario_nombre: user?.nombre, rol_usuario: rol }).then(r => r.data),
     onSuccess: (data) => {
       invalidate(); toast.success(`Estado → ${data.estado}`)
       setRechazarModal(false); setMotivoRechazo('')
+      setAccionModal(null); setAccionForm(ACCION_FORM_INIT)
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al cambiar estado'),
   })
@@ -371,7 +383,7 @@ export default function OCPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.015)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.015)' }}>
                 {['N° OC','Proveedor','Fecha creación','Fecha requerida','Estado','Total','Ítems',''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
@@ -379,12 +391,12 @@ export default function OCPage() {
             </thead>
             <tbody>
               {isLoading ? Array.from({ length: 4 }).map((_, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  {Array.from({ length: 8 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} /></td>)}
+                <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
+                  {Array.from({ length: 8 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>)}
                 </tr>
               )) : ocsFiltradas.map((oc, i) => (
                 <tr key={oc.id} onClick={() => abrirDetalle(oc)} className="cursor-pointer hover:bg-white/[0.03] transition-colors"
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                  style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
                   <td className="px-4 py-3 font-mono font-bold text-xs" style={{ color: 'var(--rmg-blt)' }}>{oc.numero}</td>
                   <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>{oc.proveedor}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(oc.fecha_emision || oc.created_at)}</td>
@@ -417,7 +429,7 @@ export default function OCPage() {
   if (vista === 'nueva') return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center gap-3">
-        <button onClick={cancelarFormOC} className="p-2 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
+        <button onClick={cancelarFormOC} className="p-2 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
           <ChevronLeft size={18}/>
         </button>
         <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>
@@ -465,7 +477,7 @@ export default function OCPage() {
             </div>
             <table className="w-full text-xs">
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   {['Buscar','SKU','Descripción','Cant.','P. Unit. Neto','Subtotal',''].map(h => (
                     <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
@@ -513,7 +525,7 @@ export default function OCPage() {
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => { setVista('lista'); setOcId(null) }} className="p-2 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
+        <button onClick={() => { setVista('lista'); setOcId(null) }} className="p-2 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
           <ChevronLeft size={18}/>
         </button>
         <div className="flex-1">
@@ -539,7 +551,7 @@ export default function OCPage() {
             </button>
           </>)}
           {estado === 'pendiente_autorizacion' && esGerente && (<>
-            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'autorizada' })} disabled={estadoMut.isPending}
+            <button onClick={() => { setAccionForm(ACCION_FORM_INIT); setAccionModal('autorizada') }}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"
               style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.3)' }}>
               <CheckCircle size={13}/> Autorizar
@@ -591,7 +603,7 @@ export default function OCPage() {
             </button>
           )}
           {estado === 'facturada' && esGerente && (
-            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'pago_autorizado' })} disabled={estadoMut.isPending}
+            <button onClick={() => { setAccionForm({ ...ACCION_FORM_INIT, forma_pago: oc?.forma_pago || oc?.medio_pago || '' }); setAccionModal('pago_autorizado') }}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"
               style={{ background: 'rgba(244,162,60,0.15)', color: 'var(--rmg-gold)', border: '1px solid rgba(244,162,60,0.3)' }}>
               <CheckCircle size={13}/> Autorizar pago
@@ -603,7 +615,7 @@ export default function OCPage() {
             </span>
           )}
           {estado === 'pago_autorizado' && esGerente && (
-            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'pagada' })} disabled={estadoMut.isPending}
+            <button onClick={() => { setAccionForm({ ...ACCION_FORM_INIT, forma_pago: oc?.forma_pago || '', cuenta_bancaria: oc?.cuenta_bancaria || '' }); setAccionModal('pagada') }}
               className="btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50">
               💸 Marcar pagada
             </button>
@@ -659,6 +671,8 @@ export default function OCPage() {
               ['Fecha emisión', oc.fecha_emision ? formatFecha(oc.fecha_emision) : '—'],
               ['Fecha requerida', oc.fecha_requerida ? formatFecha(oc.fecha_requerida) : '—'],
               ['Medio de pago', oc.medio_pago || '—'],
+              ...(oc.forma_pago ? [['Modo de pago (autorizado)', oc.forma_pago]] : []),
+              ...(oc.cuenta_bancaria ? [['Cuenta con que se paga', oc.cuenta_bancaria]] : []),
             ].map(([label, val]) => (
               <div key={label}>
                 <div className="text-xs uppercase tracking-wider font-semibold mb-0.5" style={{ color: 'var(--rmg-muted)' }}>{label}</div>
@@ -668,7 +682,7 @@ export default function OCPage() {
             {oc.observaciones && (
               <div className="md:col-span-4">
                 <div className="text-xs uppercase tracking-wider font-semibold mb-0.5" style={{ color: 'var(--rmg-muted)' }}>Observaciones</div>
-                <div className="text-sm" style={{ color: 'var(--rmg-off)' }}>{oc.observaciones}</div>
+                <div className="text-sm" style={{ color: 'var(--rmg-off)', whiteSpace: 'pre-line' }}>{oc.observaciones}</div>
               </div>
             )}
             {estado === 'rechazada' && oc.motivo_rechazo && (
@@ -684,7 +698,7 @@ export default function OCPage() {
             <div className="px-4 py-2.5 border-b text-xs font-semibold uppercase tracking-wider" style={{ borderColor: 'rgba(56,182,255,0.1)', color: 'var(--rmg-muted)' }}>Líneas de producto</div>
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(56,182,255,0.08)' }}>
+                <tr style={{ background: 'rgba(15, 35, 60,0.02)', borderBottom: '1px solid rgba(56,182,255,0.08)' }}>
                   {['SKU','Descripción','Solicitado','Recibido','P. Unit. Neto','Subtotal'].map(h => (
                     <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
@@ -695,7 +709,7 @@ export default function OCPage() {
                   const recibido = item.cantidad_recibida_total || 0
                   const completada = recibido >= item.cantidad
                   return (
-                    <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <tr key={item.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.03)' }}>
                       <td className="px-4 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{item.codigo}</td>
                       <td className="px-4 py-2.5" style={{ color: 'var(--rmg-off)' }}>{item.descripcion}</td>
                       <td className="px-4 py-2.5 text-center">{item.cantidad}</td>
@@ -710,7 +724,7 @@ export default function OCPage() {
                 })}
               </tbody>
             </table>
-            <div className="px-4 py-3 flex justify-end gap-6 border-t" style={{ borderColor: 'rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+            <div className="px-4 py-3 flex justify-end gap-6 border-t" style={{ borderColor: 'rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.02)' }}>
               <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Neto: <span className="font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(neto)}</span></div>
               <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>IVA 19%: <span className="font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(iva)}</span></div>
               <div className="text-base font-black" style={{ color: 'var(--rmg-gold)', fontFamily: 'Inter Tight, sans-serif' }}>Total: {formatCLP(total)}</div>
@@ -808,7 +822,7 @@ export default function OCPage() {
               <h3 className="font-bold text-sm mb-3">Registrar nueva recepción</h3>
               <table className="w-full text-sm mb-3">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                     {['SKU','Descripción','Solicitado','Ya recibido','Pendiente','A recibir ahora'].map(h => (
                       <th key={h} className="text-left px-3 py-2 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
@@ -818,7 +832,7 @@ export default function OCPage() {
                   {recepcionLineas.map((linea, i) => {
                     const pendiente = linea.cantidad_solicitada - linea.ya_recibido
                     return (
-                      <tr key={linea.linea_oc_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <tr key={linea.linea_oc_id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         <td className="px-3 py-2 font-mono text-xs" style={{ color: 'var(--rmg-blt)' }}>{linea.codigo}</td>
                         <td className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-off)' }}>{linea.descripcion}</td>
                         <td className="px-3 py-2 text-center text-xs">{linea.cantidad_solicitada}</td>
@@ -875,7 +889,7 @@ export default function OCPage() {
               </div>
               <table className="w-full text-xs">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.02)' }}>
                     {['SKU','Descripción','Cant. recibida','De'].map(h => (
                       <th key={h} className="text-left px-3 py-1.5 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
@@ -883,7 +897,7 @@ export default function OCPage() {
                 </thead>
                 <tbody>
                   {(r.lineas || []).map(l => (
-                    <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <tr key={l.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.03)' }}>
                       <td className="px-3 py-2 font-mono" style={{ color: 'var(--rmg-blt)' }}>{l.codigo}</td>
                       <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>{l.descripcion}</td>
                       <td className="px-3 py-2 font-bold" style={{ color: 'var(--rmg-teal)' }}>{l.cantidad_recibida}</td>
@@ -962,6 +976,58 @@ export default function OCPage() {
           </div>
         </div>
       )}
+
+      {/* Modal: Acción con datos — autorizar / autorizar pago / marcar pagada */}
+      {accionModal && (() => {
+        const meta = ACCION_META[accionModal]
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+            <div className="rmg-card p-6 w-full max-w-sm animate-fade-in">
+              <h2 className="font-bold mb-1">{meta.titulo}</h2>
+              <p className="text-xs mb-4" style={{ color: 'var(--rmg-muted)' }}>OC {oc?.numero} · {oc?.proveedor}</p>
+
+              <div className="space-y-3">
+                {meta.necesitaPago && (<>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Modo de pago</label>
+                    <select className="rmg-input w-full" value={accionForm.forma_pago}
+                      onChange={e => setAccionForm(f => ({ ...f, forma_pago: e.target.value }))}>
+                      <option value="">Seleccionar…</option>
+                      {MODO_PAGO_OPCIONES.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cuenta con la que se paga</label>
+                    <input className="rmg-input w-full" placeholder="Ej: 1781310106 Banco de Chile"
+                      value={accionForm.cuenta_bancaria} onChange={e => setAccionForm(f => ({ ...f, cuenta_bancaria: e.target.value }))} />
+                  </div>
+                </>)}
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Observaciones</label>
+                  <textarea className="rmg-input w-full text-sm" rows={3} placeholder="Notas u observaciones (opcional)…"
+                    value={accionForm.observaciones} onChange={e => setAccionForm(f => ({ ...f, observaciones: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end mt-4">
+                <button onClick={() => { setAccionModal(null); setAccionForm(ACCION_FORM_INIT) }} className="btn-secondary">Cancelar</button>
+                <button
+                  disabled={estadoMut.isPending}
+                  onClick={() => estadoMut.mutate({
+                    id: oc.id,
+                    nuevo_estado: accionModal,
+                    observaciones: accionForm.observaciones,
+                    cuenta_bancaria: accionForm.cuenta_bancaria,
+                    forma_pago: accionForm.forma_pago,
+                  })}
+                  className="btn-primary flex items-center gap-1.5 disabled:opacity-50">
+                  <CheckCircle size={14}/> {estadoMut.isPending ? 'Guardando…' : meta.confirmLabel}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Modal: Email */}
       {emailModal && (

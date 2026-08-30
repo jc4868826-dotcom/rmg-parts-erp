@@ -184,7 +184,7 @@ export default function VentasPage() {
               <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--rmg-muted)' }}>Ítems</div>
               <table className="w-full text-xs">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                     {['SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Costo', 'Subtotal', ''].map(h => (
                       <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
@@ -194,7 +194,7 @@ export default function VentasPage() {
                   {form.items.map((item, i) => {
                     const sub = Number(item.precio_unitario || 0) * Number(item.cantidad || 0)
                     return (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         <td className="px-3 py-2 w-24"><input className="rmg-input text-xs" placeholder="SKU" value={item.sku} onChange={e => updateItem(i, 'sku', e.target.value)} /></td>
                         <td className="px-3 py-2 min-w-40"><input className="rmg-input text-xs" placeholder="Descripción" value={item.descripcion} onChange={e => updateItem(i, 'descripcion', e.target.value)} /></td>
                         <td className="px-3 py-2 w-20"><input type="number" min="0" className="rmg-input text-xs text-center" value={item.cantidad} onChange={e => updateItem(i, 'cantidad', e.target.value)} /></td>
@@ -261,7 +261,7 @@ export default function VentasPage() {
           <div className="w-full max-w-md animate-fade-in">
             <div className="flex justify-between items-center mb-2 px-1">
               <h2 className="font-bold text-sm" style={{ color: '#fff' }}>Documentos — {docsVenta.numero_documento || `Venta #${docsVenta.id}`}</h2>
-              <button onClick={() => setDocsVenta(null)} className="p-1 rounded hover:bg-white/10" style={{ color: '#fff' }}><X size={16}/></button>
+              <button onClick={() => setDocsVenta(null)} className="p-1 rounded hover:bg-black/10" style={{ color: '#fff' }}><X size={16}/></button>
             </div>
             <DocumentosPanel entidad="venta" entidadId={docsVenta.id} />
           </div>
@@ -324,13 +324,13 @@ export default function VentasPage() {
 
       {/* Tabla */}
       <div className="rmg-card overflow-hidden">
-        <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+        <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
           <span className="font-bold text-sm">{ventas.length} ventas · {mes}</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.015)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.015)' }}>
                 {['Fecha', 'Cliente', 'Doc.', 'Total', 'Costo', 'Estado', 'Logística', 'Forma Pago', 'Acciones'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
@@ -339,16 +339,16 @@ export default function VentasPage() {
             <tbody>
               {isLoading
                 ? Array.from({ length: 4 }).map((_, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                       {Array.from({ length: 8 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} /></td>
+                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>
                       ))}
                     </tr>
                   ))
                 : ventas.map((v, i) => {
                     const est = ESTADO_STYLE[v.estado] || ESTADO_STYLE.Pendiente
                     return (
-                      <tr key={v.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                      <tr key={v.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
                         className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(v.fecha)}</td>
                         <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>
@@ -379,10 +379,10 @@ export default function VentasPage() {
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
                             {v.estado !== 'Pagado' && (
-                              <button onClick={() => { setPagoModal(v); setPago(PAGO_INIT) }} title="Registrar pago" className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
+                              <button onClick={() => { setPagoModal(v); setPago(PAGO_INIT) }} title="Registrar pago" className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
                             )}
-                            <button onClick={() => setDocsVenta(v)} title="Documentos" className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-blue)' }}><Paperclip size={13}/></button>
-                            <button onClick={() => setEditando({ ...v })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>
+                            <button onClick={() => setDocsVenta(v)} title="Documentos" className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-blue)' }}><Paperclip size={13}/></button>
+                            <button onClick={() => setEditando({ ...v })} className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>
                             <button onClick={() => { if (confirm('¿Eliminar esta venta?')) eliminarMut.mutate(v.id) }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><Trash2 size={13}/></button>
                           </div>
                         </td>
@@ -393,7 +393,7 @@ export default function VentasPage() {
             </tbody>
             {!isLoading && ventas.length > 0 && (
               <tfoot>
-                <tr style={{ background: 'rgba(255,255,255,0.03)', borderTop: '1px solid rgba(56,182,255,0.1)' }}>
+                <tr style={{ background: 'rgba(15, 35, 60,0.03)', borderTop: '1px solid rgba(56,182,255,0.1)' }}>
                   <td colSpan={3} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Total mes</td>
                   <td className="px-4 py-3 font-black text-base" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(totalMes)}</td>
                   <td className="px-4 py-3 font-bold text-sm" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(costoMes)}</td>

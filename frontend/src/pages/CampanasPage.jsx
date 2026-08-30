@@ -85,8 +85,8 @@ function LeadEstadoBadge({ value }) {
 
 function KpiCard({ label, value, sub, color }) {
   return (
-    <div style={{ flex: 1, minWidth: 100, padding: '12px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(56,182,255,0.1)' }}>
-      <div style={{ fontSize: 22, fontWeight: 800, color: color || 'rgba(255,255,255,0.9)', fontFamily: 'Inter Tight, sans-serif', lineHeight: 1 }}>{value}</div>
+    <div style={{ flex: 1, minWidth: 100, padding: '12px 16px', borderRadius: 10, background: 'rgba(15, 35, 60,0.03)', border: '0.5px solid rgba(56,182,255,0.1)' }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || 'rgba(15, 35, 60,0.9)', fontFamily: 'Inter Tight, sans-serif', lineHeight: 1 }}>{value}</div>
       <div style={{ fontSize: 11, color: 'var(--rmg-muted)', marginTop: 4 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: color || 'var(--rmg-muted)', fontWeight: 600, marginTop: 2 }}>{sub}</div>}
     </div>
@@ -146,7 +146,7 @@ function PanelDetalle({ campana, onClose }) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Megaphone size={16} style={{ color: 'var(--rmg-blt)' }} />
-              <span style={{ fontWeight: 700, fontSize: 16, color: 'rgba(255,255,255,0.92)' }}>{campana.nombre}</span>
+              <span style={{ fontWeight: 700, fontSize: 16, color: 'rgba(15, 35, 60,0.92)' }}>{campana.nombre}</span>
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
               <EstadoBadge value={campana.estado} />
@@ -178,8 +178,8 @@ function PanelDetalle({ campana, onClose }) {
             onClick={() => setFiltro(f)}
             style={{
               fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-              background: filtro === f ? 'rgba(41,170,225,0.2)' : 'rgba(255,255,255,0.04)',
-              border: filtro === f ? '0.5px solid #29AAE1' : '0.5px solid rgba(255,255,255,0.1)',
+              background: filtro === f ? 'rgba(41,170,225,0.2)' : 'rgba(15, 35, 60,0.04)',
+              border: filtro === f ? '0.5px solid #29AAE1' : '0.5px solid rgba(15, 35, 60,0.1)',
               color: filtro === f ? '#29AAE1' : 'var(--rmg-muted)',
             }}
           >
@@ -199,7 +199,7 @@ function PanelDetalle({ campana, onClose }) {
         ))}
         <button
           onClick={() => refetch()}
-          style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.08)', color: 'var(--rmg-muted)', display: 'flex', alignItems: 'center', gap: 4 }}
+          style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', background: 'rgba(15, 35, 60,0.04)', border: '0.5px solid rgba(15, 35, 60,0.08)', color: 'var(--rmg-muted)', display: 'flex', alignItems: 'center', gap: 4 }}
         >
           <RefreshCw size={10} /> Actualizar
         </button>
@@ -234,7 +234,7 @@ function PanelDetalle({ campana, onClose }) {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ position: 'sticky', top: 0, background: 'var(--rmg-card, #0f1923)', zIndex: 1 }}>
-              <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ background: 'rgba(15, 35, 60,0.02)' }}>
                 {['Empresa', 'Email', 'Estado', 'Aperturas', 'Fecha apertura', 'Acciones'].map(h => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: 'rgba(90,143,168,0.7)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '0.5px solid rgba(56,182,255,0.1)', whiteSpace: 'nowrap' }}>
                     {h}
@@ -246,15 +246,15 @@ function PanelDetalle({ campana, onClose }) {
               {prospectosFiltrados.map(p => (
                 <tr key={p.id}
                   style={{ borderBottom: '0.5px solid rgba(56,182,255,0.05)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.02)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
                   <td style={{ padding: '10px 14px', minWidth: 140 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>{p.empresa || '—'}</div>
+                    <div style={{ fontWeight: 600, fontSize: 12, color: 'rgba(15, 35, 60,0.85)' }}>{p.empresa || '—'}</div>
                     {p.nombre && <div style={{ fontSize: 11, color: 'var(--rmg-muted)', marginTop: 1 }}>{p.nombre}</div>}
                     {p.rubro && <div style={{ fontSize: 10, color: 'rgba(90,143,168,0.5)', marginTop: 1 }}>{p.rubro}</div>}
                   </td>
-                  <td style={{ padding: '10px 14px', fontSize: 11, color: 'rgba(255,255,255,0.55)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '10px 14px', fontSize: 11, color: 'rgba(15, 35, 60,0.55)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {p.email || <span style={{ color: 'rgba(224,90,78,0.6)' }}>Sin email</span>}
                   </td>
                   <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
@@ -539,7 +539,7 @@ export default function CampanasPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <tr style={{ background: 'rgba(15, 35, 60,0.03)' }}>
                 {['Nombre', 'Segmento / Rubro', 'Canal', 'Estado', 'Métricas', 'Acciones'].map(h => (
                   <th key={h} className="px-4 py-3 text-left" style={{ fontSize: 11, fontWeight: 500, color: 'rgba(90,143,168,0.7)', borderBottom: '0.5px solid rgba(56,182,255,0.1)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
@@ -550,7 +550,7 @@ export default function CampanasPage() {
                 ? Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>{Array.from({ length: 6 }).map((_, j) => (
                     <td key={j} className="px-4 py-3">
-                      <div style={{ height: 13, borderRadius: 6, background: 'rgba(255,255,255,0.05)', width: '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                      <div style={{ height: 13, borderRadius: 6, background: 'rgba(15, 35, 60,0.05)', width: '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
                     </td>
                   ))}</tr>
                 ))
@@ -565,18 +565,18 @@ export default function CampanasPage() {
                   : campanas.map(c => (
                     <tr key={c.id}
                       style={{ borderBottom: '0.5px solid rgba(56,182,255,0.07)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.025)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       {/* Nombre */}
                       <td className="px-4 py-3" style={{ minWidth: 160 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>{c.nombre}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(15, 35, 60,0.85)' }}>{c.nombre}</div>
                         <div style={{ fontSize: 11, color: 'var(--rmg-muted)', marginTop: 1 }}>{c.tipo || '—'}</div>
                       </td>
                       {/* Segmento / Rubro */}
                       <td className="px-4 py-3">
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{c.segmento || '—'}</div>
-                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{c.rubro || '—'}</div>
+                        <div style={{ fontSize: 12, color: 'rgba(15, 35, 60,0.6)' }}>{c.segmento || '—'}</div>
+                        <div style={{ fontSize: 11, color: 'rgba(15, 35, 60,0.4)', marginTop: 1 }}>{c.rubro || '—'}</div>
                       </td>
                       {/* Canal */}
                       <td className="px-4 py-3 whitespace-nowrap"><CanalBadge value={c.canal} /></td>
@@ -638,9 +638,9 @@ export default function CampanasPage() {
                           <button
                             title="Editar"
                             onClick={() => setEditModal({ ...c })}
-                            style={{ display:'flex', alignItems:'center', justifyContent:'center', width:30, height:30, borderRadius:7, background:'rgba(255,255,255,0.05)', border:'0.5px solid rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.5)', cursor:'pointer' }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                            style={{ display:'flex', alignItems:'center', justifyContent:'center', width:30, height:30, borderRadius:7, background:'rgba(15, 35, 60,0.05)', border:'0.5px solid rgba(15, 35, 60,0.1)', color:'rgba(15, 35, 60,0.5)', cursor:'pointer' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.1)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.05)'}
                           >
                             <Pencil size={13} />
                           </button>
@@ -680,19 +680,19 @@ export default function CampanasPage() {
             {verMensaje.asunto && (
               <div className="mb-3">
                 <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--rmg-muted)' }}>Asunto</div>
-                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{verMensaje.asunto}</div>
+                <div style={{ fontSize: 13, color: 'rgba(15, 35, 60,0.8)', fontWeight: 500 }}>{verMensaje.asunto}</div>
               </div>
             )}
             <div className="mb-3">
               <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--rmg-muted)' }}>Mensaje</div>
-              <div className="p-4 rounded-lg text-sm" style={{ background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(56,182,255,0.1)', color: 'rgba(255,255,255,0.75)', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 80 }}>
+              <div className="p-4 rounded-lg text-sm" style={{ background: 'rgba(15, 35, 60,0.03)', border: '0.5px solid rgba(56,182,255,0.1)', color: 'rgba(15, 35, 60,0.75)', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 80 }}>
                 {verMensaje.mensaje_editado || <span style={{ color: 'var(--rmg-muted)' }}>Sin mensaje guardado</span>}
               </div>
             </div>
             {verMensaje.firma && (
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--rmg-muted)' }}>Firma</div>
-                <div className="p-3 rounded-lg text-xs" style={{ background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(56,182,255,0.07)', color: 'rgba(255,255,255,0.5)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                <div className="p-3 rounded-lg text-xs" style={{ background: 'rgba(15, 35, 60,0.02)', border: '0.5px solid rgba(56,182,255,0.07)', color: 'rgba(15, 35, 60,0.5)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
                   {verMensaje.firma}
                 </div>
               </div>

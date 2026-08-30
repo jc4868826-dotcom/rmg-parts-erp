@@ -26,7 +26,7 @@ const ActiveBadge = ({ activo }) => (
   <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
     style={activo
       ? { background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }
-      : { background: 'rgba(255,255,255,0.06)', color: 'var(--rmg-muted)' }}>
+      : { background: 'rgba(15, 35, 60,0.06)', color: 'var(--rmg-muted)' }}>
     {activo ? 'Sí' : 'No'}
   </span>
 )
@@ -35,7 +35,7 @@ const Thumbnail = ({ src, size = 40 }) => src
   ? <img src={src} alt="foto" className="rounded object-cover flex-shrink-0"
       style={{ width: size, height: size }} />
   : <div className="rounded flex items-center justify-center flex-shrink-0"
-      style={{ width: size, height: size, background: 'rgba(255,255,255,0.06)' }}>
+      style={{ width: size, height: size, background: 'rgba(15, 35, 60,0.06)' }}>
       <Image size={size * 0.45} style={{ color: 'var(--rmg-muted)' }} />
     </div>
 
@@ -45,7 +45,7 @@ const TH = ({ children }) => (
 )
 
 const TR = ({ children }) => (
-  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>{children}</tr>
+  <tr style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>{children}</tr>
 )
 
 const TD = ({ children, className = '' }) => (
@@ -54,7 +54,7 @@ const TD = ({ children, className = '' }) => (
 
 const ActionBtn = ({ onClick, icon: Icon, color, title }) => (
   <button onClick={onClick} title={title}
-    className="p-1.5 rounded-lg transition-colors hover:bg-white/5"
+    className="p-1.5 rounded-lg transition-colors hover:bg-black/5"
     style={{ color }}>
     <Icon size={14} />
   </button>
@@ -145,7 +145,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
                 {editId ? 'Editar subfamilia' : 'Nueva subfamilia'}
               </span>
               {editId && (
-                <button onClick={resetForm} className="p-1 rounded hover:bg-white/5"
+                <button onClick={resetForm} className="p-1 rounded hover:bg-black/5"
                   style={{ color: 'var(--rmg-muted)' }}><X size={14} /></button>
               )}
             </div>
@@ -192,7 +192,7 @@ function TabSubfamilias({ subfamilias = [], isLoading }) {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                 <TH>ID</TH><TH>Familia</TH><TH>Nombre</TH><TH>Foto</TH><TH>Orden</TH><TH>Activo</TH><TH></TH>
               </tr>
             </thead>
@@ -351,7 +351,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
                 {editId ? 'Editar bloque' : 'Nuevo bloque de contenido'}
               </span>
               {editId && (
-                <button onClick={resetForm} className="p-1 rounded hover:bg-white/5"
+                <button onClick={resetForm} className="p-1 rounded hover:bg-black/5"
                   style={{ color: 'var(--rmg-muted)' }}><X size={14} /></button>
               )}
             </div>
@@ -448,7 +448,7 @@ function TabProductos({ productos = [], subfamilias = [], isLoading }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   <TH>ID</TH><TH>Familia</TH><TH>Subfamilia</TH><TH>Nombre</TH><TH>Foto</TH><TH>Descripción</TH><TH>Activo</TH><TH></TH>
                 </tr>
               </thead>
@@ -568,7 +568,7 @@ function TabFamilias({ familias = [], isLoading }) {
                 {editKey ? 'Editar familia' : 'Nueva familia'}
               </span>
               {editKey && (
-                <button onClick={resetForm} className="p-1 rounded hover:bg-white/5"
+                <button onClick={resetForm} className="p-1 rounded hover:bg-black/5"
                   style={{ color: 'var(--rmg-muted)' }}><X size={14} /></button>
               )}
             </div>
@@ -603,7 +603,7 @@ function TabFamilias({ familias = [], isLoading }) {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                 <TH>Familia</TH><TH>Descripción</TH><TH>Foto</TH><TH></TH>
               </tr>
             </thead>
@@ -679,7 +679,7 @@ function TabBanners({ banners = [], isLoading }) {
       {/* Lista de banners */}
       <div className="rmg-card overflow-hidden">
         <div className="px-5 py-3 border-b flex items-center gap-2"
-          style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+          style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
           <span className="font-bold text-sm">Banners activos</span>
           <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
             style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blt)' }}>
@@ -697,7 +697,7 @@ function TabBanners({ banners = [], isLoading }) {
             {banners.map((b, i) => (
               <div key={b.id} className="rounded-xl overflow-hidden border"
                 style={{ borderColor: 'rgba(56,182,255,0.1)' }}>
-                <div style={{ height: 120, background: 'rgba(255,255,255,0.04)', position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
+                <div style={{ height: 120, background: 'rgba(15, 35, 60,0.04)', position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
                   <img src={FOTO_URL('banners', b.id)} alt={`Banner ${i + 1}`}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     onError={e => { e.currentTarget.style.display = 'none' }} />

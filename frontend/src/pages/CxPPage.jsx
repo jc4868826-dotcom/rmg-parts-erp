@@ -82,7 +82,7 @@ export default function CxPPage() {
             className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
             style={filtroEstado === f.k
               ? { background: 'var(--rmg-blue)', color: '#fff' }
-              : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
+              : { background: 'rgba(15, 35, 60,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }
             }>{f.l}</button>
         ))}
       </div>
@@ -91,7 +91,7 @@ export default function CxPPage() {
       <div className="rmg-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
               {['N° Factura','Proveedor','OC Ref.','Monto','Emisión','Vencimiento','Días','Estado','Fecha pago',''].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
@@ -100,9 +100,9 @@ export default function CxPPage() {
           <tbody>
             {isLoading
               ? Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                     {Array.from({ length: 10 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/></td>
+                      <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                     ))}
                   </tr>
                 ))
@@ -111,7 +111,7 @@ export default function CxPPage() {
                   const EstIcon = est.icon
                   return (
                     <tr key={f.id}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                      style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
                       <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{f.numero}</td>
                       <td className="px-4 py-3 font-medium text-sm" style={{ color: 'var(--rmg-off)' }}>{f.proveedor}</td>
                       <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--rmg-muted)' }}>{f.oc_numero}</td>

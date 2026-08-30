@@ -71,7 +71,7 @@ const SegBar = ({ nombre, icono, actual, meta, color }) => {
         <span style={{ color:'var(--rmg-off)' }}>{icono} {nombre}</span>
         <span className="font-semibold precio-clp" style={{ color }}>{formatCLP(actual)}</span>
       </div>
-      <div className="h-2 rounded-full" style={{ background:'rgba(255,255,255,0.06)' }}>
+      <div className="h-2 rounded-full" style={{ background:'rgba(15, 35, 60,0.06)' }}>
         <div className="h-2 rounded-full transition-all duration-700" style={{ width:`${pct}%`, background:color }} />
       </div>
       <div className="flex justify-between text-xs" style={{ color:'var(--rmg-muted)' }}>
@@ -200,8 +200,8 @@ export default function DashboardPage() {
     return rows
   }, [datos.cxcRows, filtroCxC])
 
-  const TT  = { background:'#0a1a2e', border:'1px solid rgba(56,182,255,0.2)', borderRadius:8, color:'#fff' }
-  const AX  = { fill:'rgba(90,143,168,0.7)', fontSize:11 }
+  const TT  = { background:'#ffffff', border:'1px solid rgba(15,35,60,0.12)', borderRadius:8, color:'#16233a', boxShadow:'0 2px 12px rgba(15,35,60,0.12)' }
+  const AX  = { fill:'#64748b', fontSize:11 }
 
   const periodoLabel = () => {
     const p = activo.periodo
@@ -228,7 +228,7 @@ export default function DashboardPage() {
                 className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
                 style={filtro.periodo===k
                   ? {background:'var(--rmg-blue)',color:'#fff'}
-                  : {background:'rgba(255,255,255,0.05)',color:'var(--rmg-muted)',border:'1px solid rgba(255,255,255,0.08)'}
+                  : {background:'rgba(15, 35, 60,0.05)',color:'var(--rmg-muted)',border:'1px solid rgba(15, 35, 60,0.08)'}
                 }>{l}</button>
             ))}
           </div>
@@ -253,7 +253,7 @@ export default function DashboardPage() {
                 className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
                 style={filtro.segmento===s
                   ? { background:s==='todos'?'var(--rmg-blue)':`${SEG_COLOR[s]}22`, color:s==='todos'?'#fff':SEG_COLOR[s], border:`1px solid ${s==='todos'?'var(--rmg-blue)':SEG_COLOR[s]}55` }
-                  : { background:'rgba(255,255,255,0.04)', color:'var(--rmg-muted)', border:'1px solid rgba(255,255,255,0.08)' }
+                  : { background:'rgba(15, 35, 60,0.04)', color:'var(--rmg-muted)', border:'1px solid rgba(15, 35, 60,0.08)' }
                 }>{SEG_NAME[s]}</button>
             ))}
           </div>
@@ -304,7 +304,7 @@ export default function DashboardPage() {
             <div className="text-xs" style={{ color:'var(--rmg-muted)' }}>de meta {formatCLP(datos.meta)}</div>
           </div>
         </div>
-        <div className="h-3 rounded-full" style={{ background:'rgba(255,255,255,0.05)' }}>
+        <div className="h-3 rounded-full" style={{ background:'rgba(15, 35, 60,0.05)' }}>
           <div className="h-3 rounded-full transition-all duration-700"
             style={{ width:`${Math.min(datos.pctMeta,100)}%`, background:'linear-gradient(90deg, var(--rmg-blue), var(--rmg-blt))' }}/>
         </div>
@@ -342,7 +342,7 @@ export default function DashboardPage() {
             {datos.ventasChart.length > 0 ? (
               <ResponsiveContainer width="100%" height={160}>
                 <BarChart data={datos.ventasChart} barCategoryGap="40%">
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)"/>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 35, 60,0.05)"/>
                   <XAxis dataKey="label" tick={AX} axisLine={false} tickLine={false}/>
                   <YAxis tick={AX} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1e6).toFixed(1)}M`}/>
                   <Tooltip contentStyle={TT} formatter={v=>[formatCLP(v),'Ingresos']}/>
@@ -364,7 +364,7 @@ export default function DashboardPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ borderBottom:'1px solid rgba(56,182,255,0.1)', background:'rgba(255,255,255,0.02)' }}>
+                <tr style={{ borderBottom:'1px solid rgba(56,182,255,0.1)', background:'rgba(15, 35, 60,0.02)' }}>
                   {['Cliente','Segmento','Última compra','Monto período'].map(h=>(
                     <th key={h} className="text-left px-3 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color:'var(--rmg-muted)' }}>{h}</th>
                   ))}
@@ -372,7 +372,7 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {datos.clientesFiltro.map((c,i)=>(
-                  <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                  <tr key={i} style={{ borderBottom:'1px solid rgba(15, 35, 60,0.04)' }}>
                     <td className="px-3 py-2.5 font-medium" style={{ color:'var(--rmg-off)' }}>{c.nombre}</td>
                     <td className="px-3 py-2.5">
                       <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
@@ -401,7 +401,7 @@ export default function DashboardPage() {
               { label:'Venta bruta',        monto:datos.venta,      pct:'100%' },
               { label:'− Costo mercadería', monto:datos.costoMerc,  pct: datos.venta > 0 ? `${(100 - datos.margenPct).toFixed(1)}%` : '0%' },
             ].map(r=>(
-              <div key={r.label} className="flex justify-between py-2" style={{ borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+              <div key={r.label} className="flex justify-between py-2" style={{ borderBottom:'1px solid rgba(15, 35, 60,0.05)' }}>
                 <span style={{ color:'var(--rmg-muted)' }}>{r.label}</span>
                 <div className="flex items-center gap-6">
                   <span className="text-xs w-12 text-right" style={{ color:'var(--rmg-muted)' }}>{r.pct}</span>
@@ -423,7 +423,7 @@ export default function DashboardPage() {
               Gastos operacionales confirmados
             </div>
 
-            <div className="flex justify-between py-2" style={{ borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+            <div className="flex justify-between py-2" style={{ borderBottom:'1px solid rgba(15, 35, 60,0.05)' }}>
               <span style={{ color:'var(--rmg-muted)' }}>Total gastos (caja confirmada)</span>
               <span className="font-semibold w-32 text-right precio-clp" style={{ color:'var(--rmg-off)' }}>{formatCLP(datos.totalGastos)}</span>
             </div>
@@ -464,7 +464,7 @@ export default function DashboardPage() {
           <div className="md:col-span-2">
             <ResponsiveContainer width="100%" height={210}>
               <BarChart data={forecast} barCategoryGap="40%">
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)"/>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 35, 60,0.05)"/>
                 <XAxis dataKey="mes" tick={{...AX,fontSize:13}} axisLine={false} tickLine={false}/>
                 <YAxis tick={AX} axisLine={false} tickLine={false}
                   tickFormatter={v=>`$${(v/1e6).toFixed(0)}M`}
@@ -544,7 +544,7 @@ export default function DashboardPage() {
                   ? { background:k==='criticas'?'rgba(224,90,78,0.2)':k==='vencidas'?'rgba(244,162,60,0.2)':'rgba(56,182,255,0.15)',
                       color:k==='criticas'?'var(--rmg-red)':k==='vencidas'?'var(--rmg-gold)':'var(--rmg-blt)',
                       border:`1px solid ${k==='criticas'?'rgba(224,90,78,0.4)':k==='vencidas'?'rgba(244,162,60,0.4)':'rgba(56,182,255,0.4)'}` }
-                  : { background:'rgba(255,255,255,0.04)', color:'var(--rmg-muted)', border:'1px solid rgba(255,255,255,0.08)' }
+                  : { background:'rgba(15, 35, 60,0.04)', color:'var(--rmg-muted)', border:'1px solid rgba(15, 35, 60,0.08)' }
                 }>{l}</button>
             ))}
           </div>
@@ -553,7 +553,7 @@ export default function DashboardPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom:'1px solid rgba(56,182,255,0.1)', background:'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom:'1px solid rgba(56,182,255,0.1)', background:'rgba(15, 35, 60,0.02)' }}>
                 {['Cliente','N° NV','Monto','Días','Estado'].map(h=>(
                   <th key={h} className="text-left px-3 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color:'var(--rmg-muted)' }}>{h}</th>
                 ))}
@@ -565,7 +565,7 @@ export default function DashboardPage() {
                 : cxcVisible.map((c,i)=>{
                   const est = CXC_EST[c.estado] || CXC_EST.al_dia
                   return (
-                    <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={i} style={{ borderBottom:'1px solid rgba(15, 35, 60,0.04)' }}>
                       <td className="px-3 py-3 font-medium" style={{ color:'var(--rmg-off)' }}>{c.cliente}</td>
                       <td className="px-3 py-3 text-xs font-mono" style={{ color:'var(--rmg-muted)' }}>{c.factura}</td>
                       <td className="px-3 py-3 font-bold precio-clp" style={{ color:'var(--rmg-off)' }}>{formatCLP(c.monto)}</td>
@@ -609,7 +609,7 @@ export default function DashboardPage() {
         {datos.flujoCaja.length > 0 ? (
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={datos.flujoCaja} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)"/>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 35, 60,0.05)"/>
               <XAxis dataKey="semana" tick={AX} axisLine={false} tickLine={false}/>
               <YAxis tick={AX} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1e6).toFixed(1)}M`}/>
               <Tooltip contentStyle={TT} formatter={(v,n)=>[formatCLP(v),n==='ingresos'?'Ingresos':'Egresos']}/>

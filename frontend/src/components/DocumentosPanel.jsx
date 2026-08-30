@@ -77,7 +77,7 @@ export default function DocumentosPanel({ entidad, entidadId, titulo = 'Document
             const Icon = ICONO[d.tipo] || FileText
             return (
               <div key={d.id} className="flex items-center justify-between text-xs rounded-lg px-3 py-2"
-                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                style={{ background: 'rgba(15, 35, 60,0.02)', border: '1px solid rgba(15, 35, 60,0.05)' }}>
                 <a href={`${api.defaults.baseURL}/documentos/archivo/${d.id}`} target="_blank" rel="noreferrer"
                   className="flex items-center gap-2 flex-1 min-w-0" style={{ color: 'var(--rmg-off)' }}>
                   <Icon size={14} style={{ color: 'var(--rmg-blue)', flexShrink: 0 }}/>

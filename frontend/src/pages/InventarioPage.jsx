@@ -67,7 +67,7 @@ export default function InventarioPage() {
             className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
             style={cat === c.key
               ? { background: 'var(--rmg-blue)', color: '#fff' }
-              : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
+              : { background: 'rgba(15, 35, 60,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }
             }>
             {c.label}
           </button>
@@ -78,7 +78,7 @@ export default function InventarioPage() {
       <div className="rmg-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+            <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
               {['Código', 'Marca / Descripción', 'Categoría', 'Stock actual', 'Mínimo', 'Estado', 'Unidad'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
@@ -87,9 +87,9 @@ export default function InventarioPage() {
           <tbody>
             {isLoading
               ? Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                     {Array.from({ length: 7 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} /></td>
+                      <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>
                     ))}
                   </tr>
                 ))
@@ -97,7 +97,7 @@ export default function InventarioPage() {
                   const pct = Math.min((p.stock_actual / (p.stock_minimo * 4)) * 100, 100)
                   const alertColor = p.alerta === 'critico' ? 'var(--rmg-red)' : p.alerta === 'bajo' ? 'var(--rmg-gold)' : 'var(--rmg-teal)'
                   return (
-                    <tr key={p.codigo} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: p.alerta === 'critico' ? 'rgba(224,90,78,0.03)' : i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                    <tr key={p.codigo} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: p.alerta === 'critico' ? 'rgba(224,90,78,0.03)' : i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
                       className="hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo}</td>
                       <td className="px-4 py-3">
@@ -107,7 +107,7 @@ export default function InventarioPage() {
                       <td className="px-4 py-3 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{p.categoria}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', minWidth: 60 }}>
+                          <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(15, 35, 60,0.06)', minWidth: 60 }}>
                             <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: alertColor }} />
                           </div>
                           <span className="font-bold w-10 text-right" style={{ color: alertColor }}>{p.stock_actual}</span>

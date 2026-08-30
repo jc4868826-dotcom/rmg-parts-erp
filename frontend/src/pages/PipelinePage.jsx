@@ -99,7 +99,7 @@ export default function PipelinePage() {
       {/* Floating action bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 rounded-xl px-4 py-2.5 flex-shrink-0 animate-fade-in"
-          style={{ background: 'rgba(7,21,40,0.9)', border: '1px solid rgba(56,182,255,0.35)' }}>
+          style={{ background: '#ffffff', border: '1px solid rgba(21,104,184,0.35)', boxShadow: 'var(--rmg-shadow)' }}>
           <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>
             ✓ {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
           </span>
@@ -131,7 +131,7 @@ export default function PipelinePage() {
                   <span className="text-sm font-semibold" style={{ color: etapa.color }}>{etapa.label}</span>
                 </div>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--rmg-muted)' }}>
+                  style={{ background: 'rgba(15, 35, 60,0.06)', color: 'var(--rmg-muted)' }}>
                   {isLoading ? '—' : cards.length}
                 </span>
               </div>
@@ -141,8 +141,8 @@ export default function PipelinePage() {
                 {isLoading
                   ? Array.from({ length: 2 }).map((_, i) => (
                       <div key={i} className="rmg-card p-3.5 animate-pulse">
-                        <div className="h-4 rounded mb-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                        <div className="h-3 rounded w-2/3" style={{ background: 'rgba(255,255,255,0.04)' }} />
+                        <div className="h-4 rounded mb-2" style={{ background: 'rgba(15, 35, 60,0.06)' }} />
+                        <div className="h-3 rounded w-2/3" style={{ background: 'rgba(15, 35, 60,0.04)' }} />
                       </div>
                     ))
                   : cards.map(c => (
@@ -157,7 +157,7 @@ export default function PipelinePage() {
                 }
                 {!isLoading && cards.length === 0 && (
                   <div className="text-center py-8 text-xs rounded-xl border-2 border-dashed"
-                    style={{ color: 'var(--rmg-muted)', borderColor: 'rgba(255,255,255,0.06)' }}>
+                    style={{ color: 'var(--rmg-muted)', borderColor: 'rgba(15, 35, 60,0.06)' }}>
                     Sin clientes
                   </div>
                 )}

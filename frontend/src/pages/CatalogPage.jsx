@@ -30,8 +30,8 @@ function LineaRow({ row, i }) {
   return (
     <tr
       style={{
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
-        background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)',
+        borderBottom: '1px solid rgba(15, 35, 60,0.04)',
+        background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)',
       }}
       className="hover:bg-white/[0.02] transition-colors"
     >
@@ -74,7 +74,7 @@ function LineaGroupRows({ linea, rows, isOpen, onToggle }) {
       {/* Fila cabecera de la línea (clickable) */}
       <tr
         style={{
-          borderBottom: '1px solid rgba(255,255,255,0.04)',
+          borderBottom: '1px solid rgba(15, 35, 60,0.04)',
           background: 'rgba(56,182,255,0.04)',
           cursor: 'pointer',
         }}
@@ -134,7 +134,7 @@ function LineaGroupRows({ linea, rows, isOpen, onToggle }) {
         <tr
           key={row['Tipo']}
           style={{
-            borderBottom: '1px solid rgba(255,255,255,0.03)',
+            borderBottom: '1px solid rgba(15, 35, 60,0.03)',
             background: 'rgba(56,182,255,0.025)',
           }}
         >
@@ -159,7 +159,7 @@ function LineaGroupRows({ linea, rows, isOpen, onToggle }) {
 function LineaTableHeader() {
   return (
     <thead>
-      <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+      <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
         {[
           'Línea / Marca',
           'Tipo',
@@ -222,7 +222,7 @@ const FAM_COLOR = {
 }
 
 function famColor(fam) {
-  return FAM_COLOR[fam] || { bg: 'rgba(255,255,255,0.06)', text: 'var(--rmg-muted)' }
+  return FAM_COLOR[fam] || { bg: 'rgba(15, 35, 60,0.06)', text: 'var(--rmg-muted)' }
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -321,7 +321,7 @@ export default function CatalogPage() {
       {/* Estado de carga */}
       {isLoading && (
         <div className="rmg-card p-8 text-center" style={{ color: 'var(--rmg-muted)' }}>
-          <div className="h-4 w-48 rounded animate-pulse mx-auto" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <div className="h-4 w-48 rounded animate-pulse mx-auto" style={{ background: 'rgba(15, 35, 60,0.06)' }} />
           <p className="mt-3 text-sm">Cargando catálogo…</p>
         </div>
       )}
@@ -371,7 +371,7 @@ export default function CatalogPage() {
                 </button>
 
                 {isFamOpen && (
-                  <div style={{ borderTop: `1px solid rgba(255,255,255,0.06)` }}>
+                  <div style={{ borderTop: `1px solid rgba(15, 35, 60,0.06)` }}>
                     {subKeys.map(sub => {
                       const subSubKeys = Object.keys(tree[fam][sub])
                       const subTotal   = subSubKeys.reduce((n, ss) => n + Object.keys(tree[fam][sub][ss]).length, 0)
@@ -384,7 +384,7 @@ export default function CatalogPage() {
                           {/* Nivel 2 — Subfamilia */}
                           <button
                             className="w-full flex items-center gap-3 px-8 py-2.5 text-left transition-colors hover:bg-white/[0.02]"
-                            style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+                            style={{ borderTop: '1px solid rgba(15, 35, 60,0.04)' }}
                             onClick={() => toggleSub(fam, sub)}
                           >
                             <ChevronRight
@@ -406,7 +406,7 @@ export default function CatalogPage() {
                             directOnly
                               /* Sin Sub-subfamilia → tabla directa */
                               ? (
-                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                <div style={{ borderTop: '1px solid rgba(15, 35, 60,0.04)' }}>
                                   <LineaTable
                                     lineaMap={tree[fam][sub]['__direct__']}
                                     isSearching={isSearching}
@@ -428,7 +428,7 @@ export default function CatalogPage() {
                                       {/* Nivel 3 — Sub-subfamilia */}
                                       <button
                                         className="w-full flex items-center gap-3 px-12 py-2 text-left transition-colors hover:bg-white/[0.02]"
-                                        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+                                        style={{ borderTop: '1px solid rgba(15, 35, 60,0.04)' }}
                                         onClick={() => toggleSubSub(fam, sub, subsub)}
                                       >
                                         <ChevronRight
@@ -451,7 +451,7 @@ export default function CatalogPage() {
 
                                       {/* Nivel 4 — Líneas */}
                                       {isSsOpen && (
-                                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                        <div style={{ borderTop: '1px solid rgba(15, 35, 60,0.04)' }}>
                                           <LineaTable
                                             lineaMap={lineaMap}
                                             isSearching={isSearching}

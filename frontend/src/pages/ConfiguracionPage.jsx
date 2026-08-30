@@ -19,7 +19,7 @@ const INTEGRACIONES = [
 const ESTADO_STYLES = {
   activo:    { color: 'var(--rmg-teal)',  bg: 'rgba(45,201,138,0.12)',  label: '● Activo'         },
   mock:      { color: 'var(--rmg-gold)',  bg: 'rgba(244,162,60,0.12)',  label: '◌ Mock local'     },
-  pendiente: { color: 'rgba(90,143,168,0.9)', bg: 'rgba(255,255,255,0.08)', label: '○ No configurado' },
+  pendiente: { color: 'rgba(90,143,168,0.9)', bg: 'rgba(15, 35, 60,0.08)', label: '○ No configurado' },
 }
 // 3 perfiles: gerente (acceso total + autorizaciones) · administrador (acceso total, sin autorizaciones) · vendedor (resto)
 const ROLES = ['gerente', 'administrador', 'vendedor']
@@ -304,7 +304,7 @@ export default function ConfiguracionPage() {
             ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   {['Nombre', 'Email', 'Rol', 'Estado', 'Contraseña', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
@@ -312,7 +312,7 @@ export default function ConfiguracionPage() {
               </thead>
               <tbody>
                 {usuarios.map(u => (
-                  <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <tr key={u.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
@@ -349,26 +349,26 @@ export default function ConfiguracionPage() {
                             onChange={e => setPwValue(e.target.value)}
                           />
                           <button onClick={() => handleSavePassword(u.id)} disabled={setPasswordMut.isPending}
-                            className="p-1.5 rounded-lg hover:bg-white/5" style={{ color: 'var(--rmg-teal)' }} title="Guardar">
+                            className="p-1.5 rounded-lg hover:bg-black/5" style={{ color: 'var(--rmg-teal)' }} title="Guardar">
                             <Check size={14} />
                           </button>
                           <button onClick={() => { setPwEditId(null); setPwValue('') }}
-                            className="p-1.5 rounded-lg hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }} title="Cancelar">
+                            className="p-1.5 rounded-lg hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }} title="Cancelar">
                             <X size={14} />
                           </button>
                         </div>
                       ) : (
                         <button onClick={() => { setPwEditId(u.id); setPwValue('') }}
-                          className="text-xs px-2.5 py-1 rounded-lg transition-colors hover:bg-white/5 flex items-center gap-1.5"
-                          style={{ color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          className="text-xs px-2.5 py-1 rounded-lg transition-colors hover:bg-black/5 flex items-center gap-1.5"
+                          style={{ color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }}>
                           <KeyRound size={12} /> Cambiar
                         </button>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <button onClick={() => toggleActivo(u)}
-                        className="text-xs px-2.5 py-1 rounded-lg transition-colors hover:bg-white/5"
-                        style={{ color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        className="text-xs px-2.5 py-1 rounded-lg transition-colors hover:bg-black/5"
+                        style={{ color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }}>
                         {u.activo ? 'Desactivar' : 'Activar'}
                       </button>
                     </td>
@@ -387,7 +387,7 @@ export default function ConfiguracionPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold w-40" style={{ color: 'var(--rmg-muted)' }}>Módulo</th>
                     {ROLES.map(r => (
                       <th key={r} className="px-6 py-3 text-center" style={{ minWidth: 110 }}>
@@ -399,13 +399,13 @@ export default function ConfiguracionPage() {
                 </thead>
                 <tbody>
                   {PERMISOS.map((p, i) => (
-                    <tr key={p.modulo} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                    <tr key={p.modulo} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
                       <td className="px-4 py-2.5 text-sm font-medium" style={{ color: 'var(--rmg-off)' }}>{p.modulo}</td>
                       {ROLES.map(r => (
                         <td key={r} className="px-6 py-2.5 text-center">
                           {p[r]
                             ? <Eye size={15} style={{ color: 'var(--rmg-teal)', display: 'inline' }} />
-                            : <EyeOff size={15} style={{ color: 'rgba(255,255,255,0.15)', display: 'inline' }} />
+                            : <EyeOff size={15} style={{ color: 'rgba(15, 35, 60,0.15)', display: 'inline' }} />
                           }
                         </td>
                       ))}
@@ -416,7 +416,7 @@ export default function ConfiguracionPage() {
             </div>
             <div className="px-5 py-3 flex gap-5 text-xs" style={{ color: 'var(--rmg-muted)', borderTop: '1px solid rgba(56,182,255,0.08)' }}>
               <span className="flex items-center gap-1.5"><Eye size={13} style={{ color: 'var(--rmg-teal)' }} /> Puede acceder</span>
-              <span className="flex items-center gap-1.5"><EyeOff size={13} style={{ color: 'rgba(255,255,255,0.2)' }} /> Sin acceso</span>
+              <span className="flex items-center gap-1.5"><EyeOff size={13} style={{ color: 'rgba(15, 35, 60,0.2)' }} /> Sin acceso</span>
             </div>
           </div>
         </div>

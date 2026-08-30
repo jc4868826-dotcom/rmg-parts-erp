@@ -8,35 +8,44 @@
 @tailwind utilities;
 
 :root {
-  /* ── Paleta principal ── */
-  --rmg-bg:        #050f1c;   /* Fondo oscuro principal */
-  --rmg-surface:   #0a1a2e;   /* Superficie de cards */
-  --rmg-border:    rgba(56, 182, 255, 0.12);
+  /* ── Paleta principal — tema claro profesional ── */
+  --rmg-bg:        #f3f5f8;   /* Fondo principal, gris azulado muy suave */
+  --rmg-surface:   #ffffff;   /* Superficie de cards */
+  --rmg-surface-2: #f7f9fb;   /* Superficie secundaria (headers de tabla, franjas) */
+  --rmg-border:    rgba(15, 35, 60, 0.10);
 
-  /* ── Colores de acento ── */
-  --rmg-blue:      #1b8fd4;   /* Azul principal */
-  --rmg-blt:       #38b6ff;   /* Azul claro / highlights */
-  --rmg-teal:      #2dc98a;   /* Verde teal (flotas) */
-  --rmg-purple:    #7b61c4;   /* Púrpura (concesionarios) */
-  --rmg-gold:      #f4a23c;   /* Dorado (construcción) */
-  --rmg-red:       #e05a4e;   /* Rojo (alertas / ERP) */
-  --rmg-green:     #2dc98a;   /* Verde (positivo) */
+  /* ── Colores de acento (ajustados para contraste sobre fondo claro) ── */
+  --rmg-blue:      #1568b8;   /* Azul principal — botones sólidos */
+  --rmg-blt:       #0e5d9e;   /* Azul texto / énfasis (antes era claro, para dark bg) */
+  --rmg-teal:      #16916e;   /* Verde teal (flotas) */
+  --rmg-purple:    #6b4fb0;   /* Púrpura (concesionarios) */
+  --rmg-gold:      #b5760c;   /* Dorado (construcción) */
+  --rmg-red:       #c0392b;   /* Rojo (alertas / ERP) */
+  --rmg-green:     #16916e;   /* Verde (positivo) */
 
   /* ── Segmentos ── */
-  --seg-taller:        #38b6ff;
-  --seg-flota:         #2dc98a;
-  --seg-concesionario: #7b61c4;
-  --seg-construccion:  #f4a23c;
+  --seg-taller:        #1568b8;
+  --seg-flota:         #16916e;
+  --seg-concesionario: #6b4fb0;
+  --seg-construccion:  #b5760c;
 
   /* ── Tipografía ── */
-  --rmg-text:      #ffffff;
-  --rmg-muted:     rgba(90, 143, 168, 0.7);
-  --rmg-off:       rgba(255, 255, 255, 0.65);
+  --rmg-text:      #16233a;   /* Texto principal — azul-negro, no negro puro */
+  --rmg-muted:     #64748b;   /* Texto secundario / etiquetas */
+  --rmg-off:       #334155;   /* Texto de apoyo, más marcado que muted */
+
+  /* ── Overlays sutiles (antes eran "blanco sobre oscuro", ahora "tinta sobre claro") ── */
+  --rmg-hover:     rgba(15, 35, 60, 0.045);
+  --rmg-divider:   rgba(15, 35, 60, 0.09);
+  --rmg-stripe:    rgba(15, 35, 60, 0.02);
 
   /* ── Radios ── */
   --radius-sm:  6px;
   --radius-md:  10px;
   --radius-lg:  16px;
+
+  /* ── Sombra estándar de card ── */
+  --rmg-shadow: 0 1px 2px rgba(15, 35, 60, 0.04), 0 1px 12px rgba(15, 35, 60, 0.05);
 }
 
 /* ── Base ─────────────────────────────────────────────────── */
@@ -53,25 +62,26 @@ body {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--rmg-bg); }
 ::-webkit-scrollbar-thumb {
-  background: rgba(56, 182, 255, 0.3);
+  background: rgba(15, 35, 60, 0.18);
   border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(56, 182, 255, 0.6); }
+::-webkit-scrollbar-thumb:hover { background: rgba(15, 35, 60, 0.32); }
 
 /* ── Componentes utilitarios ──────────────────────────────── */
 @layer components {
   /* Card base */
   .rmg-card {
     @apply rounded-xl border;
-    background: rgba(10, 26, 46, 0.9);
-    border-color: rgba(56, 182, 255, 0.15);
+    background: var(--rmg-surface);
+    border-color: var(--rmg-border);
+    box-shadow: var(--rmg-shadow);
   }
 
   /* Badge de segmento */
-  .badge-taller        { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300; }
-  .badge-flota         { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300; }
-  .badge-concesionario { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300; }
-  .badge-construccion  { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300; }
+  .badge-taller        { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800; }
+  .badge-flota         { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800; }
+  .badge-concesionario { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800; }
+  .badge-construccion  { @apply text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800; }
 
   /* Botón primario */
   .btn-primary {
@@ -79,16 +89,17 @@ body {
     background: var(--rmg-blue);
     color: #fff;
   }
-  .btn-primary:hover { background: var(--rmg-blt); transform: translateY(-1px); }
+  .btn-primary:hover { background: #0f568f; transform: translateY(-1px); }
+  .btn-primary:disabled:hover { transform: none; }
 
   /* Botón secundario */
   .btn-secondary {
     @apply px-4 py-2 rounded-lg font-semibold text-sm transition-all duration-200 border;
-    background: transparent;
-    border-color: rgba(56, 182, 255, 0.3);
-    color: var(--rmg-blt);
+    background: var(--rmg-surface);
+    border-color: rgba(21, 104, 184, 0.3);
+    color: var(--rmg-blue);
   }
-  .btn-secondary:hover { border-color: var(--rmg-blt); background: rgba(56, 182, 255, 0.1); }
+  .btn-secondary:hover { border-color: var(--rmg-blue); background: rgba(21, 104, 184, 0.06); }
 
   /* KPI card */
   .kpi-card {
@@ -100,11 +111,11 @@ body {
   /* Input */
   .rmg-input {
     @apply w-full rounded-lg px-3 py-2 text-sm outline-none transition-all;
-    background: rgba(7, 21, 40, 0.8);
-    border: 1px solid rgba(56, 182, 255, 0.2);
+    background: var(--rmg-surface);
+    border: 1px solid rgba(15, 35, 60, 0.16);
     color: var(--rmg-text);
   }
-  .rmg-input:focus { border-color: var(--rmg-blt); box-shadow: 0 0 0 2px rgba(56, 182, 255, 0.1); }
+  .rmg-input:focus { border-color: var(--rmg-blue); box-shadow: 0 0 0 2px rgba(21, 104, 184, 0.12); }
   .rmg-input::placeholder { color: var(--rmg-muted); }
 }
 

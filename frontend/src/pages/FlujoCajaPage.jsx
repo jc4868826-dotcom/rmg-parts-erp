@@ -44,8 +44,8 @@ function semanaKey(dateStr) {
   }
 }
 
-const TT = { background: '#0a1a2e', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, color: '#fff', fontSize: 12 }
-const AX = { fill: 'rgba(90,143,168,0.7)', fontSize: 11 }
+const TT = { background: '#ffffff', border: '1px solid rgba(15,35,60,0.12)', borderRadius: 8, color: '#16233a', fontSize: 12, boxShadow: '0 2px 12px rgba(15,35,60,0.12)' }
+const AX = { fill: '#64748b', fontSize: 11 }
 
 const mesPasadoStr = () => {
   const d = new Date(); d.setMonth(d.getMonth() - 1)
@@ -246,7 +246,7 @@ export default function FlujoCajaPage() {
               className="text-xs px-3 py-1.5 rounded-lg transition-all"
               style={filtroMode === opt.key
                 ? { background: 'rgba(27,143,212,0.2)', color: 'var(--rmg-blt)', border: '1px solid rgba(27,143,212,0.4)' }
-                : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
+                : { background: 'rgba(15, 35, 60,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }
               }>
               {opt.label}
             </button>
@@ -305,7 +305,7 @@ export default function FlujoCajaPage() {
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={chartData} barGap={4} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 35, 60,0.05)" />
               <XAxis dataKey="semana" tick={AX} axisLine={false} tickLine={false} />
               <YAxis tick={AX} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1e6).toFixed(1)}M`} />
               <Tooltip contentStyle={TT} formatter={v => formatCLP(v)} />
@@ -489,7 +489,7 @@ export default function FlujoCajaPage() {
                           {catOpen && catObj.items.map(m => (
                             <div key={`${m.origen_tabla}_${m.origen_id}`}
                               className="flex items-center justify-between px-10 py-2 text-xs border-t"
-                              style={{ borderColor: 'rgba(255,255,255,0.03)' }}>
+                              style={{ borderColor: 'rgba(15, 35, 60,0.03)' }}>
                               <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <span style={{ color: 'var(--rmg-muted)', flexShrink: 0 }}>{formatFecha(m.fecha_pago)}</span>
                                 <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={ORIGEN_STYLE[m.origen_label] ?? {}}>
@@ -509,7 +509,7 @@ export default function FlujoCajaPage() {
                                 </span>
                                 {m.origen_tabla === 'manual' && (
                                   <>
-                                    <button onClick={() => setEditando({ ...m })} className="p-1 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
+                                    <button onClick={() => setEditando({ ...m })} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
                                       <Pencil size={11}/>
                                     </button>
                                     <button onClick={() => eliminarMut.mutate(m.id)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}>
@@ -540,7 +540,7 @@ export default function FlujoCajaPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                 {['Fecha pago','Tipo','Origen','Categoría','Descripción','Cuenta','Monto','Estado','Saldo acum.',''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold whitespace-nowrap"
                     style={{ color: 'var(--rmg-muted)' }}>{h}</th>
@@ -550,9 +550,9 @@ export default function FlujoCajaPage() {
             <tbody>
               {isLoading
                 ? Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                       {Array.from({ length: 10 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/></td>
+                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                       ))}
                     </tr>
                   ))
@@ -560,7 +560,7 @@ export default function FlujoCajaPage() {
                     const isIng = m.tipo === 'ingreso'
                     return (
                       <tr key={`${m.origen_tabla}_${m.origen_id}`}
-                        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                        style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
                         className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(m.fecha_pago)}</td>
                         <td className="px-4 py-2.5">
@@ -598,7 +598,7 @@ export default function FlujoCajaPage() {
                         <td className="px-4 py-2.5">
                           {m.origen_tabla === 'manual' && (
                             <div className="flex gap-1">
-                              <button onClick={() => setEditando({ ...m })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
+                              <button onClick={() => setEditando({ ...m })} className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
                                 <Pencil size={12}/>
                               </button>
                               <button onClick={() => eliminarMut.mutate(m.id)} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}>

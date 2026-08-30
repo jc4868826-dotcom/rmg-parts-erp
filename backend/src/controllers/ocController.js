@@ -216,7 +216,7 @@ const patchEstadoOC = (req, res) => {
     const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
 
-    const { nuevo_estado, motivo_rechazo } = req.body
+    const { nuevo_estado, motivo_rechazo, observaciones, cuenta_bancaria, forma_pago } = req.body
     const usuario_id = req.user?.id
     const usuario_nombre = req.user?.nombre || req.user?.email
     if (!nuevo_estado) return res.status(400).json({ error: 'nuevo_estado es requerido' })
@@ -261,6 +261,24 @@ const patchEstadoOC = (req, res) => {
       cols.push('fecha_emision = COALESCE(fecha_emision, ?)')
       vals.push(hoy)
     }
+    if (nuevo_estado === 'pago_autorizado') {
+      if (forma_pago) { cols.push('forma_pago = ?'); vals.push(forma_pago) }
+      if (cuenta_bancaria) { cols.push('cuenta_bancaria = ?'); vals.push(cuenta_bancaria) }
+    }
+    if (nuevo_estado === 'pagada') {
+      cols.push('fecha_pago = ?')
+      vals.push(hoy)
+      if (forma_pago) { cols.push('forma_pago = ?'); vals.push(forma_pago) }
+      if (cuenta_bancaria) { cols.push('cuenta_bancaria = ?'); vals.push(cuenta_bancaria) }
+    }
+    // Observaciones: se acumulan como bitácora, sin pisar lo ya escrito.
+    if (observaciones && observaciones.trim()) {
+      const etiquetas = { autorizada: 'Autorización', pago_autorizado: 'Autorización de pago', pagada: 'Pago' }
+      const etiqueta = etiquetas[nuevo_estado] || nuevo_estado
+      const linea = `[${etiqueta} · ${usuario_nombre || 'usuario'} · ${hoy}] ${observaciones.trim()}`
+      cols.push("observaciones = TRIM(COALESCE(observaciones || char(10), '') || ?)")
+      vals.push(linea)
+    }
     vals.push(oc.id)
 
     const ejecutar = db.transaction(() => {
@@ -269,10 +287,13 @@ const patchEstadoOC = (req, res) => {
       // Al autorizar el pago se registra el egreso y se cierra la CxP asociada.
       if (nuevo_estado === 'pagada') {
         try {
+          const cuentaFinal = cuenta_bancaria || oc.cuenta_bancaria || null
+          const descripcion = [`OC ${oc.numero} · ${oc.proveedor}`, forma_pago ? `(${forma_pago})` : null]
+            .filter(Boolean).join(' ')
           db.prepare(`INSERT INTO caja_movimientos
-            (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id)
-            VALUES ('egreso','Compra proveedor',?,?,?,?,'confirmado','ordenes_compra',?)`)
-            .run(`OC ${oc.numero} · ${oc.proveedor}`, oc.total, hoy, hoy, oc.id)
+            (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
+            VALUES ('egreso','Compra proveedor',?,?,?,?,'confirmado','ordenes_compra',?,?)`)
+            .run(descripcion, oc.total, hoy, hoy, oc.id, cuentaFinal)
         } catch (_) {}
         try {
           db.prepare("UPDATE facturas_cxp SET estado = 'pagada', fecha_pago = ? WHERE oc_id = ?").run(hoy, oc.id)
@@ -281,11 +302,19 @@ const patchEstadoOC = (req, res) => {
     })
     ejecutar()
 
+    const detalleExtra = nuevo_estado === 'rechazada'
+      ? `Rechazada: ${motivo_rechazo}`
+      : [
+          forma_pago ? `Modo de pago: ${forma_pago}` : null,
+          cuenta_bancaria ? `Cuenta: ${cuenta_bancaria}` : null,
+          observaciones && observaciones.trim() ? `Obs: ${observaciones.trim()}` : null,
+        ].filter(Boolean).join(' · ') || null
+
     logEvento(oc.id, TIPO_EVENTO[nuevo_estado] || 'modificacion', {
       usuario_id, usuario_nombre,
       estado_anterior: estadoActual,
       estado_nuevo: nuevo_estado,
-      detalle: nuevo_estado === 'rechazada' ? `Rechazada: ${motivo_rechazo}` : null,
+      detalle: detalleExtra,
     })
 
     res.json(withDetails(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(oc.id)))

@@ -44,14 +44,14 @@ export default function ClienteDetalle() {
 
       {/* Header */}
       <div className="flex items-start gap-4">
-        <button onClick={() => navigate('/clientes')} className="p-2 rounded-lg hover:bg-white/5 transition-colors mt-1" style={{ color: 'var(--rmg-muted)' }}>
+        <button onClick={() => navigate('/clientes')} className="p-2 rounded-lg hover:bg-black/5 transition-colors mt-1" style={{ color: 'var(--rmg-muted)' }}>
           <ArrowLeft size={18} />
         </button>
         <div className="flex-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>{cliente.razon_social}</h1>
             <span className={`badge-${cliente.segmento}`}>{labelSegmento(cliente.segmento)}</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: etapa.color }}>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(15, 35, 60,0.06)', color: etapa.color }}>
               {etapa.label}
             </span>
           </div>
@@ -126,7 +126,7 @@ export default function ClienteDetalle() {
                     <span style={{ color: 'var(--rmg-muted)' }}>Plazo</span>
                     <span style={{ color: 'var(--rmg-teal)' }}>{cliente.dias_credito} días</span>
                   </div>
-                  <div className="h-2 rounded-full mt-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="h-2 rounded-full mt-2" style={{ background: 'rgba(15, 35, 60,0.06)' }}>
                     <div className="h-2 rounded-full" style={{
                       width: `${Math.min((cliente.saldo_pendiente / cliente.limite_credito) * 100, 100)}%`,
                       background: 'var(--rmg-gold)',

@@ -167,7 +167,7 @@ export default function ListaPreciosPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                 {[
                   'SKU', 'Proveedor', 'Categoría', 'Producto Genérico', 'Descripción',
                   'Presentación', 'Tipo Envase', 'Costo Neto',
@@ -181,17 +181,17 @@ export default function ListaPreciosPage() {
             <tbody>
               {isLoading
                 ? Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                       {Array.from({ length: 11 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
-                          <div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/>
+                          <div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/>
                         </td>
                       ))}
                     </tr>
                   ))
                 : resultados.map((f, i) => (
                     <tr key={f.id}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                      style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
                       className="hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-mono text-xs font-bold whitespace-nowrap" style={{ color: 'var(--rmg-blt)' }}>{f.codigo_sku}</td>
                       <td className="px-4 py-3 text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.proveedor}</td>
@@ -248,7 +248,7 @@ export default function ListaPreciosPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                 {['SKU', 'Proveedor', 'Categoría', 'Producto Genérico', 'Descripción', 'Presentación', 'Costo Neto', 'Precio Venta Neto', 'Margen %'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold whitespace-nowrap"
                     style={{ color: 'var(--rmg-muted)' }}>{h}</th>
@@ -258,15 +258,15 @@ export default function ListaPreciosPage() {
             <tbody>
               {isLoading
                 ? Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                       {Array.from({ length: 9 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/></td>
+                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                       ))}
                     </tr>
                   ))
                 : articulosUnicos.map((f, i) => (
                     <tr key={f.codigo_sku}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                      style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
                       className="hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-mono text-xs font-bold whitespace-nowrap" style={{ color: 'var(--rmg-blt)' }}>{f.codigo_sku}</td>
                       <td className="px-4 py-3 text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.proveedor}</td>

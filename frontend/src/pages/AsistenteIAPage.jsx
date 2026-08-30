@@ -14,12 +14,12 @@ const MD_COMPONENTS = {
     </div>
   ),
   th: ({ children }) => (
-    <th style={{ border: '1px solid rgba(56,182,255,0.2)', padding: '6px 10px', textAlign: 'left', background: 'rgba(56,182,255,0.1)', color: 'rgba(255,255,255,0.75)', fontWeight: 600 }}>
+    <th style={{ border: '1px solid rgba(56,182,255,0.2)', padding: '6px 10px', textAlign: 'left', background: 'rgba(56,182,255,0.1)', color: 'rgba(15, 35, 60,0.75)', fontWeight: 600 }}>
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td style={{ border: '1px solid rgba(56,182,255,0.1)', padding: '6px 10px', color: 'rgba(255,255,255,0.85)', verticalAlign: 'top' }}>
+    <td style={{ border: '1px solid rgba(56,182,255,0.1)', padding: '6px 10px', color: 'rgba(15, 35, 60,0.85)', verticalAlign: 'top' }}>
       {children}
     </td>
   ),
@@ -27,13 +27,13 @@ const MD_COMPONENTS = {
     <h3 style={{ color: '#a78bfa', fontWeight: 600, margin: '16px 0 6px', fontSize: '14px' }}>{children}</h3>
   ),
   h4: ({ children }) => (
-    <h4 style={{ color: 'rgba(255,255,255,0.8)', fontWeight: 600, margin: '10px 0 4px', fontSize: '13px' }}>{children}</h4>
+    <h4 style={{ color: 'rgba(15, 35, 60,0.8)', fontWeight: 600, margin: '10px 0 4px', fontSize: '13px' }}>{children}</h4>
   ),
   strong: ({ children }) => (
     <strong style={{ color: '#fff', fontWeight: 700 }}>{children}</strong>
   ),
   em: ({ children }) => (
-    <em style={{ color: 'rgba(255,255,255,0.7)' }}>{children}</em>
+    <em style={{ color: 'rgba(15, 35, 60,0.7)' }}>{children}</em>
   ),
   code: ({ children }) => (
     <code style={{ background: 'rgba(56,182,255,0.12)', padding: '1px 5px', borderRadius: '3px', fontSize: '11px', color: '#38b6ff', fontFamily: 'monospace' }}>
@@ -41,13 +41,13 @@ const MD_COMPONENTS = {
     </code>
   ),
   p: ({ children }) => (
-    <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: '8px', lineHeight: '1.65', fontSize: '13px' }}>{children}</p>
+    <p style={{ color: 'rgba(15, 35, 60,0.8)', marginBottom: '8px', lineHeight: '1.65', fontSize: '13px' }}>{children}</p>
   ),
   ul: ({ children }) => (
     <ul style={{ paddingLeft: '18px', marginBottom: '8px' }}>{children}</ul>
   ),
   li: ({ children }) => (
-    <li style={{ color: 'rgba(255,255,255,0.75)', marginBottom: '4px', fontSize: '13px' }}>{children}</li>
+    <li style={{ color: 'rgba(15, 35, 60,0.75)', marginBottom: '4px', fontSize: '13px' }}>{children}</li>
   ),
   hr: () => (
     <hr style={{ border: 'none', borderTop: '1px solid rgba(56,182,255,0.15)', margin: '12px 0' }} />
@@ -169,7 +169,7 @@ export default function AsistenteIAPage() {
   ).slice(0, 12)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--rmg-bg, #050f1c)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--rmg-bg, #f3f5f8)' }}>
 
       {/* ── Header ── */}
       <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(56,182,255,0.1)', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
@@ -178,13 +178,13 @@ export default function AsistenteIAPage() {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>Zara — Asistente Comercial B2B</div>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Radiografía de clientes · Portafolio 360° RMG Parts · SKUs reales del ERP</div>
+          <div style={{ color: 'rgba(15, 35, 60,0.4)', fontSize: 12 }}>Radiografía de clientes · Portafolio 360° RMG Parts · SKUs reales del ERP</div>
         </div>
         {messages.length > 0 && (
           <button
             onClick={() => setMessages([])}
             title="Nueva conversación"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '6px 8px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+            style={{ background: 'rgba(15, 35, 60,0.05)', border: '1px solid rgba(15, 35, 60,0.1)', borderRadius: 6, padding: '6px 8px', color: 'rgba(15, 35, 60,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
           >
             <RotateCcw size={13} /> Nueva
           </button>
@@ -197,7 +197,7 @@ export default function AsistenteIAPage() {
         {messages.length === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, textAlign: 'center' }}>
             <Bot size={52} style={{ color: 'rgba(167,139,250,0.25)' }} />
-            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14, lineHeight: 1.6 }}>
+            <div style={{ color: 'rgba(15, 35, 60,0.35)', fontSize: 14, lineHeight: 1.6 }}>
               Describe el perfil del cliente o la flota.<br />
               Zara arma el portafolio 360° con SKUs reales del ERP.
             </div>
@@ -255,7 +255,7 @@ export default function AsistenteIAPage() {
 
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-            <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.18)', display: 'flex', alignItems: 'center', gap: 8, color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>
+            <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.18)', display: 'flex', alignItems: 'center', gap: 8, color: 'rgba(15, 35, 60,0.45)', fontSize: 13 }}>
               <Loader2 size={14} className="animate-spin" /> Zara está analizando...
             </div>
           </div>
@@ -276,7 +276,7 @@ export default function AsistenteIAPage() {
             placeholder="Ej: taller que atiende camiones Volvo, 8 unidades..."
             style={{
               flex: 1, borderRadius: 10, padding: '10px 14px', fontSize: 13,
-              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(56,182,255,0.2)',
+              background: 'rgba(15, 35, 60,0.05)', border: '1px solid rgba(56,182,255,0.2)',
               color: '#fff', resize: 'none', outline: 'none', minHeight: 44, maxHeight: 120,
               fontFamily: 'inherit', lineHeight: 1.5,
             }}
@@ -288,7 +288,7 @@ export default function AsistenteIAPage() {
               borderRadius: 10, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6,
               fontSize: 13, fontWeight: 600, cursor: input.trim() && !loading ? 'pointer' : 'not-allowed',
               background: input.trim() && !loading ? '#a78bfa' : 'rgba(167,139,250,0.15)',
-              color: input.trim() && !loading ? '#fff' : 'rgba(255,255,255,0.3)',
+              color: input.trim() && !loading ? '#fff' : 'rgba(15, 35, 60,0.3)',
               border: 'none', transition: 'background 0.15s',
               flexShrink: 0,
             }}
@@ -296,7 +296,7 @@ export default function AsistenteIAPage() {
             <Send size={15} />
           </button>
         </div>
-        <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11, marginTop: 6 }}>
+        <div style={{ color: 'rgba(15, 35, 60,0.2)', fontSize: 11, marginTop: 6 }}>
           Enter para enviar · Shift+Enter para nueva línea
         </div>
       </div>
@@ -307,22 +307,22 @@ export default function AsistenteIAPage() {
           onClick={e => { if (e.target === e.currentTarget) setCotizModal(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
         >
-          <div style={{ background: '#0a1929', border: '1px solid rgba(56,182,255,0.18)', borderRadius: 14, width: '100%', maxWidth: 740, maxHeight: '92vh', overflowY: 'auto', padding: 28 }}>
+          <div style={{ background: '#ffffff', border: '1px solid rgba(15,35,60,0.12)', boxShadow: '0 24px 60px rgba(15,35,60,0.25)', borderRadius: 14, width: '100%', maxWidth: 740, maxHeight: '92vh', overflowY: 'auto', padding: 28 }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <ShoppingCart size={18} style={{ color: '#a78bfa' }} />
-                <span style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>Crear Cotización</span>
+                <span style={{ color: 'var(--rmg-text)', fontSize: 16, fontWeight: 700 }}>Crear Cotización</span>
               </div>
-              <button onClick={() => setCotizModal(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', padding: 4 }}>
+              <button onClick={() => setCotizModal(null)} style={{ background: 'none', border: 'none', color: 'rgba(15, 35, 60,0.35)', cursor: 'pointer', padding: 4 }}>
                 <X size={18} />
               </button>
             </div>
 
             {/* Cliente */}
             <div style={{ marginBottom: 22 }}>
-              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cliente</div>
+              <div style={{ color: 'rgba(15, 35, 60,0.55)', fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cliente</div>
               <div style={{ position: 'relative' }}>
                 <input
                   value={clienteQuery}
@@ -330,22 +330,22 @@ export default function AsistenteIAPage() {
                   onFocus={() => setShowClienteList(true)}
                   onBlur={() => setTimeout(() => setShowClienteList(false), 150)}
                   placeholder="Buscar cliente por nombre..."
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(56,182,255,0.22)', borderRadius: 8, color: '#fff', fontSize: 13, outline: 'none' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', background: 'rgba(15, 35, 60,0.04)', border: '1px solid rgba(56,182,255,0.22)', borderRadius: 8, color: 'var(--rmg-text)', fontSize: 13, outline: 'none' }}
                 />
                 {showClienteList && clienteQuery.length > 0 && !clienteSeleccionado && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#0d1f35', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, maxHeight: 200, overflowY: 'auto', zIndex: 10 }}>
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#ffffff', border: '1px solid rgba(15,35,60,0.12)', boxShadow: '0 8px 24px rgba(15,35,60,0.18)', borderRadius: 8, maxHeight: 200, overflowY: 'auto', zIndex: 10 }}>
                     {clientesFiltrados.length === 0
-                      ? <div style={{ padding: '9px 13px', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Sin resultados</div>
+                      ? <div style={{ padding: '9px 13px', color: 'rgba(15, 35, 60,0.3)', fontSize: 13 }}>Sin resultados</div>
                       : clientesFiltrados.map(c => (
                         <div
                           key={c.id}
                           onMouseDown={() => { setClienteSel(c); setClienteQuery(c.razon_social); setShowClienteList(false) }}
-                          style={{ padding: '9px 13px', color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                          style={{ padding: '9px 13px', color: 'rgba(15, 35, 60,0.8)', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(167,139,250,0.1)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >
                           {c.razon_social}
-                          {c.rut && <span style={{ color: 'rgba(255,255,255,0.3)', marginLeft: 8, fontSize: 11 }}>{c.rut}</span>}
+                          {c.rut && <span style={{ color: 'rgba(15, 35, 60,0.3)', marginLeft: 8, fontSize: 11 }}>{c.rut}</span>}
                         </div>
                       ))
                     }
@@ -355,14 +355,14 @@ export default function AsistenteIAPage() {
               {clienteSeleccionado && (
                 <div style={{ marginTop: 7, color: '#38b6ff', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
                   ✓ <strong>{clienteSeleccionado.razon_social}</strong>
-                  {clienteSeleccionado.rut && <span style={{ color: 'rgba(255,255,255,0.35)' }}> · {clienteSeleccionado.rut}</span>}
+                  {clienteSeleccionado.rut && <span style={{ color: 'rgba(15, 35, 60,0.35)' }}> · {clienteSeleccionado.rut}</span>}
                 </div>
               )}
             </div>
 
             {/* Productos */}
             <div style={{ marginBottom: 22 }}>
-              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ color: 'rgba(15, 35, 60,0.55)', fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Productos ({cotizModal.lineas.length})
               </div>
               <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid rgba(56,182,255,0.1)' }}>
@@ -370,26 +370,26 @@ export default function AsistenteIAPage() {
                   <thead>
                     <tr style={{ background: 'rgba(56,182,255,0.06)' }}>
                       {['Producto', 'SKU', 'Precio Unit.', 'Cantidad', 'Subtotal', ''].map(h => (
-                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.45)', fontWeight: 600, borderBottom: '1px solid rgba(56,182,255,0.1)', whiteSpace: 'nowrap' }}>{h}</th>
+                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'rgba(15, 35, 60,0.45)', fontWeight: 600, borderBottom: '1px solid rgba(56,182,255,0.1)', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {cotizModal.lineas.map((l, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <td style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.85)', maxWidth: 260 }}>{l.descripcion}</td>
-                        <td style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', fontSize: 11 }}>{l.codigo_sku}</td>
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
+                        <td style={{ padding: '8px 12px', color: 'rgba(15, 35, 60,0.85)', maxWidth: 260 }}>{l.descripcion}</td>
+                        <td style={{ padding: '8px 12px', color: 'rgba(15, 35, 60,0.4)', fontFamily: 'monospace', fontSize: 11 }}>{l.codigo_sku}</td>
                         <td style={{ padding: '8px 12px', color: '#38b6ff', whiteSpace: 'nowrap' }}>${Math.round(l.precio_venta_neto).toLocaleString('es-CL')}</td>
                         <td style={{ padding: '8px 12px' }}>
                           <input
                             type="number" min={1} value={l.cantidad}
                             onChange={e => actualizarCantidad(idx, e.target.value)}
-                            style={{ width: 60, padding: '4px 6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 5, color: '#fff', fontSize: 12, textAlign: 'center', outline: 'none' }}
+                            style={{ width: 60, padding: '4px 6px', background: 'rgba(15, 35, 60,0.05)', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 5, color: '#fff', fontSize: 12, textAlign: 'center', outline: 'none' }}
                           />
                         </td>
                         <td style={{ padding: '8px 12px', color: '#a78bfa', fontWeight: 600, whiteSpace: 'nowrap' }}>${Math.round(l.cantidad * l.precio_venta_neto).toLocaleString('es-CL')}</td>
                         <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                          <button onClick={() => quitarLinea(idx)} title="Quitar" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', padding: 2, display: 'flex' }}>
+                          <button onClick={() => quitarLinea(idx)} title="Quitar" style={{ background: 'none', border: 'none', color: 'rgba(15, 35, 60,0.2)', cursor: 'pointer', padding: 2, display: 'flex' }}>
                             <Trash2 size={13} />
                           </button>
                         </td>
@@ -406,8 +406,8 @@ export default function AsistenteIAPage() {
               const iva  = Math.round(neto * 0.19)
               return (
                 <div style={{ borderTop: '1px solid rgba(56,182,255,0.1)', paddingTop: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-                  <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>Neto: <span style={{ color: 'rgba(255,255,255,0.85)' }}>${neto.toLocaleString('es-CL')}</span></div>
-                  <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>IVA (19%): <span style={{ color: 'rgba(255,255,255,0.85)' }}>${iva.toLocaleString('es-CL')}</span></div>
+                  <div style={{ color: 'rgba(15, 35, 60,0.45)', fontSize: 13 }}>Neto: <span style={{ color: 'rgba(15, 35, 60,0.85)' }}>${neto.toLocaleString('es-CL')}</span></div>
+                  <div style={{ color: 'rgba(15, 35, 60,0.45)', fontSize: 13 }}>IVA (19%): <span style={{ color: 'rgba(15, 35, 60,0.85)' }}>${iva.toLocaleString('es-CL')}</span></div>
                   <div style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>Total: ${(neto + iva).toLocaleString('es-CL')}</div>
                 </div>
               )
@@ -424,7 +424,7 @@ export default function AsistenteIAPage() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button
                 onClick={() => setCotizModal(null)}
-                style={{ padding: '9px 18px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'rgba(255,255,255,0.4)', fontSize: 13, cursor: 'pointer' }}
+                style={{ padding: '9px 18px', background: 'rgba(15, 35, 60,0.04)', border: '1px solid rgba(15, 35, 60,0.1)', borderRadius: 8, color: 'rgba(15, 35, 60,0.4)', fontSize: 13, cursor: 'pointer' }}
               >
                 Cancelar
               </button>
@@ -434,7 +434,7 @@ export default function AsistenteIAPage() {
                 style={{
                   padding: '9px 20px', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
                   background: clienteSeleccionado && !cotizLoading && cotizModal.lineas.length ? '#a78bfa' : 'rgba(167,139,250,0.2)',
-                  color: clienteSeleccionado && !cotizLoading && cotizModal.lineas.length ? '#fff' : 'rgba(255,255,255,0.3)',
+                  color: clienteSeleccionado && !cotizLoading && cotizModal.lineas.length ? '#fff' : 'rgba(15, 35, 60,0.3)',
                   cursor: clienteSeleccionado && !cotizLoading && cotizModal.lineas.length ? 'pointer' : 'not-allowed',
                 }}
               >

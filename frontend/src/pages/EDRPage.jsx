@@ -91,7 +91,7 @@ export default function EDRPage() {
 
           {/* Estado de Resultados detallado */}
           <div className="rmg-card overflow-hidden">
-            <div className="px-6 py-4 border-b" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+            <div className="px-6 py-4 border-b" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
               <div className="font-bold">Estado de Resultados — {mes}</div>
             </div>
             <table className="w-full">

@@ -131,7 +131,7 @@ function NotasCell({ id, text, expanded, onToggle }) {
   const isLong = text.length > 100 || lines.length > 2
   return (
     <div style={{ maxWidth: 200 }}>
-      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', margin: 0, whiteSpace: 'pre-wrap', overflow: expanded ? 'visible' : 'hidden', display: expanded ? 'block' : '-webkit-box', WebkitLineClamp: expanded ? undefined : 2, WebkitBoxOrient: 'vertical', lineHeight: '1.5' }}>
+      <p style={{ fontSize: 12, color: 'rgba(15, 35, 60,0.55)', margin: 0, whiteSpace: 'pre-wrap', overflow: expanded ? 'visible' : 'hidden', display: expanded ? 'block' : '-webkit-box', WebkitLineClamp: expanded ? undefined : 2, WebkitBoxOrient: 'vertical', lineHeight: '1.5' }}>
         {text}
       </p>
       {isLong && <button onClick={() => onToggle(id)} style={{ fontSize: 11, color: 'var(--rmg-blue)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: 2 }}>{expanded ? 'Ver menos' : 'Ver más'}</button>}
@@ -143,7 +143,7 @@ function SkeletonRow() {
   return (
     <tr>{Array.from({ length: 9 }).map((_, i) => (
       <td key={i} style={{ padding: '12px 12px' }}>
-        <div style={{ height: 14, borderRadius: 6, background: 'rgba(255,255,255,0.05)', width: i === 0 ? '80%' : '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ height: 14, borderRadius: 6, background: 'rgba(15, 35, 60,0.05)', width: i === 0 ? '80%' : '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
       </td>
     ))}</tr>
   )
@@ -151,8 +151,8 @@ function SkeletonRow() {
 
 function FilterSelect({ value, onChange, options }) {
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(56,182,255,0.15)', borderRadius: 8, padding: '7px 12px', fontSize: 13, color: value === options[0] ? 'rgba(90,143,168,0.7)' : 'rgba(255,255,255,0.8)', outline: 'none', cursor: 'pointer', minWidth: 130 }}>
-      {options.map(o => <option key={o} value={o} style={{ background: '#0a1a2e' }}>{o}</option>)}
+    <select value={value} onChange={e => onChange(e.target.value)} style={{ background: 'rgba(15, 35, 60,0.04)', border: '0.5px solid rgba(56,182,255,0.15)', borderRadius: 8, padding: '7px 12px', fontSize: 13, color: value === options[0] ? 'rgba(90,143,168,0.7)' : 'rgba(15, 35, 60,0.8)', outline: 'none', cursor: 'pointer', minWidth: 130 }}>
+      {options.map(o => <option key={o} value={o} style={{ background: '#ffffff', color: '#16233a' }}>{o}</option>)}
     </select>
   )
 }
@@ -508,7 +508,7 @@ export default function ProspeccionPage() {
         <div style={{ position: 'relative', flex: '1 1 220px' }}>
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(90,143,168,0.6)', pointerEvents: 'none' }} />
           <input type="text" placeholder="Buscar empresa, RUT, rubro, email, comuna…" value={busqueda} onChange={e => setBusqueda(e.target.value)}
-            style={{ width: '100%', paddingLeft: 30, paddingRight: 10, paddingTop: 7, paddingBottom: 7, background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(56,182,255,0.15)', borderRadius: 8, fontSize: 13, color: 'rgba(255,255,255,0.8)', outline: 'none' }} />
+            style={{ width: '100%', paddingLeft: 30, paddingRight: 10, paddingTop: 7, paddingBottom: 7, background: 'rgba(15, 35, 60,0.04)', border: '0.5px solid rgba(56,182,255,0.15)', borderRadius: 8, fontSize: 13, color: 'rgba(15, 35, 60,0.8)', outline: 'none' }} />
         </div>
         <FilterSelect value={segmentoFiltro} onChange={setSegmentoFiltro} options={segmentos} />
         <FilterSelect value={prioridadFiltro} onChange={setPrioridadFiltro} options={['Todas', 'alta', 'media', 'baja']} />
@@ -524,7 +524,7 @@ export default function ProspeccionPage() {
       {/* ── Barra de acciones masivas ── */}
       {selectedIds.size > 0 && (
         <div className="rmg-card px-4 py-2.5 flex items-center gap-3 flex-wrap animate-fade-in"
-          style={{ border: '1px solid rgba(56,182,255,0.35)', background: 'rgba(7,21,40,0.9)' }}>
+          style={{ border: '1px solid rgba(21,104,184,0.35)' }}>
           <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>
             ✓ {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
           </span>
@@ -547,7 +547,7 @@ export default function ProspeccionPage() {
       <div style={{ overflowX: 'auto', borderRadius: 8, border: '0.5px solid rgba(56,182,255,0.15)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
           <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+            <tr style={{ background: 'rgba(15, 35, 60,0.03)' }}>
               <th className="px-3 py-3 w-8" style={{ borderBottom: '0.5px solid rgba(56,182,255,0.1)' }}>
                 <input type="checkbox"
                   checked={selectedIds.size === filtrados.length && filtrados.length > 0}
@@ -578,7 +578,7 @@ export default function ProspeccionPage() {
                 )
                 : filtrados.map(p => (
                   <tr key={p.id} style={{ borderBottom: '0.5px solid rgba(56,182,255,0.07)' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.025)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     {/* Checkbox */}
                     <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
@@ -589,20 +589,20 @@ export default function ProspeccionPage() {
                       />
                     </td>
                     {/* RUT */}
-                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(15, 35, 60,0.55)', whiteSpace: 'nowrap' }}>
                       {p.rut ? `${p.rut}${p.dv ? `-${p.dv}` : ''}` : <span style={{ color: 'rgba(90,143,168,0.35)' }}>—</span>}
                     </td>
                     {/* Razón Social + segmento */}
                     <td style={{ padding: '11px 12px', minWidth: 160 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>{p.empresa || '—'}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(15, 35, 60,0.85)', marginBottom: 4 }}>{p.empresa || '—'}</div>
                       <SegmentoBadge segmento={p.segmento} />
                     </td>
                     {/* Rubro */}
-                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.55)', minWidth: 120 }}>
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(15, 35, 60,0.55)', minWidth: 120 }}>
                       {p.rubro || p.rubro_especialidad || <span style={{ color: 'rgba(90,143,168,0.35)' }}>—</span>}
                     </td>
                     {/* Comuna */}
-                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(255,255,255,0.65)', minWidth: 100 }}>
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'rgba(15, 35, 60,0.65)', minWidth: 100 }}>
                       {p.comuna || <span style={{ color: 'rgba(90,143,168,0.35)' }}>—</span>}
                     </td>
                     {/* Email */}
@@ -620,7 +620,7 @@ export default function ProspeccionPage() {
                         if (!phone && !cell) return <span style={{ color: 'rgba(90,143,168,0.35)', fontSize: 12 }}>—</span>
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            {phone && <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{phone}</span>}
+                            {phone && <span style={{ fontSize: 12, color: 'rgba(15, 35, 60,0.65)' }}>{phone}</span>}
                             {cell && cell !== phone && <span style={{ fontSize: 11, color: 'rgba(90,143,168,0.7)' }}>{cell}</span>}
                             {waUrl && <a href={waUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#2dc98a', fontSize: 11, marginTop: 2 }}><MessageCircle size={12} /> WhatsApp</a>}
                           </div>
@@ -655,9 +655,9 @@ export default function ProspeccionPage() {
                     <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: 5 }}>
                         <button title="Editar" onClick={() => setEditando({ ...p })}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', transition: 'background 0.15s' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}>
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(15, 35, 60,0.05)', border: '0.5px solid rgba(15, 35, 60,0.1)', color: 'rgba(15, 35, 60,0.5)', cursor: 'pointer', transition: 'background 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.05)'}>
                           <Pencil size={13} />
                         </button>
                         <button title="Mover a Contacto" onClick={() => handleMoverAContacto(p.id)}
@@ -764,7 +764,7 @@ export default function ProspeccionPage() {
             <div className="overflow-auto flex-1 mb-4">
               <table className="w-full text-xs">
                 <thead>
-                  <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
+                  <tr style={{ background: 'rgba(15, 35, 60,0.03)', borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
                     {['RUT', 'Razón Social', 'Rubro', 'Comuna', 'Teléfono', 'Celular', 'Email', 'Segmento'].map(h => (
                       <th key={h} className="text-left px-3 py-2 uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
@@ -772,7 +772,7 @@ export default function ProspeccionPage() {
                 </thead>
                 <tbody>
                   {preview.registros.map((r, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/[0.02]">
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }} className="hover:bg-white/[0.02]">
                       <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.rut ? `${r.rut}-${r.dv || ''}` : '—'}</td>
                       <td className="px-3 py-2 font-semibold" style={{ color: 'var(--rmg-off)' }}>{r.empresa}</td>
                       <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{r.rubro || '—'}</td>

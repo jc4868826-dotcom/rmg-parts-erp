@@ -124,7 +124,7 @@ export default function ProveedoresPage() {
                     className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
                     style={form.categorias.includes(cat)
                       ? { background: `${CAT_COLOR[cat]}22`, color: CAT_COLOR[cat], border: `1px solid ${CAT_COLOR[cat]}55` }
-                      : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
+                      : { background: 'rgba(15, 35, 60,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }
                     }>
                     {CAT_LABEL[cat]}
                   </button>
@@ -148,8 +148,8 @@ export default function ProveedoresPage() {
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rmg-card p-4 animate-pulse">
-                  <div className="h-4 rounded mb-2" style={{ background: 'rgba(255,255,255,0.06)' }}/>
-                  <div className="h-3 rounded w-2/3" style={{ background: 'rgba(255,255,255,0.04)' }}/>
+                  <div className="h-4 rounded mb-2" style={{ background: 'rgba(15, 35, 60,0.06)' }}/>
+                  <div className="h-3 rounded w-2/3" style={{ background: 'rgba(15, 35, 60,0.04)' }}/>
                 </div>
               ))
             : proveedores.map(p => (
@@ -188,8 +188,8 @@ export default function ProveedoresPage() {
             </div>
           ) : !detalle ? (
             <div className="rmg-card p-6 animate-pulse">
-              <div className="h-6 rounded mb-4" style={{ background: 'rgba(255,255,255,0.06)' }}/>
-              <div className="h-4 rounded w-3/4 mb-2" style={{ background: 'rgba(255,255,255,0.04)' }}/>
+              <div className="h-6 rounded mb-4" style={{ background: 'rgba(15, 35, 60,0.06)' }}/>
+              <div className="h-4 rounded w-3/4 mb-2" style={{ background: 'rgba(15, 35, 60,0.04)' }}/>
             </div>
           ) : (
             <div className="space-y-4">
@@ -233,7 +233,7 @@ export default function ProveedoresPage() {
 
               {/* Historial de OC del proveedor */}
               <div className="rmg-card overflow-hidden">
-                <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   <span className="text-sm font-bold">Historial de Órdenes de Compra</span>
                   <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{(detalle.ordenes_compra || []).length} OC</span>
                 </div>
@@ -242,7 +242,7 @@ export default function ProveedoresPage() {
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+                      <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.02)' }}>
                         {['N° OC','Fecha','Monto total','Estado','N° Factura'].map(h => (
                           <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                         ))}
@@ -253,7 +253,7 @@ export default function ProveedoresPage() {
                         const estKey = oc.pagada ? 'Pagada' : oc.estado
                         const est = ESTADO_OC[estKey] || { label: estKey, bg: 'rgba(148,163,184,0.12)', color: 'var(--rmg-muted)' }
                         return (
-                          <tr key={oc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <tr key={oc.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                             <td className="px-4 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{oc.numero}</td>
                             <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{oc.fecha_emision}</td>
                             <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(oc.total)}</td>

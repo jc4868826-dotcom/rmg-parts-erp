@@ -32,7 +32,7 @@ const s = {
     flex: 1, padding: '0 14px', height: '42px',
     border: '1px solid rgba(56,182,255,0.2)',
     borderRadius: '8px', fontSize: '14px', outline: 'none',
-    background: 'rgba(255,255,255,0.05)',
+    background: 'rgba(15, 35, 60,0.05)',
     color: 'var(--rmg-text, #e2e8f0)',
   },
   btnPrimary: {
@@ -41,7 +41,7 @@ const s = {
     fontSize: '14px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
   },
   btnDisabled: {
-    background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.5)', border: '1px solid rgba(56,182,255,0.1)',
+    background: 'rgba(15, 35, 60,0.05)', color: 'rgba(148,163,184,0.5)', border: '1px solid rgba(56,182,255,0.1)',
     borderRadius: '8px', padding: '0 20px', height: '42px',
     fontSize: '14px', cursor: 'not-allowed', whiteSpace: 'nowrap', flexShrink: 0,
   },
@@ -50,7 +50,7 @@ const s = {
     border: '1px solid rgba(56,182,255,0.2)', borderRadius: '16px',
     padding: '4px 12px', fontSize: '12px',
     color: 'var(--rmg-muted, #94a3b8)', cursor: 'pointer',
-    background: 'rgba(255,255,255,0.04)',
+    background: 'rgba(15, 35, 60,0.04)',
   },
   loading: { textAlign: 'center', padding: '48px 20px', color: 'var(--rmg-muted, #94a3b8)', fontSize: '14px' },
   empty:   { textAlign: 'center', padding: '48px 20px', color: 'rgba(148,163,184,0.4)', fontSize: '14px' },
@@ -77,7 +77,7 @@ const s = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
   },
   card: {
-    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(56,182,255,0.12)',
+    background: 'rgba(15, 35, 60,0.03)', border: '1px solid rgba(56,182,255,0.12)',
     borderRadius: '10px', padding: '14px 16px', marginBottom: '8px',
   },
   cardTop:  { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', marginBottom: '5px' },

@@ -2163,6 +2163,15 @@ function runMigrations() {
     }
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_estados_snake_case_v1')
   }
+
+  const mOcCuenta = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('oc_cuenta_bancaria_v1')
+  if (!mOcCuenta) {
+    const ocColsCuenta = db.prepare('PRAGMA table_info(ordenes_compra)').all().map(c => c.name)
+    if (!ocColsCuenta.includes('cuenta_bancaria')) {
+      db.exec("ALTER TABLE ordenes_compra ADD COLUMN cuenta_bancaria TEXT")
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_cuenta_bancaria_v1')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

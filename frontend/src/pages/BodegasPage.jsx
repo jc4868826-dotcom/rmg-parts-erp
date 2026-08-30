@@ -224,7 +224,7 @@ export default function BodegasPage() {
             {(search || catFiltro || alertaFiltro) && (
               <button onClick={() => { setSearch(''); setCatFiltro(''); setAlertaFiltro('') }}
                 className="text-xs px-3 py-1.5 rounded-lg"
-                style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--rmg-muted)' }}>
+                style={{ background: 'rgba(15, 35, 60,0.06)', color: 'var(--rmg-muted)' }}>
                 Limpiar
               </button>
             )}
@@ -243,7 +243,7 @@ export default function BodegasPage() {
           <div className="rmg-card overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   {['SKU','Marca / Descripción','Cat.','Stock','Mínimo','Estado',''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
@@ -252,9 +252,9 @@ export default function BodegasPage() {
               <tbody>
                 {loadingStock
                   ? Array.from({ length: 8 }).map((_, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         {Array.from({ length: 7 }).map((_, j) => (
-                          <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/></td>
+                          <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                         ))}
                       </tr>
                     ))
@@ -266,8 +266,8 @@ export default function BodegasPage() {
                         <tr key={p.codigo}
                           onClick={() => setProductoSeleccionado(isSelected ? null : p)}
                           style={{
-                            borderBottom: '1px solid rgba(255,255,255,0.04)',
-                            background: isSelected ? 'rgba(56,182,255,0.06)' : p.alerta === 'critico' ? 'rgba(224,90,78,0.03)' : i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)',
+                            borderBottom: '1px solid rgba(15, 35, 60,0.04)',
+                            background: isSelected ? 'rgba(56,182,255,0.06)' : p.alerta === 'critico' ? 'rgba(224,90,78,0.03)' : i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)',
                             cursor: 'pointer',
                           }}
                           className="hover:bg-white/[0.02] transition-colors">
@@ -279,7 +279,7 @@ export default function BodegasPage() {
                           <td className="px-4 py-3 text-xs capitalize" style={{ color: 'var(--rmg-muted)' }}>{p.categoria}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
-                              <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', minWidth: 60 }}>
+                              <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(15, 35, 60,0.06)', minWidth: 60 }}>
                                 <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: alertInfo.color }}/>
                               </div>
                               <span className="font-bold w-10 text-right" style={{ color: alertInfo.color }}>{p.stock_actual}</span>
@@ -335,7 +335,7 @@ export default function BodegasPage() {
                       const ts = TIPO_STYLES[m.tipo] || TIPO_STYLES.ajuste
                       const TIcon = ts.icon
                       return (
-                        <tr key={m.id || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <tr key={m.id || i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                           <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{formatHora(m.created_at)}</td>
                           <td className="px-3 py-2">
                             <span className="flex items-center gap-1 w-fit px-1.5 py-0.5 rounded-full font-semibold"
@@ -369,7 +369,7 @@ export default function BodegasPage() {
                 className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
                 style={tipoFiltro === f.k
                   ? { background: 'var(--rmg-blue)', color: '#fff' }
-                  : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
+                  : { background: 'rgba(15, 35, 60,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }
                 }>{f.l}</button>
             ))}
           </div>
@@ -377,7 +377,7 @@ export default function BodegasPage() {
           <div className="rmg-card overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   {['Fecha','Tipo','Código','Descripción','Cantidad','Stock ant.','Stock nuevo','Motivo'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
@@ -386,9 +386,9 @@ export default function BodegasPage() {
               <tbody>
                 {loadingMovs
                   ? Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         {Array.from({ length: 8 }).map((_, j) => (
-                          <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }}/></td>
+                          <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                         ))}
                       </tr>
                     ))
@@ -396,7 +396,7 @@ export default function BodegasPage() {
                       const ts = TIPO_STYLES[m.tipo] || TIPO_STYLES.ajuste
                       const TIcon = ts.icon
                       return (
-                        <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                        <tr key={m.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
                           <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatHora(m.created_at)}</td>
                           <td className="px-4 py-3">
                             <span className="flex items-center gap-1.5 w-fit text-xs font-semibold px-2 py-0.5 rounded-full"

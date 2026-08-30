@@ -30,7 +30,7 @@ export default function ReportesPage() {
     { sku: '244374',  descripcion: 'KUMHO 275/60 R20 AT51', unidades: 22, ingresos: 4620000 },
   ]
 
-  const tooltipStyle = { background: '#0a1a2e', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 8, color: '#fff' }
+  const tooltipStyle = { background: '#ffffff', border: '1px solid rgba(15,35,60,0.12)', borderRadius: 8, color: '#16233a', boxShadow: '0 2px 12px rgba(15,35,60,0.12)' }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -50,7 +50,7 @@ export default function ReportesPage() {
         <h2 className="font-bold mb-4">Ventas mensuales vs meta — 2026</h2>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={meses} barGap={4}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 35, 60,0.05)" />
             <XAxis dataKey="mes" tick={{ fill: 'rgba(90,143,168,0.7)', fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: 'rgba(90,143,168,0.7)', fontSize: 11 }} axisLine={false} tickLine={false}
               tickFormatter={v => `$${(v / 1000000).toFixed(0)}M`} />
@@ -77,7 +77,7 @@ export default function ReportesPage() {
                     <span style={{ color: 'var(--rmg-off)' }}>{s.segmento}</span>
                     <span className="font-semibold" style={{ color }}>{formatCLP(s.actual)}</span>
                   </div>
-                  <div className="h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="h-2 rounded-full" style={{ background: 'rgba(15, 35, 60,0.06)' }}>
                     <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
                   </div>
                   <div className="text-xs mt-1 text-right" style={{ color: 'var(--rmg-muted)' }}>{pct.toFixed(0)}% de {formatCLP(s.meta)}</div>
@@ -92,7 +92,7 @@ export default function ReportesPage() {
           <h2 className="font-bold mb-4">Top SKUs — unidades vendidas</h2>
           <div className="space-y-2">
             {topSkus.map((s, i) => (
-              <div key={s.sku} className="flex items-center gap-3 py-2" style={{ borderBottom: i < topSkus.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+              <div key={s.sku} className="flex items-center gap-3 py-2" style={{ borderBottom: i < topSkus.length - 1 ? '1px solid rgba(15, 35, 60,0.04)' : 'none' }}>
                 <div className="font-black text-lg w-6 text-center" style={{ color: 'rgba(90,143,168,0.4)', fontFamily: 'Inter Tight, sans-serif' }}>{i + 1}</div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate" style={{ color: 'var(--rmg-off)' }}>{s.descripcion}</div>

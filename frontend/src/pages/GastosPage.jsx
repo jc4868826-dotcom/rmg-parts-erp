@@ -197,21 +197,21 @@ export default function GastosPage() {
             className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
             style={filtroErp === cat
               ? { background: 'var(--rmg-blue)', color: '#fff' }
-              : { background: 'rgba(255,255,255,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(255,255,255,0.08)' }
+              : { background: 'rgba(15, 35, 60,0.04)', color: 'var(--rmg-muted)', border: '1px solid rgba(15, 35, 60,0.08)' }
             }>{cat || 'Todos'}</button>
         ))}
       </div>
 
       {/* Tabla */}
       <div className="rmg-card overflow-hidden">
-        <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+        <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
           <span className="font-bold text-sm">{gastosFiltrados.length} gastos · {mes}{filtroErp ? ` · ${filtroErp}` : ''}</span>
           {filtroErp && <button onClick={() => setFiltroErp('')} className="text-xs flex items-center gap-1" style={{ color: 'var(--rmg-muted)' }}><X size={12}/> Limpiar</button>}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.015)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.015)' }}>
                 {['Fecha', 'Categoría', 'Subcategoría', 'Descripción', 'Monto', 'Forma Pago', 'Acciones'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
@@ -220,16 +220,16 @@ export default function GastosPage() {
             <tbody>
               {isLoading
                 ? Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                       {Array.from({ length: 7 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} /></td>
+                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>
                       ))}
                     </tr>
                   ))
                 : gastosFiltrados.map((g, i) => {
                     const cat = getCatErp(g)
                     return (
-                      <tr key={g.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
+                      <tr key={g.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
                         className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(g.fecha)}</td>
                         <td className="px-4 py-3">
@@ -243,7 +243,7 @@ export default function GastosPage() {
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{g.forma_pago || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
-                            <button onClick={() => setEditando({ ...g })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>
+                            <button onClick={() => setEditando({ ...g })} className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>
                             <button onClick={() => { if (confirm('¿Eliminar este gasto?')) eliminarMut.mutate(g.id) }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><Trash2 size={13}/></button>
                           </div>
                         </td>
@@ -254,7 +254,7 @@ export default function GastosPage() {
             </tbody>
             {!isLoading && gastosFiltrados.length > 0 && (
               <tfoot>
-                <tr style={{ background: 'rgba(255,255,255,0.03)', borderTop: '1px solid rgba(56,182,255,0.1)' }}>
+                <tr style={{ background: 'rgba(15, 35, 60,0.03)', borderTop: '1px solid rgba(56,182,255,0.1)' }}>
                   <td colSpan={4} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Total</td>
                   <td className="px-4 py-3 font-black text-base" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>
                     {formatCLP(gastosFiltrados.reduce((s, g) => s + g.monto, 0))}

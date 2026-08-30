@@ -6,12 +6,12 @@ import { Shield, Download, RefreshCw, Clock, HardDrive, Database, AlertTriangle,
 
 function StatCard({ icon: Icon, label, value, sub }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(56,182,255,0.12)', borderRadius: 12, padding: '16px 20px', flex: 1, minWidth: 140 }}>
+    <div style={{ background: 'rgba(15, 35, 60,0.03)', border: '0.5px solid rgba(56,182,255,0.12)', borderRadius: 12, padding: '16px 20px', flex: 1, minWidth: 140 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <Icon size={14} style={{ color: 'var(--rmg-blt)' }} />
         <span style={{ fontSize: 11, color: 'rgba(90,143,168,0.7)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
       </div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>{value}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(15, 35, 60,0.9)' }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'rgba(90,143,168,0.55)', marginTop: 3 }}>{sub}</div>}
     </div>
   )
@@ -146,7 +146,7 @@ export default function BackupsPage() {
       </div>
 
       {/* Table */}
-      <div style={{ background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(56,182,255,0.12)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: 'rgba(15, 35, 60,0.02)', border: '0.5px solid rgba(56,182,255,0.12)', borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', borderBottom: '0.5px solid rgba(56,182,255,0.08)' }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(90,143,168,0.7)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Historial de respaldos
@@ -162,7 +162,7 @@ export default function BackupsPage() {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ background: 'rgba(15, 35, 60,0.02)' }}>
                 {['Archivo', 'Tamaño', 'Fecha', 'Acciones'].map(h => (
                   <th key={h} style={{ padding: '9px 16px', fontSize: 11, fontWeight: 500, color: 'rgba(90,143,168,0.6)', textAlign: 'left', borderBottom: '0.5px solid rgba(56,182,255,0.08)' }}>{h}</th>
                 ))}
@@ -171,9 +171,9 @@ export default function BackupsPage() {
             <tbody>
               {backups.map((b, i) => (
                 <tr key={b.filename} style={{ borderBottom: '0.5px solid rgba(56,182,255,0.05)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.02)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <td style={{ padding: '10px 16px', fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'monospace' }}>
+                  <td style={{ padding: '10px 16px', fontSize: 12, color: 'rgba(15, 35, 60,0.75)', fontFamily: 'monospace' }}>
                     {i === 0 && <span style={{ fontSize: 9, fontWeight: 700, background: 'rgba(45,201,138,0.15)', color: '#2dc98a', padding: '1px 6px', borderRadius: 4, marginRight: 8 }}>ÚLTIMO</span>}
                     {b.filename}
                   </td>
@@ -217,7 +217,7 @@ export default function BackupsPage() {
       {/* Restore Modal */}
       {restoreTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ background: '#0a1a2e', border: '1px solid rgba(56,182,255,0.2)', borderRadius: 14, padding: 28, maxWidth: 440, width: '90%' }}>
+          <div style={{ background: '#ffffff', border: '1px solid rgba(15,35,60,0.12)', borderRadius: 14, padding: 28, maxWidth: 440, width: '90%', boxShadow: '0 8px 32px rgba(15,35,60,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <AlertTriangle size={18} style={{ color: '#f4a23c' }} />
@@ -225,7 +225,7 @@ export default function BackupsPage() {
               </div>
               <button onClick={() => setRestoreTarget(null)} style={{ background: 'none', border: 'none', color: 'rgba(90,143,168,0.6)', cursor: 'pointer' }}><X size={16}/></button>
             </div>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>
+            <p style={{ fontSize: 13, color: 'rgba(15, 35, 60,0.7)', marginBottom: 8 }}>
               ¿Restaurar la base de datos al estado del:
             </p>
             <p style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--rmg-blt)', background: 'rgba(56,182,255,0.06)', padding: '8px 12px', borderRadius: 8, marginBottom: 16 }}>

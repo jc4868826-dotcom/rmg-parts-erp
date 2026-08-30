@@ -118,11 +118,11 @@ function ClienteModal({ cliente, onClose, onSaved }) {
     <ModalBackdrop onClose={onClose}>
       <div className="rmg-card w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto animate-fade-in"
         style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
-        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
           <h2 className="font-black text-lg" style={{ fontFamily: 'Inter Tight, sans-serif' }}>
             {isEdit ? 'Editar cliente' : 'Nuevo cliente'}
           </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-black/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
             <X size={18} />
           </button>
         </div>
@@ -230,7 +230,7 @@ function ClienteModal({ cliente, onClose, onSaved }) {
             </div>
           </div>
 
-          <div className="flex gap-3 justify-end pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+          <div className="flex gap-3 justify-end pt-2 border-t" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
             <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={saveMut.isPending} className="btn-primary disabled:opacity-50">
               {saveMut.isPending ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear cliente')}
@@ -294,7 +294,7 @@ function FichaModal({ cliente, onClose, onEdit }) {
         style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
 
         {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+        <div className="flex items-start justify-between p-5 border-b" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
           <div>
             <h2 className="font-black text-lg" style={{ fontFamily: 'Inter Tight, sans-serif' }}>{c.razon_social}</h2>
             <div className="flex items-center gap-2 mt-1">
@@ -312,14 +312,14 @@ function FichaModal({ cliente, onClose, onEdit }) {
               className="flex items-center gap-1.5 text-xs btn-secondary px-3 py-1.5">
               <Pencil size={13} /> Editar
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-black/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
               <X size={18} />
             </button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b px-5" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+        <div className="flex border-b px-5" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className="text-sm font-semibold px-4 py-3 transition-colors border-b-2 -mb-px"
@@ -351,7 +351,7 @@ function FichaModal({ cliente, onClose, onEdit }) {
                   </div>
                 ))}
               </div>
-              <hr style={{ borderColor: 'rgba(255,255,255,0.06)' }} />
+              <hr style={{ borderColor: 'rgba(15, 35, 60,0.06)' }} />
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { label: 'Dirección', value: c.direccion || '—', icon: MapPin },
@@ -365,7 +365,7 @@ function FichaModal({ cliente, onClose, onEdit }) {
                   </div>
                 ))}
               </div>
-              <hr style={{ borderColor: 'rgba(255,255,255,0.06)' }} />
+              <hr style={{ borderColor: 'rgba(15, 35, 60,0.06)' }} />
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { label: 'Email', value: c.email || '—' },
@@ -386,7 +386,7 @@ function FichaModal({ cliente, onClose, onEdit }) {
           {tab === 'bitacora' && (
             <div className="space-y-4">
               {/* Add note */}
-              <div className="rounded-lg p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="rounded-lg p-4 space-y-3" style={{ background: 'rgba(15, 35, 60,0.03)', border: '1px solid rgba(15, 35, 60,0.07)' }}>
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <FieldLabel>Tipo de interacción</FieldLabel>
@@ -415,7 +415,7 @@ function FichaModal({ cliente, onClose, onEdit }) {
               {loadingBit ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map(i => (
-                    <div key={i} className="h-16 rounded-lg animate-pulse" style={{ background: 'rgba(255,255,255,0.04)' }} />
+                    <div key={i} className="h-16 rounded-lg animate-pulse" style={{ background: 'rgba(15, 35, 60,0.04)' }} />
                   ))}
                 </div>
               ) : bitacora.length === 0 ? (
@@ -426,7 +426,7 @@ function FichaModal({ cliente, onClose, onEdit }) {
               ) : (
                 <div className="space-y-3">
                   {bitacora.map((n, i) => (
-                    <div key={n.id || i} className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div key={n.id || i} className="rounded-lg p-3" style={{ background: 'rgba(15, 35, 60,0.03)', border: '1px solid rgba(15, 35, 60,0.06)' }}>
                       <div className="flex items-center gap-2 mb-1.5">
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
                           style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blt)' }}>
@@ -456,8 +456,8 @@ function FichaModal({ cliente, onClose, onEdit }) {
                       disabled={etapaMut.isPending}
                       className="w-full flex items-center gap-3 rounded-lg px-4 py-3 transition-all disabled:opacity-50"
                       style={{
-                        background: isCurrent ? st.bg : 'rgba(255,255,255,0.02)',
-                        border: `1px solid ${isCurrent ? st.color + '60' : 'rgba(255,255,255,0.07)'}`,
+                        background: isCurrent ? st.bg : 'rgba(15, 35, 60,0.02)',
+                        border: `1px solid ${isCurrent ? st.color + '60' : 'rgba(15, 35, 60,0.07)'}`,
                         cursor: 'pointer',
                       }}>
                       <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black"
@@ -520,12 +520,12 @@ function EmailModal({ cliente, onClose }) {
     <ModalBackdrop onClose={onClose}>
       <div className="rmg-card w-full max-w-lg mx-4 animate-fade-in"
         style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
-        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
           <div className="flex items-center gap-2">
             <Mail size={18} style={{ color: 'var(--rmg-blt)' }} />
             <h2 className="font-black text-base">Enviar Email</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-black/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
             <X size={18} />
           </button>
         </div>
@@ -614,14 +614,14 @@ function WspModal({ clientes, onClose }) {
     <ModalBackdrop onClose={onClose}>
       <div className="rmg-card w-full max-w-lg mx-4 animate-fade-in"
         style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
-        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
           <div className="flex items-center gap-2">
             <MessageCircle size={18} style={{ color: 'var(--rmg-teal)' }} />
             <h2 className="font-black text-base">
               {isSingle ? `WhatsApp — ${c0.razon_social}` : `WhatsApp masivo (${clientes.length})`}
             </h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-black/5 transition-colors" style={{ color: 'var(--rmg-muted)' }}>
             <X size={18} />
           </button>
         </div>
@@ -832,7 +832,7 @@ export default function ClientesPage() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-xl px-5 py-3 animate-fade-in"
           style={{ background: 'var(--rmg-surface)', border: '1px solid rgba(56,182,255,0.25)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
           <span className="text-sm font-semibold" style={{ color: 'var(--rmg-blt)' }}>{selected.size} seleccionado{selected.size !== 1 ? 's' : ''}</span>
-          <div className="w-px h-5" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          <div className="w-px h-5" style={{ background: 'rgba(15, 35, 60,0.1)' }} />
           <button onClick={handleDeleteSelected}
             className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors"
             style={{ color: 'var(--rmg-red)', background: 'rgba(224,90,78,0.1)' }}>
@@ -875,7 +875,7 @@ export default function ClientesPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                 {/* Checkbox all */}
                 <th className="px-4 py-3 w-10">
                   <input type="checkbox" checked={allSelected} onChange={toggleAll}
@@ -892,10 +892,10 @@ export default function ClientesPage() {
             <tbody>
               {isLoading
                 ? Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                       {Array.from({ length: 8 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
-                          <div className="h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                          <div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} />
                         </td>
                       ))}
                     </tr>
@@ -905,10 +905,10 @@ export default function ClientesPage() {
                     return (
                       <tr key={c.id}
                         style={{
-                          borderBottom: '1px solid rgba(255,255,255,0.04)',
+                          borderBottom: '1px solid rgba(15, 35, 60,0.04)',
                           background: isChecked
                             ? 'rgba(56,182,255,0.05)'
-                            : i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)',
+                            : i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)',
                         }}
                         className="hover:bg-white/[0.025] transition-colors group">
 
@@ -970,21 +970,21 @@ export default function ClientesPage() {
                             <button
                               onClick={(e) => { e.stopPropagation(); setEditC(c) }}
                               title="Editar"
-                              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-black/10 transition-colors"
                               style={{ color: 'var(--rmg-blt)' }}>
                               <Pencil size={13} />
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDelete(c) }}
                               title="Eliminar"
-                              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-black/10 transition-colors"
                               style={{ color: 'var(--rmg-red)' }}>
                               <Trash2 size={13} />
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); setFicha(c) }}
                               title="Ver ficha"
-                              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-black/10 transition-colors"
                               style={{ color: 'var(--rmg-muted)' }}>
                               <FileText size={13} />
                             </button>
@@ -992,7 +992,7 @@ export default function ClientesPage() {
                               <button
                                 onClick={(e) => { e.stopPropagation(); setEmailC(c) }}
                                 title="Enviar email"
-                                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                className="p-1.5 rounded-lg hover:bg-black/10 transition-colors"
                                 style={{ color: 'var(--rmg-blt)' }}>
                                 <Mail size={13} />
                               </button>
@@ -1001,7 +1001,7 @@ export default function ClientesPage() {
                               <button
                                 onClick={(e) => { e.stopPropagation(); setWspC([c]) }}
                                 title="WhatsApp"
-                                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                className="p-1.5 rounded-lg hover:bg-black/10 transition-colors"
                                 style={{ color: 'var(--rmg-teal)' }}>
                                 <MessageCircle size={13} />
                               </button>
@@ -1031,7 +1031,7 @@ export default function ClientesPage() {
         )}
 
         {!isLoading && filtered.length > 0 && (
-          <div className="px-5 py-3 border-t text-xs" style={{ borderColor: 'rgba(255,255,255,0.05)', color: 'var(--rmg-muted)' }}>
+          <div className="px-5 py-3 border-t text-xs" style={{ borderColor: 'rgba(15, 35, 60,0.05)', color: 'var(--rmg-muted)' }}>
             Mostrando {filtered.length} de {clientes.length} clientes
             {selected.size > 0 && <span className="ml-2" style={{ color: 'var(--rmg-blt)' }}>· {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}</span>}
           </div>

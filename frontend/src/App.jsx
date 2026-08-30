@@ -55,7 +55,7 @@ const queryClient = new QueryClient({
 // ── Ruta protegida ─────────────────────────────────────────
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth()
-  if (loading) return <div className="flex items-center justify-center h-screen bg-[#050f1c] text-white">Cargando...</div>
+  if (loading) return <div className="flex items-center justify-center h-screen" style={{ background: 'var(--rmg-bg)', color: 'var(--rmg-muted)' }}>Cargando...</div>
   if (!user) return <Navigate to="/login" replace />
   return children
 }
@@ -69,9 +69,10 @@ export default function App() {
             position="top-right"
             toastOptions={{
               style: {
-                background: '#0a1a2e',
-                color: '#fff',
-                border: '1px solid rgba(56,182,255,0.2)',
+                background: '#ffffff',
+                color: '#16233a',
+                border: '1px solid rgba(15,35,60,0.12)',
+                boxShadow: '0 2px 16px rgba(15,35,60,0.15)',
               },
             }}
           />
