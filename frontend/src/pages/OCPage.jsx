@@ -6,7 +6,7 @@ import { formatCLP, formatFecha } from '@utils/format'
 import {
   Plus, X, Search, ChevronLeft, Send, CheckCircle, XCircle, Truck,
   PackageCheck, FileText, Mail, ClipboardList, History, RotateCcw,
-  ExternalLink, Package, Trash2, AlertTriangle,
+  ExternalLink, Package, Trash2, AlertTriangle, Pencil,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@context/AuthContext'
@@ -165,6 +165,7 @@ export default function OCPage() {
   const [ocAEliminar, setOcAEliminar]   = useState(null)   // { id, numero } para el modal
   const [facturaActiva, setFacturaActiva] = useState(false)
   const [facturaForm, setFacturaForm]     = useState(FACTURA_INIT)
+  const [ocEditando, setOcEditando]       = useState(null)   // id de la OC en edición, o null si es "nueva"
 
   // Queries
   const { data: ocs = [], isLoading } = useQuery({
@@ -200,6 +201,15 @@ export default function OCPage() {
       setVista('detalle'); setOcId(data.id); setForm(FORM_INIT)
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al crear OC'),
+  })
+
+  const editarOCMut = useMutation({
+    mutationFn: ({ id, data }) => api.put(`/oc/${id}`, data).then(r => r.data),
+    onSuccess: (data) => {
+      invalidate(); toast.success('OC actualizada')
+      setVista('detalle'); setOcId(data.id); setForm(FORM_INIT); setOcEditando(null)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar OC'),
   })
 
   const estadoMut = useMutation({
@@ -269,6 +279,21 @@ export default function OCPage() {
 
   const abrirDetalle = (oc) => { setOcId(oc.id); setDetalleTab('detalle'); setVista('detalle') }
 
+  const abrirEdicion = (oc) => {
+    setForm({
+      proveedor_id: oc.proveedor_id || '',
+      proveedor: oc.proveedor || '',
+      fecha_requerida: oc.fecha_requerida || '',
+      medio_pago: oc.medio_pago || 'Contado',
+      observaciones: oc.observaciones || '',
+      items: (oc.items || []).length
+        ? oc.items.map(i => ({ codigo: i.codigo || '', descripcion: i.descripcion || '', cantidad: i.cantidad || 1, precio_unitario: i.precio_unitario || 0 }))
+        : [{ ...ITEM_INIT }],
+    })
+    setOcEditando(oc.id)
+    setVista('nueva')
+  }
+
   const abrirRecepcion = (oc) => {
     setRecepcionLineas((oc.items || []).map(i => ({
       linea_oc_id: i.id,
@@ -286,7 +311,16 @@ export default function OCPage() {
     if (!form.proveedor) { toast.error('Proveedor requerido'); return }
     const items = form.items.filter(i => i.codigo && Number(i.cantidad) > 0)
     if (!items.length) { toast.error('Al menos un ítem con SKU y cantidad > 0'); return }
-    crearMut.mutate({ ...form, items, usuario_id: user?.id, usuario_nombre: user?.nombre })
+    if (ocEditando) {
+      editarOCMut.mutate({ id: ocEditando, data: { ...form, items } })
+    } else {
+      crearMut.mutate({ ...form, items, usuario_id: user?.id, usuario_nombre: user?.nombre })
+    }
+  }
+
+  const cancelarFormOC = () => {
+    setForm(FORM_INIT)
+    if (ocEditando) { setVista('detalle'); setOcEditando(null) } else { setVista('lista') }
   }
 
   // Filtered list
@@ -383,10 +417,12 @@ export default function OCPage() {
   if (vista === 'nueva') return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center gap-3">
-        <button onClick={() => setVista('lista')} className="p-2 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
+        <button onClick={cancelarFormOC} className="p-2 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}>
           <ChevronLeft size={18}/>
         </button>
-        <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Nueva Orden de Compra</h1>
+        <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>
+          {ocEditando ? `Editar OC` : 'Nueva Orden de Compra'}
+        </h1>
       </div>
 
       <div className="rmg-card p-6">
@@ -454,9 +490,11 @@ export default function OCPage() {
           </div>
 
           <div className="flex gap-3 justify-end pt-1">
-            <button type="button" onClick={() => setVista('lista')} className="btn-secondary">Cancelar</button>
-            <button type="submit" disabled={crearMut.isPending} className="btn-primary disabled:opacity-50">
-              {crearMut.isPending ? 'Creando…' : 'Crear OC'}
+            <button type="button" onClick={cancelarFormOC} className="btn-secondary">Cancelar</button>
+            <button type="submit" disabled={crearMut.isPending || editarOCMut.isPending} className="btn-primary disabled:opacity-50">
+              {ocEditando
+                ? (editarOCMut.isPending ? 'Guardando…' : 'Guardar cambios')
+                : (crearMut.isPending ? 'Creando…' : 'Crear OC')}
             </button>
           </div>
         </form>
@@ -489,12 +527,17 @@ export default function OCPage() {
         </div>
         {/* Action buttons per state */}
         <div className="flex gap-2 flex-wrap justify-end">
-          {estado === 'borrador' && (
+          {estado === 'borrador' && (<>
+            <button onClick={() => abrirEdicion(oc)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
+              style={{ background: 'rgba(148,163,184,0.1)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.3)' }}>
+              <Pencil size={13}/> Editar
+            </button>
             <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'pendiente_autorizacion' })} disabled={estadoMut.isPending}
               className="btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50">
               <Send size={13}/> Enviar a autorización
             </button>
-          )}
+          </>)}
           {estado === 'pendiente_autorizacion' && esGerente && (<>
             <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'autorizada' })} disabled={estadoMut.isPending}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"

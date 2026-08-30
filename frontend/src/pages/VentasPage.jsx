@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard } from 'lucide-react'
 import toast from 'react-hot-toast'
 import DocumentosPanel from '@components/DocumentosPanel'
 
@@ -14,6 +14,8 @@ const FORMAS_PAGO = ['Contado', 'Transferencia', 'Crédito 30 días', 'Crédito 
 const TIPOS_DOC = ['Nota de Venta', 'Factura', 'Boleta']
 const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, precio_unitario: 0, costo_unitario: 0 }
 const FORM_INIT = { fecha: HOY, cliente_nombre: '', numero_documento: '', tipo_documento: 'Nota de Venta', estado: 'Pendiente', forma_pago: 'Contado', notas: '', items: [{ ...ITEM_INIT }] }
+const CUENTAS = ['1781310106 Banco de Chile', '000-0-00000 Banco BCI', '000-0-00000 Banco Santander', 'Caja chica']
+const PAGO_INIT = { metodo_pago: 'Transferencia', cuenta_bancaria: CUENTAS[0], fecha_pago: HOY, notas: '' }
 
 const ESTADO_STYLE = {
   Pagado:  { color: 'var(--rmg-teal)',   bg: 'rgba(45,201,138,0.12)' },
@@ -66,9 +68,15 @@ export default function VentasPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al cambiar estado'),
   })
 
+  const [pagoModal, setPagoModal] = useState(null)   // venta seleccionada, o null
+  const [pago, setPago] = useState(PAGO_INIT)
+
   const pagoMut = useMutation({
-    mutationFn: (id) => api.post(`/ventas/${id}/pago`).then(r => r.data),
-    onSuccess: () => { invalidate(); toast.success('Venta marcada como pagada') },
+    mutationFn: ({ id, data }) => api.post(`/ventas/${id}/pago`, data).then(r => r.data),
+    onSuccess: () => {
+      invalidate(); toast.success('Pago registrado — ingreso confirmado en flujo de caja')
+      setPagoModal(null); setPago(PAGO_INIT)
+    },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar pago'),
   })
 
@@ -260,6 +268,60 @@ export default function VentasPage() {
         </div>
       )}
 
+      {/* Modal registrar pago */}
+      {pagoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-bold">Registrar pago</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{pagoModal.numero_documento || `Venta #${pagoModal.id}`} · {formatCLP(pagoModal.total)}</p>
+              </div>
+              <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Método de pago</label>
+                <select className="rmg-input" value={pago.metodo_pago} onChange={e => setPago(p => ({ ...p, metodo_pago: e.target.value }))}>
+                  <option>Transferencia</option>
+                  <option>Cheque</option>
+                  <option>Efectivo</option>
+                  <option>Crédito 30 días</option>
+                  <option>Crédito 60 días</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cuenta bancaria</label>
+                <select className="rmg-input" value={pago.cuenta_bancaria} onChange={e => setPago(p => ({ ...p, cuenta_bancaria: e.target.value }))}>
+                  {CUENTAS.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="">Sin especificar</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Fecha de pago</label>
+                <input type="date" className="rmg-input" value={pago.fecha_pago}
+                  onChange={e => setPago(p => ({ ...p, fecha_pago: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas</label>
+                <input className="rmg-input" placeholder="Referencia, número de operación..." value={pago.notas}
+                  onChange={e => setPago(p => ({ ...p, notas: e.target.value }))} />
+              </div>
+              <div className="flex gap-3 justify-end pt-2">
+                <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} className="btn-secondary">Cancelar</button>
+                <button
+                  onClick={() => pagoMut.mutate({ id: pagoModal.id, data: pago })}
+                  disabled={pagoMut.isPending}
+                  className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                  <CreditCard size={14}/>
+                  {pagoMut.isPending ? 'Registrando...' : 'Confirmar pago'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tabla */}
       <div className="rmg-card overflow-hidden">
         <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
@@ -317,7 +379,7 @@ export default function VentasPage() {
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
                             {v.estado !== 'Pagado' && (
-                              <button onClick={() => pagoMut.mutate(v.id)} title="Marcar pagada" className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
+                              <button onClick={() => { setPagoModal(v); setPago(PAGO_INIT) }} title="Registrar pago" className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
                             )}
                             <button onClick={() => setDocsVenta(v)} title="Documentos" className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-blue)' }}><Paperclip size={13}/></button>
                             <button onClick={() => setEditando({ ...v })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>

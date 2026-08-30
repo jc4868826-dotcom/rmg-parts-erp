@@ -274,15 +274,20 @@ const registrarPago = (req, res) => {
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
     if (venta.estado === 'Pagado') return res.status(400).json({ error: 'La venta ya está pagada' })
 
-    const { cuenta_bancaria, fecha_pago } = req.body
+    const { cuenta_bancaria, fecha_pago, metodo_pago, notas } = req.body
+    const descripcion = [
+      `Pago ${venta.numero_documento} — ${venta.cliente_nombre || ''}`,
+      metodo_pago ? `(${metodo_pago})` : null,
+      notas ? `· ${notas}` : null,
+    ].filter(Boolean).join(' ')
     const doPago = db.transaction(() => {
-      db.prepare("UPDATE ventas SET estado = 'Pagado', fecha_pago = ? WHERE id = ?")
-        .run(fecha_pago || hoy(), venta.id)
+      db.prepare("UPDATE ventas SET estado = 'Pagado', fecha_pago = ?, forma_pago = COALESCE(?, forma_pago) WHERE id = ?")
+        .run(fecha_pago || hoy(), metodo_pago || null, venta.id)
       db.prepare(`
         INSERT INTO caja_movimientos
           (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
         VALUES ('ingreso','venta',?,?,?,?,'confirmado','ventas',?,?)
-      `).run(`Pago ${venta.numero_documento} — ${venta.cliente_nombre || ''}`, venta.total,
+      `).run(descripcion, venta.total,
              hoy(), fecha_pago || hoy(), venta.id, cuenta_bancaria || null)
     })
     doPago()
