@@ -2172,6 +2172,47 @@ function runMigrations() {
     }
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_cuenta_bancaria_v1')
   }
+
+  // Migration stock_pack_correction_v1 — corrige stock_actual de SKU con presentación
+  // en pack (unidades_por_pack > 1) que quedó cargado en CAJAS antes de que existiera
+  // la conversión caja→unidad (CantidadPresentacion). Ej: un SKU de caja de 12 con
+  // stock_actual = 2 en realidad tenía 2 cajas cargadas = 24 unidades reales.
+  // Se corre UNA sola vez (guardada en _migrations) y deja registro auditable en
+  // movimientos_stock para cada SKU corregido, con el motivo explícito.
+  const mStockPack = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('stock_pack_correction_v1')
+  if (!mStockPack) {
+    try {
+      const rows = db.prepare(`
+        SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(unidades_por_pack) AS unidades_por_pack,
+               MAX(COALESCE(stock_actual, 0)) AS stock_actual
+        FROM lista_precios
+        WHERE codigo_sku IS NOT NULL AND codigo_sku != ''
+        GROUP BY codigo_sku
+        HAVING MAX(unidades_por_pack) > 1 AND MAX(COALESCE(stock_actual, 0)) > 0
+      `).all()
+      const updStock = db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?')
+      const insMov = db.prepare(`INSERT INTO movimientos_stock
+        (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo)
+        VALUES (?,?,?,?,?,?,?,?,?)`)
+      let corregidos = 0
+      for (const r of rows) {
+        const pack = r.unidades_por_pack
+        const stockAnterior = r.stock_actual
+        const stockNuevo = stockAnterior * pack
+        updStock.run(stockNuevo, r.codigo_sku)
+        insMov.run(
+          uuidv4(), r.codigo_sku, r.codigo_sku, r.descripcion, 'ajuste',
+          stockNuevo - stockAnterior, stockAnterior, stockNuevo,
+          `Corrección automática: stock cargado en cajas antes de existir conversión caja→unidad (×${pack})`
+        )
+        corregidos++
+      }
+      console.log(`✅ Migración stock_pack_correction_v1 — ${corregidos} SKU corregidos (stock_actual × unidades_por_pack)`)
+    } catch (e) {
+      console.warn('⚠️ stock_pack_correction_v1 error:', e.message)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('stock_pack_correction_v1')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
