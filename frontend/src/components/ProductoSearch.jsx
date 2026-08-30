@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP } from '@utils/format'
@@ -10,12 +11,23 @@ import { Search, X } from 'lucide-react'
  * venta directa, orden de compra…). Al seleccionar un producto entrega el
  * registro completo — incluye presentacion / unidades_por_pack, que es lo
  * que permite mostrar el conversor de cajas ↔ unidades en el campo cantidad.
+ *
+ * La lista de resultados se pinta en un portal a document.body (posición
+ * fixed calculada desde el input), no como absolute dentro de este mismo
+ * div. Esto es necesario porque este buscador siempre vive dentro de una
+ * tabla con scroll horizontal (overflow-x-auto) — y por especificación CSS,
+ * en cuanto overflow-x no es "visible", el navegador fuerza overflow-y a
+ * "auto" también, recortando cualquier absolute posicionado adentro. Sin el
+ * portal, el dropdown de resultados queda invisible (aunque exista en el
+ * DOM) y el precio unitario nunca se autocompleta al elegir un producto.
  */
 export default function ProductoSearch({ initialQuery = '', onSelect, placeholder = 'Buscar SKU, producto…' }) {
   const [query, setQuery]   = useState(initialQuery)
   const [open, setOpen]     = useState(false)
   const [debouncedQ, setDQ] = useState('')
+  const [rect, setRect]     = useState(null)
   const wrapRef             = useRef(null)
+  const inputRef            = useRef(null)
 
   useEffect(() => { setQuery(initialQuery) }, [initialQuery])
 
@@ -31,8 +43,31 @@ export default function ProductoSearch({ initialQuery = '', onSelect, placeholde
     staleTime: 60_000,
   })
 
+  const updateRect = () => {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect()
+      setRect({ top: r.bottom, left: r.left, width: r.width })
+    }
+  }
+
+  useLayoutEffect(() => {
+    if (!open) return
+    updateRect()
+    window.addEventListener('scroll', updateRect, true)
+    window.addEventListener('resize', updateRect)
+    return () => {
+      window.removeEventListener('scroll', updateRect, true)
+      window.removeEventListener('resize', updateRect)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   useEffect(() => {
-    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    const handler = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target) && !e.target.closest('[data-producto-search-dropdown]')) {
+        setOpen(false)
+      }
+    }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
@@ -49,11 +84,14 @@ export default function ProductoSearch({ initialQuery = '', onSelect, placeholde
     onSelect({ codigo_sku: '', descripcion: '', precio_neto: 0, precio_venta_neto: 0, costo_unidad_neto: 0, presentacion: '', unidades_por_pack: null })
   }
 
+  const showDropdown = open && debouncedQ.length >= 2 && rect
+
   return (
     <div ref={wrapRef} className="relative">
       <div className="relative">
         <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--rmg-muted)' }} />
         <input
+          ref={inputRef}
           className="rmg-input text-xs pl-6 pr-6"
           placeholder={placeholder}
           value={query}
@@ -67,9 +105,10 @@ export default function ProductoSearch({ initialQuery = '', onSelect, placeholde
           </button>
         )}
       </div>
-      {open && debouncedQ.length >= 2 && (
-        <div className="absolute z-50 left-0 right-0 mt-1 rounded-lg border overflow-hidden shadow-xl"
-          style={{ background: 'var(--rmg-surface)', borderColor: 'rgba(56,182,255,0.25)', maxHeight: 260, overflowY: 'auto' }}>
+      {showDropdown && createPortal(
+        <div data-producto-search-dropdown
+          className="fixed z-50 rounded-lg border overflow-hidden shadow-xl"
+          style={{ top: rect.top + 4, left: rect.left, width: rect.width, background: 'var(--rmg-surface)', borderColor: 'rgba(56,182,255,0.25)', maxHeight: 260, overflowY: 'auto' }}>
           {isFetching && (
             <div className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>Buscando…</div>
           )}
@@ -90,7 +129,8 @@ export default function ProductoSearch({ initialQuery = '', onSelect, placeholde
               </div>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
