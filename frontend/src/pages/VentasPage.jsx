@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, X, Pencil, Trash2, ShoppingCart } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign } from 'lucide-react'
 import toast from 'react-hot-toast'
+import DocumentosPanel from '@components/DocumentosPanel'
 
 const MES_ACTUAL = new Date().toISOString().slice(0, 7)
 const HOY = new Date().toISOString().split('T')[0]
 const ESTADOS = ['Pendiente', 'Pagado', 'Anulado']
+const ESTADOS_LOGISTICOS = ['en_proceso', 'despachada', 'recibida_cliente']
 const FORMAS_PAGO = ['Contado', 'Transferencia', 'Crédito 30 días', 'Crédito 60 días', 'Cheque']
 const TIPOS_DOC = ['Nota de Venta', 'Factura', 'Boleta']
 const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, precio_unitario: 0, costo_unitario: 0 }
@@ -17,6 +19,12 @@ const ESTADO_STYLE = {
   Pagado:  { color: 'var(--rmg-teal)',   bg: 'rgba(45,201,138,0.12)' },
   Pendiente:{ color: 'var(--rmg-gold)',   bg: 'rgba(244,162,60,0.12)' },
   Anulado: { color: 'var(--rmg-red)',    bg: 'rgba(224,90,78,0.12)'  },
+}
+
+const LOGISTICO_STYLE = {
+  en_proceso:       { label: 'En proceso',       color: 'var(--rmg-gold)', bg: 'rgba(244,162,60,0.12)' },
+  despachada:       { label: 'Despachada',       color: 'var(--rmg-blue)', bg: 'rgba(56,182,255,0.12)' },
+  recibida_cliente: { label: 'Recibida cliente', color: 'var(--rmg-teal)', bg: 'rgba(45,201,138,0.12)' },
 }
 
 export default function VentasPage() {
@@ -48,6 +56,20 @@ export default function VentasPage() {
   const eliminarMut = useMutation({
     mutationFn: (id) => api.delete(`/ventas/${id}`).then(r => r.data),
     onSuccess: () => { invalidate(); toast.success('Venta eliminada') },
+  })
+
+  const [docsVenta, setDocsVenta] = useState(null)
+
+  const estadoLogMut = useMutation({
+    mutationFn: ({ id, estado_logistico }) => api.patch(`/ventas/${id}/estado`, { estado_logistico }).then(r => r.data),
+    onSuccess: () => { invalidate(); toast.success('Estado logístico actualizado') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al cambiar estado'),
+  })
+
+  const pagoMut = useMutation({
+    mutationFn: (id) => api.post(`/ventas/${id}/pago`).then(r => r.data),
+    onSuccess: () => { invalidate(); toast.success('Venta marcada como pagada') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar pago'),
   })
 
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { ...ITEM_INIT }] }))
@@ -225,6 +247,19 @@ export default function VentasPage() {
         </div>
       )}
 
+      {/* Modal documentos */}
+      {docsVenta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-md animate-fade-in">
+            <div className="flex justify-between items-center mb-2 px-1">
+              <h2 className="font-bold text-sm" style={{ color: '#fff' }}>Documentos — {docsVenta.numero_documento || `Venta #${docsVenta.id}`}</h2>
+              <button onClick={() => setDocsVenta(null)} className="p-1 rounded hover:bg-white/10" style={{ color: '#fff' }}><X size={16}/></button>
+            </div>
+            <DocumentosPanel entidad="venta" entidadId={docsVenta.id} />
+          </div>
+        </div>
+      )}
+
       {/* Tabla */}
       <div className="rmg-card overflow-hidden">
         <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
@@ -234,7 +269,7 @@ export default function VentasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(255,255,255,0.015)' }}>
-                {['Fecha', 'Cliente', 'Doc.', 'Total', 'Costo', 'Estado', 'Forma Pago', 'Acciones'].map(h => (
+                {['Fecha', 'Cliente', 'Doc.', 'Total', 'Costo', 'Estado', 'Logística', 'Forma Pago', 'Acciones'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -254,16 +289,37 @@ export default function VentasPage() {
                       <tr key={v.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.01)' }}
                         className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(v.fecha)}</td>
-                        <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>{v.cliente_nombre || '—'}</td>
+                        <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>
+                          {v.cliente_nombre || '—'}
+                          {(v.cotizacion_id || v.pedido_id) && (
+                            <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full align-middle"
+                              style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}>
+                              {v.cotizacion_id ? 'desde cotización' : 'desde pedido'}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>{v.numero_documento || '—'}</td>
                         <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-blt)' }}>{formatCLP(v.total)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.costo_total)}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{v.estado}</span>
                         </td>
+                        <td className="px-4 py-3">
+                          <select className="rmg-input text-xs py-1"
+                            value={v.estado_logistico || 'en_proceso'}
+                            disabled={estadoLogMut.isPending}
+                            onChange={e => estadoLogMut.mutate({ id: v.id, estado_logistico: e.target.value })}
+                            style={{ color: (LOGISTICO_STYLE[v.estado_logistico] || LOGISTICO_STYLE.en_proceso).color }}>
+                            {ESTADOS_LOGISTICOS.map(s => <option key={s} value={s}>{LOGISTICO_STYLE[s].label}</option>)}
+                          </select>
+                        </td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.forma_pago}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
+                            {v.estado !== 'Pagado' && (
+                              <button onClick={() => pagoMut.mutate(v.id)} title="Marcar pagada" className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
+                            )}
+                            <button onClick={() => setDocsVenta(v)} title="Documentos" className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-blue)' }}><Paperclip size={13}/></button>
                             <button onClick={() => setEditando({ ...v })} className="p-1.5 rounded hover:bg-white/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>
                             <button onClick={() => { if (confirm('¿Eliminar esta venta?')) eliminarMut.mutate(v.id) }} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><Trash2 size={13}/></button>
                           </div>

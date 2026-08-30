@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, FileText, Send, Check, X, Clock, Printer, MessageCircle, Pencil, Trash2 } from 'lucide-react'
+import { Plus, FileText, Send, Check, X, Clock, Printer, MessageCircle, Pencil, Trash2, ShoppingCart } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ESTADOS = [
@@ -367,6 +367,16 @@ export default function CotizacionesPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar cotización'),
   })
 
+  const convertirVentaMut = useMutation({
+    mutationFn: (id) => api.post(`/ventas/desde-cotizacion/${id}`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cotizaciones'] })
+      toast.success('Venta generada desde la cotización')
+      navigate('/ventas')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al generar la venta'),
+  })
+
   const total = cotizaciones.reduce((s, c) => s + c.total, 0)
   const aprobadas = cotizaciones.filter(c => c.estado === 'aprobada')
   const totalAprobado = aprobadas.reduce((s, c) => s + c.total, 0)
@@ -472,6 +482,16 @@ export default function CotizacionesPage() {
                             onClick={e => e.stopPropagation()}>
                             <MessageCircle size={11}/> WA
                           </a>
+                          {c.estado !== 'rechazada' && (
+                            <button
+                              disabled={convertirVentaMut.isPending}
+                              onClick={e => { e.stopPropagation(); convertirVentaMut.mutate(c.id) }}
+                              className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold disabled:opacity-50"
+                              style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}
+                              title="Convertir a venta">
+                              <ShoppingCart size={11}/> Venta
+                            </button>
+                          )}
                           <button
                             onClick={e => { e.stopPropagation(); setEditando({ ...c }) }}
                             className="p-1.5 rounded hover:bg-white/5 transition-colors"

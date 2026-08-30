@@ -38,7 +38,6 @@ const NAV_SECTIONS = [
     items: [
       { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: null },
       { to: '/gastos',       icon: Receipt,         label: 'Gastos',          badge: null },
-      { to: '/compras-erp',  icon: PackagePlus,     label: 'Compras',         badge: null },
       { to: '/flujo-caja',   icon: LineChart,       label: 'Flujo de Caja',   badge: null },
       { to: '/edr',          icon: BarChart2,       label: 'EDR',             badge: null },
     ],
@@ -49,7 +48,7 @@ const NAV_SECTIONS = [
       { to: '/pedidos',      icon: ShoppingCart,    label: 'Pedidos',         badge: null },
       { to: '/cxc',          icon: DollarSign,      label: 'CxC · Cobrar',    badge: null },
       { to: '/cxp',          icon: CreditCard,      label: 'CxP · Pagar',     badge: null },
-      { to: '/facturas',     icon: BookOpen,        label: 'Notas de Venta',  badge: null },
+      { to: '/facturas',     icon: BookOpen,        label: 'Imprimir Nota de Venta', badge: null },
     ],
   },
   {

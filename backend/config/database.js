@@ -2095,6 +2095,74 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('perfiles_v1')
     console.log('✅ Migración perfiles_v1 — usuarios migrados a 3 perfiles: gerente / administrador / vendedor')
   }
+
+  // Migration 47: ventas_unificadas_v1 — Venta como destino único del flujo comercial
+  // (cotización → venta directa | cotización → pedido → venta | venta directa),
+  // con estado logístico editable, trazabilidad de origen y tabla de documentos adjuntos.
+  const mVentasUnif = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('ventas_unificadas_v1')
+  if (!mVentasUnif) {
+    const vCols = db.prepare('PRAGMA table_info(ventas)').all().map(c => c.name)
+    if (!vCols.includes('cliente_id'))       db.exec('ALTER TABLE ventas ADD COLUMN cliente_id TEXT REFERENCES clientes(id)')
+    if (!vCols.includes('cotizacion_id'))    db.exec('ALTER TABLE ventas ADD COLUMN cotizacion_id TEXT REFERENCES cotizaciones(id)')
+    if (!vCols.includes('pedido_id'))        db.exec('ALTER TABLE ventas ADD COLUMN pedido_id TEXT REFERENCES pedidos(id)')
+    if (!vCols.includes('estado_logistico')) db.exec("ALTER TABLE ventas ADD COLUMN estado_logistico TEXT DEFAULT 'en_proceso'")
+    if (!vCols.includes('fecha_pago'))       db.exec('ALTER TABLE ventas ADD COLUMN fecha_pago TEXT')
+    if (!vCols.includes('direccion_entrega'))db.exec('ALTER TABLE ventas ADD COLUMN direccion_entrega TEXT')
+    if (!vCols.includes('vendedor_id'))      db.exec('ALTER TABLE ventas ADD COLUMN vendedor_id TEXT REFERENCES usuarios(id)')
+    // Ventas ya existentes (previas a este cambio): se asumen despachadas/entregadas —
+    // quedan en el estado logístico terminal en vez de reabrirse en "en_proceso".
+    try { db.exec("UPDATE ventas SET estado_logistico = 'recibida_cliente' WHERE estado_logistico IS NULL") } catch (_) {}
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS documentos_adjuntos (
+        id              TEXT PRIMARY KEY,
+        entidad         TEXT NOT NULL CHECK(entidad IN ('cotizacion','pedido','venta','orden_compra')),
+        entidad_id      TEXT NOT NULL,
+        tipo            TEXT NOT NULL CHECK(tipo IN ('pdf','excel','imagen')),
+        nombre_archivo  TEXT,
+        mime_type       TEXT,
+        contenido_base64 TEXT NOT NULL,
+        subido_por      TEXT REFERENCES usuarios(id),
+        created_at      TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_documentos_entidad ON documentos_adjuntos(entidad, entidad_id);
+    `)
+
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('ventas_unificadas_v1')
+    console.log('✅ Migración ventas_unificadas_v1 — venta como destino único (cliente_id/cotizacion_id/pedido_id/estado_logistico) + documentos_adjuntos')
+  }
+
+  // Migration 48: oc_estados_snake_case_v1 — unifica nomenclatura de estados de ordenes_compra.
+  // comprasController.js y ocController.js escribían casing distinto sobre la misma tabla
+  // (p.ej. 'Pendiente_Autorizacion' vs 'CREADA'/'AUTORIZADA'). Se normaliza a snake_case
+  // y ocController.js pasa a ser la única implementación de OC.
+  const mOcSnake = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('oc_estados_snake_case_v1')
+  if (!mOcSnake) {
+    const ESTADO_MAP = {
+      CREADA: 'borrador',
+      Pendiente_Autorizacion: 'pendiente_autorizacion',
+      AUTORIZADA: 'autorizada', Autorizada: 'autorizada',
+      RECHAZADA: 'rechazada', Rechazada: 'rechazada',
+      ENVIADA_PROVEEDOR: 'enviada_proveedor', Enviada_Proveedor: 'enviada_proveedor', enviada: 'enviada_proveedor', confirmada: 'enviada_proveedor',
+      RECIBIDA_PARCIAL: 'recibida_parcial', Recibida_Parcial: 'recibida_parcial',
+      RECIBIDA: 'recibida_total', Recibida_Bodega: 'recibida_total', recibida: 'recibida_total',
+      Facturada: 'facturada',
+      Pagada: 'pagada',
+    }
+    try {
+      const rows = db.prepare('SELECT id, estado FROM ordenes_compra').all()
+      const upd = db.prepare('UPDATE ordenes_compra SET estado = ? WHERE id = ?')
+      let cambiadas = 0
+      for (const r of rows) {
+        const nuevo = ESTADO_MAP[r.estado]
+        if (nuevo && nuevo !== r.estado) { upd.run(nuevo, r.id); cambiadas++ }
+      }
+      console.log(`✅ Migración oc_estados_snake_case_v1 — ${cambiadas}/${rows.length} OC normalizadas a snake_case`)
+    } catch (e) {
+      console.warn('⚠️ oc_estados_snake_case_v1 error:', e.message)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_estados_snake_case_v1')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

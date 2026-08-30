@@ -18,7 +18,7 @@ function buildMovimientos(filtroDesde, filtroHasta) {
       SELECT id AS origen_id, id,
         'ventas' AS origen_tabla, 'Venta' AS origen_label,
         'ingreso' AS tipo, 'Venta' AS categoria,
-        COALESCE(cliente,'Cliente') || ' · ' || COALESCE(numero,'') AS descripcion,
+        COALESCE(cliente_nombre,'Cliente') || ' · ' || COALESCE(numero_documento,'') AS descripcion,
         total AS monto,
         (${vDate}) AS fecha_pago,
         CASE WHEN estado='Pagado' THEN 'confirmado' ELSE 'proyectado' END AS estado,

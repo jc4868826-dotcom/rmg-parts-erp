@@ -4,6 +4,7 @@ import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
 import { ShoppingCart, Plus, X, ChevronDown, ChevronRight, CreditCard, FileText, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import DocumentosPanel from '@components/DocumentosPanel'
 
 const CUENTAS = ['1781310106 Banco de Chile', '000-0-00000 Banco BCI', '000-0-00000 Banco Santander', 'Caja chica']
 
@@ -76,20 +77,24 @@ export default function PedidosPage() {
     onError: () => toast.error('Error al actualizar estado'),
   })
 
-  const crearNVMut = useMutation({
-    mutationFn: (pedidoId) => api.post(`/notas-venta/from-pedido/${pedidoId}`).then(r => r.data),
-    onSuccess: (nv) => {
+  // Genera la Venta desde el pedido (destino único del flujo comercial — reemplaza
+  // a la antigua "nota de venta"). El stock ya sale al crearse la venta.
+  const crearVentaMut = useMutation({
+    mutationFn: (pedidoId) => api.post(`/ventas/desde-pedido/${pedidoId}`).then(r => r.data),
+    onSuccess: (venta) => {
       qc.invalidateQueries({ queryKey: ['pedidos'] })
-      toast.success(`Nota de venta ${nv.numero} creada`)
-      setPagoModal(nv)
+      qc.invalidateQueries({ queryKey: ['ventas'] })
+      toast.success(`Venta ${venta.numero_documento} creada`)
+      setPagoModal(venta)
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al crear nota de venta'),
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al generar la venta'),
   })
 
   const registrarPagoMut = useMutation({
-    mutationFn: ({ nvId, data }) => api.post(`/notas-venta/${nvId}/pago`, data).then(r => r.data),
+    mutationFn: ({ ventaId, data }) => api.post(`/ventas/${ventaId}/pago`, data).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pedidos'] })
+      qc.invalidateQueries({ queryKey: ['ventas'] })
       qc.invalidateQueries({ queryKey: ['flujo-caja'] })
       toast.success('Pago registrado — ingreso confirmado en flujo de caja')
       setPagoModal(null)
@@ -211,11 +216,11 @@ export default function PedidosPage() {
                         <div className="flex gap-1.5 items-center">
                           {p.estado !== 'entregado' && (
                             <button
-                              onClick={() => crearNVMut.mutate(p.id)}
-                              disabled={crearNVMut.isPending}
+                              onClick={() => crearVentaMut.mutate(p.id)}
+                              disabled={crearVentaMut.isPending}
                               className="btn-secondary text-xs px-2 py-1 flex items-center gap-1 disabled:opacity-50"
-                              title="Crear nota de venta y registrar pago">
-                              <FileText size={11}/> NV + Pago
+                              title="Generar venta desde este pedido y registrar pago">
+                              <FileText size={11}/> Venta + Pago
                             </button>
                           )}
                           <button
@@ -237,8 +242,9 @@ export default function PedidosPage() {
                     </tr>,
                     expanded && (
                       <tr key={`${p.id}-items`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <td colSpan={8} className="px-8 py-3" style={{ background: 'rgba(56,182,255,0.02)' }}>
+                        <td colSpan={8} className="px-8 py-3 space-y-3" style={{ background: 'rgba(56,182,255,0.02)' }}>
                           <PedidoItems pedidoId={p.id} />
+                          <DocumentosPanel entidad="pedido" entidadId={p.id} titulo="Documentos del pedido" />
                         </td>
                       </tr>
                     )
@@ -386,7 +392,7 @@ export default function PedidosPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-bold">Registrar pago</h2>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{pagoModal.numero} · {formatCLP(pagoModal.total)}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{pagoModal.numero_documento || pagoModal.numero} · {formatCLP(pagoModal.total)}</p>
               </div>
               <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
             </div>
@@ -421,7 +427,7 @@ export default function PedidosPage() {
               <div className="flex gap-3 justify-end pt-2">
                 <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} className="btn-secondary">Cancelar</button>
                 <button
-                  onClick={() => registrarPagoMut.mutate({ nvId: pagoModal.id, data: pago })}
+                  onClick={() => registrarPagoMut.mutate({ ventaId: pagoModal.id, data: pago })}
                   disabled={registrarPagoMut.isPending}
                   className="btn-primary flex items-center gap-2 disabled:opacity-50">
                   <CreditCard size={14}/>

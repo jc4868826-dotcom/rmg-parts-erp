@@ -97,8 +97,9 @@ app.use('/api/lista-precios',          require('./routes/listaPrecios')); // Lis
 app.use('/api/gastos',                 require('./routes/gastos'));        // Gastos operacionales
 app.use('/api/flujo-caja',             require('./routes/flujoCaja'));     // Flujo de caja
 app.use('/api/configuracion',          require('./routes/configuracion')); // Configuración mensual
-app.use('/api/notas-venta',            require('./routes/notasVenta'));    // Notas de venta
-app.use('/api/ventas',                 require('./routes/ventas'));          // ERP Ventas
+app.use('/api/notas-venta',            require('./routes/notasVenta'));    // DEPRECADO: solo lectura, ver /api/ventas
+app.use('/api/ventas',                 require('./routes/ventas'));          // Venta — destino único del flujo comercial
+app.use('/api/documentos',             require('./routes/documentos'));      // Documentos adjuntos (PDF/Excel/imagen)
 app.use('/api/edr',                    require('./routes/edr'));             // Estado de Resultados
 app.use('/api/campanas',            require('./routes/campanas'));  // Módulo Campañas
 app.use('/api/track',               require('./routes/track'));     // Email tracking pixel (público)

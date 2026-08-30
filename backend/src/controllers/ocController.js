@@ -1,3 +1,10 @@
+/**
+ * RMG Parts — Orden de Compra: única implementación (reemplaza el flujo de OC
+ * que antes vivía duplicado en comprasController.js con nombres de estado distintos).
+ * Flujo: borrador → pendiente_autorizacion → autorizada/rechazada (gerente) →
+ *        enviada_proveedor → recibida_parcial/recibida_total →
+ *        facturada → pago_autorizado (gerente) → pagada
+ */
 const { db, uuidv4 } = require('../../config/database')
 const nodemailer = require('nodemailer')
 
@@ -41,47 +48,42 @@ function generarNumeroOC() {
   return `OC-${año}-${String(seq + 1).padStart(4, '0')}`
 }
 
-// State machine
+// State machine — estados en snake_case, únicos en todo el sistema.
 const TRANSICIONES = {
-  CREADA:             ['POR_AUTORIZAR', 'ANULADA'],
-  POR_AUTORIZAR:      ['AUTORIZADA', 'RECHAZADA'],
-  RECHAZADA:          ['CREADA', 'ANULADA'],
-  AUTORIZADA:         ['ENVIADA_PROVEEDOR'],
-  ENVIADA_PROVEEDOR:  ['RECIBIDA_PARCIAL', 'RECIBIDA'],
-  RECIBIDA_PARCIAL:   ['RECIBIDA'],
-  RECIBIDA:           [],
-  ANULADA:            [],
-  // legacy
-  borrador:           ['POR_AUTORIZAR', 'ENVIADA_PROVEEDOR', 'CREADA'],
-  enviada:            ['RECIBIDA_PARCIAL', 'RECIBIDA'],
-  confirmada:         ['RECIBIDA'],
-  recibida:           [],
-  anulada:            [],
-  Pendiente_Autorizacion: ['AUTORIZADA', 'RECHAZADA'],
-  Autorizada:         ['ENVIADA_PROVEEDOR'],
-  Enviada_Proveedor:  ['RECIBIDA_PARCIAL', 'RECIBIDA'],
-  Recibida_Parcial:   ['RECIBIDA'],
-  Recibida_Bodega:    ['RECIBIDA'],
-  Rechazada:          ['CREADA', 'ANULADA'],
+  borrador:               ['pendiente_autorizacion', 'anulada'],
+  pendiente_autorizacion: ['autorizada', 'rechazada'],
+  rechazada:              ['borrador', 'anulada'],
+  autorizada:             ['enviada_proveedor'],
+  enviada_proveedor:      ['recibida_parcial', 'recibida_total'],
+  recibida_parcial:       ['recibida_total'],
+  recibida_total:         ['facturada'],
+  facturada:              ['pago_autorizado'],
+  pago_autorizado:        ['pagada'],
+  pagada:                 [],
+  anulada:                [],
 }
 
-// Autorizar/rechazar una OC es una "autorización" — solo el perfil gerente puede hacerlo.
-// Anular es una acción administrativa (no compromete pago) — gerente o administrador.
+// Autorizar OC y autorizar el pago son "autorizaciones" — solo el perfil gerente.
+// Anular es administrativo (no compromete pago) — gerente o administrador.
 const ROLES_REQUERIDOS = {
-  AUTORIZADA: ['gerente'],
-  RECHAZADA:  ['gerente'],
-  ANULADA:    ['gerente', 'administrador'],
+  autorizada:       ['gerente'],
+  rechazada:        ['gerente'],
+  pago_autorizado:  ['gerente'],
+  anulada:          ['gerente', 'administrador'],
 }
 
 const TIPO_EVENTO = {
-  POR_AUTORIZAR:      'envio_autorizacion',
-  AUTORIZADA:         'autorizacion',
-  RECHAZADA:          'rechazo',
-  ENVIADA_PROVEEDOR:  'envio_proveedor',
-  RECIBIDA:           'recepcion_total',
-  RECIBIDA_PARCIAL:   'recepcion_parcial',
-  ANULADA:            'anulacion',
-  CREADA:             'modificacion',
+  pendiente_autorizacion: 'envio_autorizacion',
+  autorizada:             'autorizacion',
+  rechazada:              'rechazo',
+  enviada_proveedor:      'envio_proveedor',
+  recibida_total:         'recepcion_total',
+  recibida_parcial:       'recepcion_parcial',
+  facturada:              'registro_factura',
+  pago_autorizado:        'autorizacion_pago',
+  pagada:                 'pago',
+  anulada:                'anulacion',
+  borrador:               'modificacion',
 }
 
 // ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -122,13 +124,15 @@ const getOC = (req, res) => {
 
 const createOC = (req, res) => {
   try {
-    const { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas, items, usuario_id, usuario_nombre } = req.body
+    const { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas, items } = req.body
     if (!proveedor) return res.status(400).json({ error: 'Proveedor requerido' })
     if (!items || !items.length) return res.status(400).json({ error: 'Al menos un ítem es requerido' })
 
     const numero = generarNumeroOC()
     const id = uuidv4()
     const fecha = new Date().toISOString().split('T')[0]
+    const usuario_id = req.user?.id
+    const usuario_nombre = req.user?.nombre || req.user?.email
 
     const neto  = items.reduce((s, i) => s + (Number(i.precio_unitario || i.precio_compra_neto || 0) * Number(i.cantidad || 0)), 0)
     const iva   = Math.round(neto * 0.19)
@@ -137,7 +141,7 @@ const createOC = (req, res) => {
     db.prepare(`INSERT INTO ordenes_compra
       (id, numero, proveedor_id, proveedor, estado, fecha_emision, fecha_requerida, neto, iva, total, observaciones, notas, usuario_creador_id, medio_pago)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, numero, proveedor_id || null, proveedor, 'CREADA', fecha, fecha_requerida || null,
+      .run(id, numero, proveedor_id || null, proveedor, 'borrador', fecha, fecha_requerida || null,
         neto, iva, total, observaciones || null, notas || null, usuario_id || null, medio_pago || 'Contado')
 
     for (const item of items) {
@@ -148,7 +152,7 @@ const createOC = (req, res) => {
         .run(uuidv4(), id, item.codigo || item.sku || '', item.descripcion || '', qty, pu, pu * qty)
     }
 
-    logEvento(id, 'creacion', { usuario_id, usuario_nombre, estado_nuevo: 'CREADA', detalle: `OC ${numero} creada` })
+    logEvento(id, 'creacion', { usuario_id, usuario_nombre, estado_nuevo: 'borrador', detalle: `OC ${numero} creada` })
 
     res.status(201).json(withDetails(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(id)))
   } catch (err) {
@@ -160,12 +164,13 @@ const updateOC = (req, res) => {
   try {
     const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
-    const estadosEditables = ['CREADA', 'borrador']
-    if (!estadosEditables.includes(oc.estado)) {
-      return res.status(400).json({ error: `Solo se puede editar una OC en estado CREADA (estado actual: ${oc.estado})` })
+    if (oc.estado !== 'borrador') {
+      return res.status(400).json({ error: `Solo se puede editar una OC en estado borrador (estado actual: ${oc.estado})` })
     }
 
-    const { proveedor_id, proveedor, fecha_requerida, medio_pago, notas, observaciones, items, usuario_id, usuario_nombre } = req.body
+    const { proveedor_id, proveedor, fecha_requerida, medio_pago, notas, observaciones, items } = req.body
+    const usuario_id = req.user?.id
+    const usuario_nombre = req.user?.nombre || req.user?.email
 
     let neto = oc.neto, iva = oc.iva, total = oc.total
     if (items) {
@@ -211,11 +216,13 @@ const patchEstadoOC = (req, res) => {
     const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
 
-    const { nuevo_estado, motivo_rechazo, usuario_id, usuario_nombre } = req.body
+    const { nuevo_estado, motivo_rechazo } = req.body
+    const usuario_id = req.user?.id
+    const usuario_nombre = req.user?.nombre || req.user?.email
     if (!nuevo_estado) return res.status(400).json({ error: 'nuevo_estado es requerido' })
 
-    const estadoActual    = oc.estado
-    const transValidas    = TRANSICIONES[estadoActual] || []
+    const estadoActual = oc.estado
+    const transValidas = TRANSICIONES[estadoActual] || []
     if (!transValidas.includes(nuevo_estado)) {
       return res.status(400).json({
         error: `Transición inválida: ${estadoActual} → ${nuevo_estado}. Permitidas: [${transValidas.join(', ') || 'ninguna'}]`,
@@ -228,37 +235,57 @@ const patchEstadoOC = (req, res) => {
       return res.status(403).json({ error: `Solo ${rolesNecesarios.join('/')} puede cambiar a ${nuevo_estado}` })
     }
 
-    if (nuevo_estado === 'RECHAZADA' && !motivo_rechazo) {
+    if (nuevo_estado === 'rechazada' && !motivo_rechazo) {
       return res.status(400).json({ error: 'motivo_rechazo es obligatorio al rechazar' })
     }
+    if (nuevo_estado === 'pagada' && !oc.numero_factura) {
+      return res.status(400).json({ error: 'La OC debe tener factura registrada antes de marcarse como pagada' })
+    }
 
+    const hoy = new Date().toISOString().split('T')[0]
     const cols = ["estado = ?", "updated_at = datetime('now')"]
     const vals = [nuevo_estado]
 
-    if (nuevo_estado === 'AUTORIZADA') {
+    if (nuevo_estado === 'autorizada') {
       cols.push('fecha_autorizacion = ?', 'autorizado_por = ?')
       vals.push(new Date().toISOString(), usuario_nombre || usuario_id || null)
     }
-    if (nuevo_estado === 'RECHAZADA') {
-      cols.push('motivo_rechazo = ?')
-      vals.push(motivo_rechazo)
+    if (nuevo_estado === 'rechazada') {
+      cols.push('fecha_rechazo = ?', 'motivo_rechazo = ?')
+      vals.push(hoy, motivo_rechazo)
     }
-    if (nuevo_estado === 'CREADA') {
+    if (nuevo_estado === 'borrador') {
       cols.push('motivo_rechazo = NULL')
     }
-    if (nuevo_estado === 'ENVIADA_PROVEEDOR') {
+    if (nuevo_estado === 'enviada_proveedor') {
       cols.push('fecha_emision = COALESCE(fecha_emision, ?)')
-      vals.push(new Date().toISOString().split('T')[0])
+      vals.push(hoy)
     }
     vals.push(oc.id)
 
-    db.prepare(`UPDATE ordenes_compra SET ${cols.join(', ')} WHERE id = ?`).run(...vals)
+    const ejecutar = db.transaction(() => {
+      db.prepare(`UPDATE ordenes_compra SET ${cols.join(', ')} WHERE id = ?`).run(...vals)
+
+      // Al autorizar el pago se registra el egreso y se cierra la CxP asociada.
+      if (nuevo_estado === 'pagada') {
+        try {
+          db.prepare(`INSERT INTO caja_movimientos
+            (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id)
+            VALUES ('egreso','Compra proveedor',?,?,?,?,'confirmado','ordenes_compra',?)`)
+            .run(`OC ${oc.numero} · ${oc.proveedor}`, oc.total, hoy, hoy, oc.id)
+        } catch (_) {}
+        try {
+          db.prepare("UPDATE facturas_cxp SET estado = 'pagada', fecha_pago = ? WHERE oc_id = ?").run(hoy, oc.id)
+        } catch (_) {}
+      }
+    })
+    ejecutar()
 
     logEvento(oc.id, TIPO_EVENTO[nuevo_estado] || 'modificacion', {
       usuario_id, usuario_nombre,
       estado_anterior: estadoActual,
       estado_nuevo: nuevo_estado,
-      detalle: nuevo_estado === 'RECHAZADA' ? `Rechazada: ${motivo_rechazo}` : null,
+      detalle: nuevo_estado === 'rechazada' ? `Rechazada: ${motivo_rechazo}` : null,
     })
 
     res.json(withDetails(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(oc.id)))
@@ -272,12 +299,14 @@ const registrarRecepcionOC = (req, res) => {
     const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
 
-    const estadosValidos = ['ENVIADA_PROVEEDOR', 'RECIBIDA_PARCIAL', 'enviada', 'Enviada_Proveedor', 'Recibida_Parcial']
+    const estadosValidos = ['enviada_proveedor', 'recibida_parcial']
     if (!estadosValidos.includes(oc.estado)) {
       return res.status(400).json({ error: `Recepción no permitida desde estado ${oc.estado}` })
     }
 
-    const { usuario_receptor_id, usuario_nombre, observacion, lineas } = req.body
+    const { observacion, lineas } = req.body
+    const usuario_receptor_id = req.user?.id
+    const usuario_nombre = req.user?.nombre || req.user?.email
     if (!lineas || !lineas.length) return res.status(400).json({ error: 'Se requiere al menos una línea' })
     const lineasFiltradas = lineas.filter(l => Number(l.cantidad_recibida) > 0)
     if (!lineasFiltradas.length) return res.status(400).json({ error: 'Ninguna línea tiene cantidad > 0' })
@@ -318,10 +347,20 @@ const registrarRecepcionOC = (req, res) => {
 
       const itemsActualizados = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(oc.id)
       const todasCompletas    = itemsActualizados.every(i => (i.cantidad_recibida_total || 0) >= i.cantidad)
-      const nuevoEstado       = todasCompletas ? 'RECIBIDA' : 'RECIBIDA_PARCIAL'
+      const nuevoEstado       = todasCompletas ? 'recibida_total' : 'recibida_parcial'
 
       db.prepare("UPDATE ordenes_compra SET estado = ?, fecha_entrega = ?, updated_at = datetime('now') WHERE id = ?")
         .run(nuevoEstado, new Date().toISOString().split('T')[0], oc.id)
+
+      // CxP pendiente en cuanto queda completamente recibida (a la espera de la factura)
+      if (todasCompletas) {
+        try {
+          db.prepare(`INSERT OR IGNORE INTO facturas_cxp (id, numero, proveedor_id, proveedor, oc_id, oc_numero, monto, fecha_emision, fecha_vencimiento, estado)
+            VALUES (?,?,?,?,?,?,?,?,?,?)`)
+            .run(uuidv4(), `CXP-${oc.numero}`, oc.proveedor_id || null, oc.proveedor, oc.id, oc.numero, oc.total,
+              new Date().toISOString().split('T')[0], oc.fecha_vencimiento || null, 'pendiente')
+        } catch (_) {}
+      }
 
       logEvento(oc.id, todasCompletas ? 'recepcion_total' : 'recepcion_parcial', {
         usuario_id: usuario_receptor_id,
@@ -356,12 +395,79 @@ const getRecepcionesOC = (req, res) => {
   }
 }
 
+// Registro de la factura del proveedor — habilita el paso a "pago_autorizado".
+const registrarFactura = (req, res) => {
+  try {
+    const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
+    if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
+    if (!['recibida_total', 'recibida_parcial'].includes(oc.estado)) {
+      return res.status(400).json({ error: `Solo se puede facturar desde recibida_total o recibida_parcial (estado actual: ${oc.estado})` })
+    }
+
+    const { numero_factura, fecha_factura, fecha_vencimiento_pago, monto_total, modo_pago } = req.body
+    if (!numero_factura || !fecha_factura || !fecha_vencimiento_pago || !monto_total || !modo_pago) {
+      return res.status(400).json({ error: 'numero_factura, fecha_factura, fecha_vencimiento_pago, monto_total y modo_pago son requeridos' })
+    }
+
+    const hoy = new Date().toISOString().split('T')[0]
+    const prov = oc.proveedor_id ? db.prepare('SELECT razon_social FROM proveedores WHERE id = ?').get(oc.proveedor_id) : null
+    const provNombre = prov?.razon_social || oc.proveedor || 'Proveedor'
+    const usuario_id = req.user?.id
+    const usuario_nombre = req.user?.nombre || req.user?.email
+
+    const ejecutar = db.transaction(() => {
+      const factId = uuidv4()
+      try {
+        db.prepare(`INSERT INTO facturas_proveedor
+          (id, oc_id, numero_factura, fecha_factura, fecha_vencimiento_pago, monto_total, modo_pago, estado_pago, usuario_registro_id)
+          VALUES (?,?,?,?,?,?,?,?,?)`)
+          .run(factId, oc.id, numero_factura, fecha_factura, fecha_vencimiento_pago, Number(monto_total),
+            modo_pago, 'pendiente', usuario_id || null)
+      } catch (_) {}
+
+      db.prepare("UPDATE ordenes_compra SET estado = 'facturada', numero_factura = ?, fecha_factura = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(numero_factura, fecha_factura, oc.id)
+
+      const esReal = fecha_vencimiento_pago <= hoy
+      try {
+        db.prepare(`INSERT INTO caja_movimientos
+          (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id)
+          VALUES (?,?,?,?,?,?,?,?,?)`)
+          .run('egreso', 'Compra proveedor', `Fac. N° ${numero_factura} · ${provNombre}`,
+            Number(monto_total), hoy, fecha_vencimiento_pago, esReal ? 'confirmado' : 'proyectado',
+            'facturas_proveedor', factId)
+      } catch (_) {}
+
+      try {
+        const cxpExiste = db.prepare('SELECT id FROM facturas_cxp WHERE oc_id = ?').get(oc.id)
+        if (cxpExiste) {
+          db.prepare("UPDATE facturas_cxp SET numero = ?, monto = ?, fecha_emision = ?, fecha_vencimiento = ? WHERE oc_id = ?")
+            .run(numero_factura, Number(monto_total), fecha_factura, fecha_vencimiento_pago, oc.id)
+        } else {
+          db.prepare(`INSERT INTO facturas_cxp (id, numero, proveedor_id, proveedor, oc_id, oc_numero, monto, fecha_emision, fecha_vencimiento, estado)
+            VALUES (?,?,?,?,?,?,?,?,?,?)`)
+            .run(uuidv4(), numero_factura, oc.proveedor_id || null, oc.proveedor, oc.id, oc.numero,
+              Number(monto_total), fecha_factura, fecha_vencimiento_pago, 'pendiente')
+        }
+      } catch (_) {}
+
+      logEvento(oc.id, 'registro_factura', {
+        usuario_id, usuario_nombre, estado_anterior: oc.estado, estado_nuevo: 'facturada',
+        detalle: `Factura ${numero_factura} registrada`,
+      })
+    })
+    ejecutar()
+
+    res.status(201).json(withDetails(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(oc.id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const getPendientesFacturar = (req, res) => {
   try {
     const ocs = db.prepare(`
-      SELECT * FROM ordenes_compra
-      WHERE estado IN ('RECIBIDA', 'recibida', 'Recibida_Bodega')
-        AND (compra_id IS NULL OR compra_id = '')
+      SELECT * FROM ordenes_compra WHERE estado IN ('recibida_total', 'recibida_parcial')
       ORDER BY created_at DESC
     `).all()
     res.json(ocs.map(oc => ({
@@ -507,7 +613,7 @@ const getImpactoEliminacion = (req, res) => {
     if (compraVinculada) {
       advertencias.push(`Existe una compra vinculada${compraVinculada.numero_factura ? ` (Factura: ${compraVinculada.numero_factura})` : ''}. La compra NO se eliminará, quedará desvinculada.`)
     }
-    const estadosConStock = ['RECIBIDA', 'RECIBIDA_PARCIAL', 'recibida', 'Recibida_Bodega', 'Recibida_Parcial']
+    const estadosConStock = ['recibida_parcial', 'recibida_total', 'facturada', 'pago_autorizado', 'pagada']
     if (estadosConStock.includes(oc.estado)) {
       advertencias.push(`La OC estaba en estado ${oc.estado}. Verifica que el stock físico en bodega también haya sido corregido.`)
     }
@@ -545,7 +651,6 @@ const deleteOC = (req, res) => {
     const stockRevertido = []
 
     const ejecutar = db.transaction(() => {
-      // 1. Revertir stock línea por línea
       for (const mov of movimientosEntrada) {
         const prod = db.prepare(
           'SELECT codigo_sku, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
@@ -565,12 +670,11 @@ const deleteOC = (req, res) => {
         stockRevertido.push({ codigo: mov.codigo, descripcion: mov.descripcion, cantidad_revertida: mov.cantidad })
       }
 
-      // 2. Desvincular compra (no borrar)
       if (compraVinculada) {
         try { db.prepare('UPDATE compras SET oc_id = NULL WHERE oc_id = ?').run(oc.id) } catch (_) {}
       }
 
-      // 3. Borrar OC — CASCADE elimina oc_items, recepciones_oc, recepciones_oc_lineas, oc_historial
+      // CASCADE elimina oc_items, recepciones_oc, recepciones_oc_lineas, oc_historial
       db.prepare('DELETE FROM ordenes_compra WHERE id = ?').run(oc.id)
     })
 
@@ -588,8 +692,9 @@ const deleteOC = (req, res) => {
 }
 
 module.exports = {
+  TRANSICIONES, ROLES_REQUERIDOS,
   getOCs, getOC, createOC, updateOC, patchEstadoOC,
-  registrarRecepcionOC, getRecepcionesOC, getPendientesFacturar,
+  registrarRecepcionOC, getRecepcionesOC, getPendientesFacturar, registrarFactura,
   generarPdfOC, enviarEmailOC,
   getImpactoEliminacion, deleteOC,
 }

@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, calcularTotalesCotizacion } from '@utils/format'
-import { ArrowLeft, Plus, Trash2, Send, Search, X } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Send, Search, X, ShoppingCart } from 'lucide-react'
 import toast from 'react-hot-toast'
+import DocumentosPanel from '@components/DocumentosPanel'
 
 function ProductoSearch({ item, onSelect, initialQuery = '' }) {
   const [query, setQuery]     = useState(initialQuery)
@@ -184,6 +185,20 @@ export default function CotizacionForm() {
     }
   }
 
+  const [convirtiendo, setConvirtiendo] = useState(false)
+  const handleConvertirVenta = async () => {
+    setConvirtiendo(true)
+    try {
+      await api.post(`/ventas/desde-cotizacion/${id}`)
+      toast.success('Venta generada desde esta cotización')
+      navigate('/ventas')
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error al generar la venta')
+    } finally {
+      setConvirtiendo(false)
+    }
+  }
+
   return (
     <div className="space-y-5 animate-fade-in max-w-4xl">
 
@@ -329,8 +344,18 @@ export default function CotizacionForm() {
               value={notas} onChange={e => setNotas(e.target.value)} />
           </div>
 
+          {/* Documentos adjuntos — solo disponible una vez guardada la cotización */}
+          {isEdit && <DocumentosPanel entidad="cotizacion" entidadId={id} titulo="Documentos de la cotización" />}
+
           {/* Acciones */}
-          <div className="flex gap-3 justify-end">
+          <div className="flex gap-3 justify-end items-center">
+            {isEdit && cotizacion?.estado !== 'rechazada' && (
+              <button type="button" onClick={handleConvertirVenta} disabled={convirtiendo}
+                className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.3)' }}>
+                <ShoppingCart size={15}/> {convirtiendo ? 'Generando…' : 'Convertir a venta'}
+              </button>
+            )}
             <button type="button" onClick={() => navigate('/cotizaciones')} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-50">
               <Send size={15} /> {saving ? 'Guardando...' : (isEdit ? 'Actualizar cotización' : 'Guardar cotización')}

@@ -43,17 +43,20 @@ const getResumen = (req, res) => {
     }
     const meta = metaMap[segmento] || metaMap.todos
 
-    // ── Ventas reales (notas_venta pagadas) ──────────────
+    // ── Ventas reales (ventas pagadas) ───────────────────
+    // "ventas.total" ya se trata como neto en el resto del sistema (EDR no le aplica IVA aparte),
+    // así que total_bruto y total_neto son el mismo valor — se mantienen ambos por compatibilidad
+    // con lo que ya consume el frontend del dashboard.
     let ventaSQL = `
-      SELECT COALESCE(SUM(nv.total),0) as total_bruto,
-             COALESCE(SUM(nv.neto),0)  as total_neto
-      FROM notas_venta nv
-      WHERE nv.estado_pago = 'pagado'
-        AND nv.fecha_pago >= ? AND nv.fecha_pago <= ?`
+      SELECT COALESCE(SUM(v.total),0) as total_bruto,
+             COALESCE(SUM(v.total),0) as total_neto
+      FROM ventas v
+      WHERE v.estado = 'Pagado'
+        AND v.fecha_pago >= ? AND v.fecha_pago <= ?`
     const ventaParams = [dateFrom, dateTo]
 
     if (segmento !== 'todos') {
-      ventaSQL += ` AND EXISTS (SELECT 1 FROM clientes c WHERE c.id = nv.cliente_id AND c.segmento = ?)`
+      ventaSQL += ` AND EXISTS (SELECT 1 FROM clientes c WHERE c.id = v.cliente_id AND c.segmento = ?)`
       ventaParams.push(segmento)
     }
     const ventaData = db.prepare(ventaSQL).get(...ventaParams)
@@ -91,15 +94,13 @@ const getResumen = (req, res) => {
     const saldoPeriodo   = saldoInicial + totalIngresosConf - totalGastosConf
     const saldoProyectado = saldoPeriodo + ingresosProy - egresosProy
 
-    // ── Margen bruto (notas_venta: neto vs costo) ───────
-    // Calculamos desde nota_venta_items × lista_precios si existen
+    // ── Margen bruto (venta_items: costo capturado al momento de la venta) ───────
     const margenQuery = db.prepare(`
-      SELECT COALESCE(SUM(nvi.subtotal),0) as venta_neto,
-             COALESCE(SUM(nvi.cantidad * COALESCE(lp.costo_unidad_neto,0)),0) as costo_total
-      FROM nota_venta_items nvi
-      JOIN notas_venta nv ON nv.id = nvi.nota_venta_id
-      LEFT JOIN lista_precios lp ON lp.codigo_sku = nvi.codigo
-      WHERE nv.estado_pago='pagado' AND nv.fecha_pago>=? AND nv.fecha_pago<=?
+      SELECT COALESCE(SUM(vi.subtotal),0) as venta_neto,
+             COALESCE(SUM(vi.cantidad * COALESCE(vi.costo_unitario,0)),0) as costo_total
+      FROM venta_items vi
+      JOIN ventas v ON v.id = vi.venta_id
+      WHERE v.estado='Pagado' AND v.fecha_pago>=? AND v.fecha_pago<=?
     `).get(dateFrom, dateTo)
     const margenBrutoMonto = margenQuery.venta_neto - margenQuery.costo_total
     const margenBrutoPct   = neto > 0 ? (margenBrutoMonto / neto * 100) : 0
@@ -107,9 +108,9 @@ const getResumen = (req, res) => {
     // ── Ventas por segmento ──────────────────────────────
     const segs = ['talleres','flotas','concesionarios','construccion'].map(seg => {
       const r = db.prepare(`
-        SELECT COALESCE(SUM(nv.total),0) as actual FROM notas_venta nv
-        WHERE nv.estado_pago='pagado' AND nv.fecha_pago>=? AND nv.fecha_pago<=?
-          AND EXISTS (SELECT 1 FROM clientes c WHERE c.id=nv.cliente_id AND c.segmento=?)
+        SELECT COALESCE(SUM(v.total),0) as actual FROM ventas v
+        WHERE v.estado='Pagado' AND v.fecha_pago>=? AND v.fecha_pago<=?
+          AND EXISTS (SELECT 1 FROM clientes c WHERE c.id=v.cliente_id AND c.segmento=?)
       `).get(dateFrom, dateTo, seg)
       return { segmento: seg, actual: r.actual, meta: metaMap[seg] }
     })
@@ -132,11 +133,11 @@ const getResumen = (req, res) => {
     // ── Lista de clientes reales ─────────────────────────
     let clientesSQL = `
       SELECT c.razon_social as nombre, c.segmento,
-             MAX(nv.fecha_pago) as ultima,
-             COALESCE(SUM(nv.total),0) as monto
+             MAX(v.fecha_pago) as ultima,
+             COALESCE(SUM(v.total),0) as monto
       FROM clientes c
-      LEFT JOIN notas_venta nv ON nv.cliente_id=c.id AND nv.estado_pago='pagado'
-        AND nv.fecha_pago>=? AND nv.fecha_pago<=?
+      LEFT JOIN ventas v ON v.cliente_id=c.id AND v.estado='Pagado'
+        AND v.fecha_pago>=? AND v.fecha_pago<=?
       WHERE c.activo=1`
     const clParams = [dateFrom, dateTo]
     if (segmento !== 'todos') { clientesSQL += ' AND c.segmento=?'; clParams.push(segmento) }
@@ -145,10 +146,10 @@ const getResumen = (req, res) => {
 
     // ── CxC real ─────────────────────────────────────────
     const cxcRows = db.prepare(`
-      SELECT nv.cliente as nombre, nv.numero, nv.total as monto, nv.fecha_pago,
-             CAST(julianday('now') - julianday(COALESCE(nv.fecha_pago, nv.created_at)) AS INTEGER) as dias_desde
-      FROM notas_venta nv
-      WHERE nv.estado_pago = 'pendiente'
+      SELECT v.cliente_nombre as nombre, v.numero_documento as numero, v.total as monto, v.fecha_pago,
+             CAST(julianday('now') - julianday(COALESCE(v.fecha_pago, v.created_at)) AS INTEGER) as dias_desde
+      FROM ventas v
+      WHERE v.estado = 'Pendiente'
       ORDER BY dias_desde DESC LIMIT 10
     `).all()
 

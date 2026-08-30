@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@context/AuthContext'
+import DocumentosPanel from '@components/DocumentosPanel'
 
 const HOY = new Date().toISOString().split('T')[0]
 const MEDIO_PAGO = ['Contado', 'Crédito 30 días', 'Crédito 60 días', 'Crédito 90 días']
@@ -18,27 +19,22 @@ const FORM_INIT = {
   proveedor_id: '', proveedor: '', fecha_requerida: '', medio_pago: 'Contado',
   observaciones: '', items: [{ ...ITEM_INIT }],
 }
+const FACTURA_INIT = { numero_factura: '', fecha_factura: HOY, fecha_vencimiento_pago: '', monto_total: '', modo_pago: 'Transferencia' }
 
+// Estados unificados (antes había dos convenciones de nombres — MAYUSCULAS en un
+// módulo y Mixtas en otro — sobre la misma tabla; ahora hay una sola).
 const ESTADO_CFG = {
-  CREADA:             { label: 'Creada',             bg: 'rgba(148,163,184,0.15)', color: '#94a3b8' },
-  POR_AUTORIZAR:      { label: 'Por Autorizar',      bg: 'rgba(244,162,60,0.15)',  color: 'var(--rmg-gold)',  pulse: true },
-  AUTORIZADA:         { label: 'Autorizada',         bg: 'rgba(56,182,255,0.15)',  color: 'var(--rmg-blue)' },
-  RECHAZADA:          { label: 'Rechazada',          bg: 'rgba(224,90,78,0.15)',   color: 'var(--rmg-red)' },
-  ENVIADA_PROVEEDOR:  { label: 'Enviada Proveedor',  bg: 'rgba(45,201,138,0.12)',  color: 'var(--rmg-teal)' },
-  RECIBIDA_PARCIAL:   { label: 'Recibida Parcial',   bg: 'rgba(244,162,60,0.12)',  color: 'var(--rmg-gold)' },
-  RECIBIDA:           { label: 'Recibida',           bg: 'rgba(45,201,138,0.15)',  color: 'var(--rmg-teal)' },
-  ANULADA:            { label: 'Anulada',            bg: 'rgba(224,90,78,0.12)',   color: 'var(--rmg-red)' },
-  // legacy
-  borrador:           { label: 'Borrador',           bg: 'rgba(148,163,184,0.12)', color: '#94a3b8' },
-  enviada:            { label: 'Enviada',            bg: 'rgba(45,201,138,0.12)',  color: 'var(--rmg-teal)' },
-  recibida:           { label: 'Recibida',           bg: 'rgba(45,201,138,0.15)',  color: 'var(--rmg-teal)' },
-  anulada:            { label: 'Anulada',            bg: 'rgba(224,90,78,0.12)',   color: 'var(--rmg-red)' },
-  Pendiente_Autorizacion: { label: 'Por Autorizar',  bg: 'rgba(244,162,60,0.15)',  color: 'var(--rmg-gold)', pulse: true },
-  Autorizada:         { label: 'Autorizada',         bg: 'rgba(56,182,255,0.15)',  color: 'var(--rmg-blue)' },
-  Enviada_Proveedor:  { label: 'Enviada Proveedor',  bg: 'rgba(45,201,138,0.12)',  color: 'var(--rmg-teal)' },
-  Recibida_Parcial:   { label: 'Recibida Parcial',   bg: 'rgba(244,162,60,0.12)',  color: 'var(--rmg-gold)' },
-  Recibida_Bodega:    { label: 'Recibida Bodega',    bg: 'rgba(45,201,138,0.13)',  color: 'var(--rmg-teal)' },
-  Rechazada:          { label: 'Rechazada',          bg: 'rgba(224,90,78,0.15)',   color: 'var(--rmg-red)' },
+  borrador:               { label: 'Borrador',              bg: 'rgba(148,163,184,0.15)', color: '#94a3b8' },
+  pendiente_autorizacion: { label: 'Por Autorizar',         bg: 'rgba(244,162,60,0.15)',  color: 'var(--rmg-gold)',  pulse: true },
+  autorizada:             { label: 'Autorizada',            bg: 'rgba(56,182,255,0.15)',  color: 'var(--rmg-blue)' },
+  rechazada:              { label: 'Rechazada',             bg: 'rgba(224,90,78,0.15)',   color: 'var(--rmg-red)' },
+  enviada_proveedor:      { label: 'Enviada Proveedor',     bg: 'rgba(45,201,138,0.12)',  color: 'var(--rmg-teal)' },
+  recibida_parcial:       { label: 'Recibida Parcial',      bg: 'rgba(244,162,60,0.12)',  color: 'var(--rmg-gold)' },
+  recibida_total:         { label: 'Recibida',              bg: 'rgba(45,201,138,0.15)',  color: 'var(--rmg-teal)' },
+  facturada:              { label: 'Facturada',             bg: 'rgba(56,182,255,0.15)',  color: 'var(--rmg-blue)' },
+  pago_autorizado:        { label: 'Pago Autorizado',       bg: 'rgba(244,162,60,0.15)',  color: 'var(--rmg-gold)', pulse: true },
+  pagada:                 { label: 'Pagada',                bg: 'rgba(45,201,138,0.18)',  color: 'var(--rmg-teal)' },
+  anulada:                { label: 'Anulada',               bg: 'rgba(224,90,78,0.12)',   color: 'var(--rmg-red)' },
 }
 
 const TIPO_EVENTO_ICON = {
@@ -50,6 +46,9 @@ const TIPO_EVENTO_ICON = {
   envio_proveedor:     '📤',
   recepcion_parcial:   '📦',
   recepcion_total:     '📦',
+  registro_factura:    '🧾',
+  autorizacion_pago:   '✅',
+  pago:                '💸',
   anulacion:           '🚫',
 }
 
@@ -148,7 +147,7 @@ export default function OCPage() {
   const navigate  = useNavigate()
   const qc        = useQueryClient()
   const rol       = user?.rol || ''
-  const esFinanzas = ['admin', 'finanzas'].includes(rol)
+  const esGerente = rol === 'gerente'
 
   const [vista, setVista]             = useState('lista')     // 'lista' | 'detalle' | 'nueva'
   const [ocId, setOcId]               = useState(null)
@@ -164,6 +163,8 @@ export default function OCPage() {
   const [recepcionLineas, setRecepcionLineas] = useState([])
   const [recepcionObs, setRecepcionObs] = useState('')
   const [ocAEliminar, setOcAEliminar]   = useState(null)   // { id, numero } para el modal
+  const [facturaActiva, setFacturaActiva] = useState(false)
+  const [facturaForm, setFacturaForm]     = useState(FACTURA_INIT)
 
   // Queries
   const { data: ocs = [], isLoading } = useQuery({
@@ -228,6 +229,15 @@ export default function OCPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al enviar email'),
   })
 
+  const facturaMut = useMutation({
+    mutationFn: ({ id, body }) => api.post(`/oc/${id}/factura`, body).then(r => r.data),
+    onSuccess: () => {
+      invalidate(); toast.success('Factura registrada — OC lista para autorizar pago')
+      setFacturaActiva(false); setFacturaForm(FACTURA_INIT)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar factura'),
+  })
+
   const { data: impactoData, isLoading: loadingImpacto } = useQuery({
     queryKey: ['oc-impacto', ocAEliminar?.id],
     queryFn: () => api.get(`/oc/${ocAEliminar.id}/impacto-eliminacion`).then(r => r.data),
@@ -286,7 +296,7 @@ export default function OCPage() {
     return ocs.filter(o => o.numero?.toLowerCase().includes(q) || o.proveedor?.toLowerCase().includes(q))
   }, [ocs, busqueda])
 
-  const pendientesAuth = ocs.filter(o => ['POR_AUTORIZAR', 'Pendiente_Autorizacion'].includes(o.estado)).length
+  const pendientesAuth = ocs.filter(o => o.estado === 'pendiente_autorizacion').length
 
   // ── VISTA LISTA ─────────────────────────────────────────────────────────────
   if (vista === 'lista') return (
@@ -316,7 +326,7 @@ export default function OCPage() {
         </div>
         <select className="rmg-input text-xs w-48" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
           <option value="">Todos los estados</option>
-          {['CREADA','POR_AUTORIZAR','AUTORIZADA','RECHAZADA','ENVIADA_PROVEEDOR','RECIBIDA_PARCIAL','RECIBIDA','ANULADA'].map(s => (
+          {['borrador','pendiente_autorizacion','autorizada','rechazada','enviada_proveedor','recibida_parcial','recibida_total','facturada','pago_autorizado','pagada','anulada'].map(s => (
             <option key={s} value={s}>{ESTADO_CFG[s]?.label || s}</option>
           ))}
         </select>
@@ -474,25 +484,19 @@ export default function OCPage() {
               {cargandoDetalle ? '…' : oc?.numero || 'OC'}
             </h1>
             {oc && <EstadoBadge estado={oc.estado} />}
-            {oc?.compra_id && (
-              <button onClick={() => navigate('/compras-erp')} className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
-                style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
-                <ExternalLink size={11}/> Ver en Compras
-              </button>
-            )}
           </div>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{oc?.proveedor}</p>
         </div>
         {/* Action buttons per state */}
         <div className="flex gap-2 flex-wrap justify-end">
-          {estado === 'CREADA' && (
-            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'POR_AUTORIZAR' })} disabled={estadoMut.isPending}
+          {estado === 'borrador' && (
+            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'pendiente_autorizacion' })} disabled={estadoMut.isPending}
               className="btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50">
               <Send size={13}/> Enviar a autorización
             </button>
           )}
-          {estado === 'POR_AUTORIZAR' && esFinanzas && (<>
-            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'AUTORIZADA' })} disabled={estadoMut.isPending}
+          {estado === 'pendiente_autorizacion' && esGerente && (<>
+            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'autorizada' })} disabled={estadoMut.isPending}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"
               style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.3)' }}>
               <CheckCircle size={13}/> Autorizar
@@ -502,19 +506,19 @@ export default function OCPage() {
               <XCircle size={13}/> Rechazar
             </button>
           </>)}
-          {estado === 'POR_AUTORIZAR' && !esFinanzas && (
+          {estado === 'pendiente_autorizacion' && !esGerente && (
             <span className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(244,162,60,0.1)', color: 'var(--rmg-gold)' }}>
-              En espera de autorización financiera
+              En espera de autorización del gerente
             </span>
           )}
-          {estado === 'RECHAZADA' && (
-            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'CREADA' })} disabled={estadoMut.isPending}
+          {estado === 'rechazada' && (
+            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'borrador' })} disabled={estadoMut.isPending}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"
               style={{ background: 'rgba(148,163,184,0.1)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.3)' }}>
               <RotateCcw size={13}/> Volver a borrador
             </button>
           )}
-          {estado === 'AUTORIZADA' && (<>
+          {estado === 'autorizada' && (<>
             <button onClick={() => window.open(`${api.defaults.baseURL}/oc/${oc.id}/pdf`, '_blank')}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
               style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blue)', border: '1px solid rgba(56,182,255,0.2)' }}>
@@ -525,23 +529,46 @@ export default function OCPage() {
               style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blue)', border: '1px solid rgba(56,182,255,0.2)' }}>
               <Mail size={13}/> Enviar email
             </button>
-            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'ENVIADA_PROVEEDOR' })} disabled={estadoMut.isPending}
+            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'enviada_proveedor' })} disabled={estadoMut.isPending}
               className="btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50">
               <Truck size={13}/> Marcar enviada a proveedor
             </button>
           </>)}
-          {['ENVIADA_PROVEEDOR','RECIBIDA_PARCIAL','Enviada_Proveedor','Recibida_Parcial'].includes(estado) && (
+          {['enviada_proveedor', 'recibida_parcial'].includes(estado) && (
             <button onClick={() => { abrirRecepcion(oc); setDetalleTab('recepciones') }}
               className="btn-primary flex items-center gap-1.5 text-xs">
               <PackageCheck size={13}/> Registrar recepción
             </button>
           )}
-          {['RECIBIDA','recibida','Recibida_Bodega'].includes(estado) && (
-            <button onClick={() => navigate('/compras-erp')}
+          {estado === 'recibida_total' && (
+            <button onClick={() => { setFacturaActiva(true); setDetalleTab('detalle') }}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
               style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.3)' }}>
-              <ExternalLink size={13}/> Ir a Compras para facturar
+              <FileText size={13}/> Registrar factura
             </button>
+          )}
+          {estado === 'facturada' && esGerente && (
+            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'pago_autorizado' })} disabled={estadoMut.isPending}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"
+              style={{ background: 'rgba(244,162,60,0.15)', color: 'var(--rmg-gold)', border: '1px solid rgba(244,162,60,0.3)' }}>
+              <CheckCircle size={13}/> Autorizar pago
+            </button>
+          )}
+          {estado === 'facturada' && !esGerente && (
+            <span className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(244,162,60,0.1)', color: 'var(--rmg-gold)' }}>
+              Factura registrada — en espera de autorización de pago
+            </span>
+          )}
+          {estado === 'pago_autorizado' && esGerente && (
+            <button onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'pagada' })} disabled={estadoMut.isPending}
+              className="btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50">
+              💸 Marcar pagada
+            </button>
+          )}
+          {estado === 'pago_autorizado' && !esGerente && (
+            <span className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(45,201,138,0.1)', color: 'var(--rmg-teal)' }}>
+              Pago autorizado — pendiente de pagar
+            </span>
           )}
           {/* Delete always visible */}
           {oc && (
@@ -601,7 +628,7 @@ export default function OCPage() {
                 <div className="text-sm" style={{ color: 'var(--rmg-off)' }}>{oc.observaciones}</div>
               </div>
             )}
-            {estado === 'RECHAZADA' && oc.motivo_rechazo && (
+            {estado === 'rechazada' && oc.motivo_rechazo && (
               <div className="md:col-span-4 rounded-lg p-3" style={{ background: 'rgba(224,90,78,0.08)', border: '1px solid rgba(224,90,78,0.2)' }}>
                 <div className="text-xs font-bold mb-0.5" style={{ color: 'var(--rmg-red)' }}>Motivo de rechazo</div>
                 <div className="text-sm" style={{ color: 'var(--rmg-off)' }}>{oc.motivo_rechazo}</div>
@@ -647,19 +674,85 @@ export default function OCPage() {
             </div>
           </div>
 
-          {/* RECIBIDA state message */}
-          {['RECIBIDA','recibida','Recibida_Bodega'].includes(estado) && !oc.compra_id && (
+          {/* recibida_total: stock ya actualizado, falta registrar la factura */}
+          {estado === 'recibida_total' && !facturaActiva && (
             <div className="rmg-card p-4 flex items-center justify-between" style={{ border: '1px solid rgba(45,201,138,0.25)', background: 'rgba(45,201,138,0.06)' }}>
               <div>
-                <div className="font-semibold" style={{ color: 'var(--rmg-teal)' }}>✅ OC completada — stock actualizado</div>
-                <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Disponible para generar compra y registrar factura del proveedor</div>
+                <div className="font-semibold" style={{ color: 'var(--rmg-teal)' }}>✅ OC recepcionada — stock actualizado</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Registra los datos de la factura del proveedor para enviarla a autorización de pago</div>
               </div>
-              <button onClick={() => navigate('/compras-erp')} className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg font-semibold"
+              <button onClick={() => setFacturaActiva(true)} className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg font-semibold"
                 style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.3)' }}>
-                <ExternalLink size={14}/> Ir a Compras
+                <FileText size={14}/> Registrar factura
               </button>
             </div>
           )}
+
+          {/* Formulario de registro de factura */}
+          {estado === 'recibida_total' && facturaActiva && (
+            <div className="rmg-card p-4 animate-fade-in">
+              <h3 className="font-bold text-sm mb-3">Datos de la factura del proveedor</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>N° Factura *</label>
+                  <input className="rmg-input text-sm" value={facturaForm.numero_factura}
+                    onChange={e => setFacturaForm(f => ({ ...f, numero_factura: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Fecha factura *</label>
+                  <input type="date" className="rmg-input text-sm" value={facturaForm.fecha_factura}
+                    onChange={e => setFacturaForm(f => ({ ...f, fecha_factura: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Vencimiento pago *</label>
+                  <input type="date" className="rmg-input text-sm" value={facturaForm.fecha_vencimiento_pago}
+                    onChange={e => setFacturaForm(f => ({ ...f, fecha_vencimiento_pago: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Monto total *</label>
+                  <input type="number" min="0" className="rmg-input text-sm" value={facturaForm.monto_total}
+                    onChange={e => setFacturaForm(f => ({ ...f, monto_total: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Modo de pago</label>
+                  <select className="rmg-input text-sm" value={facturaForm.modo_pago}
+                    onChange={e => setFacturaForm(f => ({ ...f, modo_pago: e.target.value }))}>
+                    {MEDIO_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-4">
+                <button onClick={() => { setFacturaActiva(false); setFacturaForm(FACTURA_INIT) }} className="btn-secondary text-xs">Cancelar</button>
+                <button
+                  disabled={facturaMut.isPending || !facturaForm.numero_factura || !facturaForm.fecha_vencimiento_pago || !facturaForm.monto_total}
+                  onClick={() => facturaMut.mutate({ id: oc.id, body: { ...facturaForm, usuario_id: user?.id } })}
+                  className="btn-primary text-xs disabled:opacity-50">
+                  {facturaMut.isPending ? 'Registrando…' : 'Registrar factura'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Datos de factura ya registrada */}
+          {['facturada', 'pago_autorizado', 'pagada'].includes(estado) && oc.numero_factura && (
+            <div className="rmg-card p-4 flex items-center gap-6" style={{ border: '1px solid rgba(56,182,255,0.2)', background: 'rgba(56,182,255,0.05)' }}>
+              <div>
+                <div className="text-xs uppercase tracking-wider font-semibold mb-0.5" style={{ color: 'var(--rmg-muted)' }}>N° Factura</div>
+                <div className="text-sm font-bold" style={{ color: 'var(--rmg-off)' }}>{oc.numero_factura}</div>
+              </div>
+              {oc.fecha_factura && (
+                <div>
+                  <div className="text-xs uppercase tracking-wider font-semibold mb-0.5" style={{ color: 'var(--rmg-muted)' }}>Fecha factura</div>
+                  <div className="text-sm font-medium" style={{ color: 'var(--rmg-off)' }}>{formatFecha(oc.fecha_factura)}</div>
+                </div>
+              )}
+              <div className="ml-auto">
+                <EstadoBadge estado={estado} />
+              </div>
+            </div>
+          )}
+
+          <DocumentosPanel entidad="orden_compra" entidadId={oc.id} titulo="Documentos de la OC" />
         </div>
       )}
 
@@ -717,7 +810,7 @@ export default function OCPage() {
             </div>
           )}
 
-          {!recepcionActiva && ['ENVIADA_PROVEEDOR','RECIBIDA_PARCIAL','Enviada_Proveedor','Recibida_Parcial'].includes(estado) && (
+          {!recepcionActiva && ['enviada_proveedor', 'recibida_parcial'].includes(estado) && (
             <button onClick={() => abrirRecepcion(oc)} className="btn-primary flex items-center gap-2 text-sm">
               <PackageCheck size={15}/> Nueva recepción
             </button>
@@ -817,7 +910,7 @@ export default function OCPage() {
               <button onClick={() => { setRechazarModal(false); setMotivoRechazo('') }} className="btn-secondary">Cancelar</button>
               <button
                 disabled={!motivoRechazo.trim() || estadoMut.isPending}
-                onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'RECHAZADA', motivo_rechazo: motivoRechazo })}
+                onClick={() => estadoMut.mutate({ id: oc.id, nuevo_estado: 'rechazada', motivo_rechazo: motivoRechazo })}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: 'rgba(224,90,78,0.15)', color: 'var(--rmg-red)', border: '1px solid rgba(224,90,78,0.3)' }}>
                 <XCircle size={14}/> Confirmar rechazo
