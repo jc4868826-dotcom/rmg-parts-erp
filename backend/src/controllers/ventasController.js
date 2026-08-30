@@ -36,9 +36,20 @@ function moverStock({ codigo, descripcion, tipo, cantidad, motivo, referencia })
   return db.prepare('SELECT * FROM movimientos_stock WHERE id = ?').get(id)
 }
 
+// Enriquece cada línea con la presentación/pack del SKU (lista_precios), solo
+// para referencia visual — cantidad y stock siempre se manejan en unidades.
+const enriquecerConPack = (items) => {
+  const lp = db.prepare('SELECT MAX(unidades_por_pack) AS unidades_por_pack, MAX(presentacion) AS presentacion FROM lista_precios WHERE codigo_sku = ?')
+  return items.map(i => {
+    if (!i.sku) return i
+    const info = lp.get(i.sku)
+    return { ...i, unidades_por_pack: info?.unidades_por_pack || null, presentacion: info?.presentacion || null }
+  })
+}
+
 const withItems = (v) => {
   if (!v) return null
-  const items = db.prepare('SELECT * FROM venta_items WHERE venta_id = ?').all(v.id)
+  const items = enriquecerConPack(db.prepare('SELECT * FROM venta_items WHERE venta_id = ?').all(v.id))
   return { ...v, items }
 }
 

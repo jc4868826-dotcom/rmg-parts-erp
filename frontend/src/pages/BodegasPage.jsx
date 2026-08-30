@@ -2,9 +2,11 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP } from '@utils/format'
-import { Warehouse, ArrowDown, ArrowUp, RefreshCw, Plus, X, AlertTriangle, Package, Search, Download, ChevronRight } from 'lucide-react'
+import { Warehouse, ArrowDown, ArrowUp, RefreshCw, Plus, X, AlertTriangle, Package, Search, Download, ChevronRight, Wallet, TrendingUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
+import ProductoSearch from '@components/ProductoSearch'
+import CantidadPresentacion from '@components/CantidadPresentacion'
 
 const TIPO_STYLES = {
   entrada: { label: 'Entrada',  color: 'var(--rmg-teal)',   bg: 'rgba(45,201,138,0.12)',  icon: ArrowDown },
@@ -12,9 +14,12 @@ const TIPO_STYLES = {
   ajuste:  { label: 'Ajuste',   color: 'var(--rmg-gold)',   bg: 'rgba(244,162,60,0.12)',  icon: RefreshCw },
 }
 
-const AJUSTE_INIT = { codigo: '', cantidad: '', motivo: '' }
+const AJUSTE_INIT = { codigo: '', cantidad: 0, motivo: '', presentacion: '', unidades_por_pack: null, signo: 1 }
 
+// critico: no se vende hace >60 días (capital inmovilizado). bajo: se vende pero
+// queda poco stock (<5 und). agotado: no queda nada. ok: rota bien, stock sano.
 const ALERTAS_LABEL = {
+  agotado: { label: '✕ Agotado', color: '#94243a',        bg: 'rgba(148,36,58,0.15)' },
   critico: { label: '⚠ Crítico', color: 'var(--rmg-red)',  bg: 'rgba(224,90,78,0.15)' },
   bajo:    { label: '↓ Bajo',    color: 'var(--rmg-gold)', bg: 'rgba(244,162,60,0.15)' },
   ok:      { label: '✓ OK',      color: 'var(--rmg-teal)', bg: 'rgba(45,201,138,0.15)' },
@@ -61,13 +66,16 @@ export default function BodegasPage() {
 
   const handleAjuste = (e) => {
     e.preventDefault()
-    if (!ajuste.codigo) { toast.error('Ingresa el código del producto'); return }
-    if (!ajuste.cantidad || ajuste.cantidad === '0') { toast.error('Ingresa una cantidad (positiva o negativa)'); return }
+    if (!ajuste.codigo) { toast.error('Ingresa o busca el código del producto'); return }
+    if (!ajuste.cantidad) { toast.error('Ingresa una cantidad'); return }
     if (!ajuste.motivo) { toast.error('Describe el motivo del ajuste'); return }
-    ajustarMut.mutate({ ...ajuste, cantidad: Number(ajuste.cantidad) })
+    ajustarMut.mutate({ codigo: ajuste.codigo, motivo: ajuste.motivo, cantidad: ajuste.signo * Number(ajuste.cantidad) })
   }
 
   const categorias = useMemo(() => [...new Set(stock.map(p => p.categoria).filter(Boolean))].sort(), [stock])
+
+  const valorTotalCosto = useMemo(() => stock.reduce((s, p) => s + (p.valor_costo || 0), 0), [stock])
+  const valorTotalVenta = useMemo(() => stock.reduce((s, p) => s + (p.valor_venta || 0), 0), [stock])
 
   const stockFiltrado = useMemo(() => {
     let data = stock
@@ -80,10 +88,9 @@ export default function BodegasPage() {
     return data
   }, [stock, search, catFiltro, alertaFiltro])
 
+  const agotados = stock.filter(p => p.alerta === 'agotado').length
   const criticos = stock.filter(p => p.alerta === 'critico').length
   const bajos    = stock.filter(p => p.alerta === 'bajo').length
-  const entradas = movimientos.filter(m => m.tipo === 'entrada').length
-  const salidas  = movimientos.filter(m => m.tipo === 'salida').length
 
   function formatHora(iso) {
     if (!iso) return '—'
@@ -96,10 +103,16 @@ export default function BodegasPage() {
       'Marca': p.marca,
       'Descripción': p.descripcion,
       'Categoría': p.categoria,
-      'Stock actual': p.stock_actual,
+      'Presentación': p.presentacion || '',
+      'Und. por caja': p.unidades_por_pack || '',
+      'Stock actual (und)': p.stock_actual,
+      'Cajas completas': p.cajas_completas ?? '',
+      'Unidades sueltas': p.unidades_sueltas ?? '',
       'Stock mínimo': p.stock_minimo,
-      'Estado': p.alerta === 'critico' ? 'CRÍTICO' : p.alerta === 'bajo' ? 'BAJO' : 'OK',
-      'Unidad': p.unidad,
+      'Valor a costo': p.valor_costo || 0,
+      'Valor a venta': p.valor_venta || 0,
+      'Días sin venta': p.dias_sin_venta ?? 'Nunca vendido',
+      'Estado': p.alerta === 'agotado' ? 'AGOTADO' : p.alerta === 'critico' ? 'CRÍTICO' : p.alerta === 'bajo' ? 'BAJO' : 'OK',
     }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
@@ -129,17 +142,17 @@ export default function BodegasPage() {
         </button>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — estado del stock */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Stock crítico', value: criticos, color: 'var(--rmg-red)',    icon: AlertTriangle, sub: 'bajo mínimo',        onClick: () => { setTab('stock'); setAlertaFiltro('critico') } },
-          { label: 'Stock bajo',    value: bajos,    color: 'var(--rmg-gold)',   icon: Warehouse,     sub: 'reordenar pronto',    onClick: () => { setTab('stock'); setAlertaFiltro('bajo') } },
-          { label: 'Entradas',      value: entradas, color: 'var(--rmg-teal)',   icon: ArrowDown,     sub: 'movimientos entrada',  onClick: () => { setTab('movimientos'); setTipoFiltro('entrada') } },
-          { label: 'Salidas',       value: salidas,  color: 'var(--rmg-blt)',    icon: ArrowUp,       sub: 'movimientos salida',   onClick: () => { setTab('movimientos'); setTipoFiltro('salida') } },
+          { label: 'Agotado',       value: agotados, color: '#94243a',          icon: AlertTriangle, sub: 'sin stock disponible', onClick: () => { setTab('stock'); setAlertaFiltro('agotado') } },
+          { label: 'Stock crítico', value: criticos, color: 'var(--rmg-red)',    icon: AlertTriangle, sub: `sin venta hace +60 días`, onClick: () => { setTab('stock'); setAlertaFiltro('critico') } },
+          { label: 'Stock bajo',    value: bajos,    color: 'var(--rmg-gold)',   icon: Warehouse,     sub: 'se vende y quedan <5 und', onClick: () => { setTab('stock'); setAlertaFiltro('bajo') } },
+          { label: 'SKU en bodega', value: stock.length, color: 'var(--rmg-blt)', icon: Package,      sub: 'productos con maestro',  onClick: () => { setTab('stock'); setAlertaFiltro('') } },
         ].map(k => {
           const Icon = k.icon
           return (
-            <div key={k.label} className="rmg-card p-4 cursor-pointer hover:bg-white/[0.03] transition-colors" onClick={k.onClick}>
+            <div key={k.label} className="rmg-card p-4 cursor-pointer hover:bg-black/[0.02] transition-colors" onClick={k.onClick}>
               <div className="flex items-start justify-between mb-2">
                 <div className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{k.label}</div>
                 <div className="p-1.5 rounded-lg" style={{ background: `${k.color}15` }}>
@@ -153,22 +166,65 @@ export default function BodegasPage() {
         })}
       </div>
 
+      {/* KPIs — valorización del inventario */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="rmg-card p-4">
+          <div className="flex items-start justify-between mb-2">
+            <div className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Inventario a costo</div>
+            <div className="p-1.5 rounded-lg" style={{ background: 'rgba(21,104,184,0.1)' }}><Wallet size={14} style={{ color: 'var(--rmg-blt)' }}/></div>
+          </div>
+          <div className="font-black text-2xl" style={{ fontFamily: 'Inter Tight, sans-serif', color: 'var(--rmg-blt)' }}>{formatCLP(valorTotalCosto)}</div>
+          <div className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>lo que costó comprar el stock actual</div>
+        </div>
+        <div className="rmg-card p-4">
+          <div className="flex items-start justify-between mb-2">
+            <div className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>Inventario a precio de venta</div>
+            <div className="p-1.5 rounded-lg" style={{ background: 'rgba(45,201,138,0.1)' }}><TrendingUp size={14} style={{ color: 'var(--rmg-teal)' }}/></div>
+          </div>
+          <div className="font-black text-2xl" style={{ fontFamily: 'Inter Tight, sans-serif', color: 'var(--rmg-teal)' }}>{formatCLP(valorTotalVenta)}</div>
+          <div className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>lo que factura si se vende todo el stock actual</div>
+        </div>
+      </div>
+
       {/* Formulario ajuste */}
       {showAjuste && (
         <div className="rmg-card p-5 animate-fade-in">
           <h2 className="font-bold mb-4">Ajuste manual de stock</h2>
           <form onSubmit={handleAjuste} className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Buscar producto</label>
+              <ProductoSearch
+                initialQuery={ajuste.codigo}
+                onSelect={p => setAjuste(a => ({ ...a, codigo: p.codigo_sku || '', presentacion: p.presentacion || '', unidades_por_pack: p.unidades_por_pack || null }))}
+              />
+              {ajuste.unidades_por_pack > 1 && (
+                <p className="text-[10px] mt-1" style={{ color: 'var(--rmg-muted)' }}>
+                  Este SKU viene en cajas de {ajuste.unidades_por_pack} unidades{ajuste.presentacion ? ` (${ajuste.presentacion})` : ''}.
+                </p>
+              )}
+            </div>
+            <div>
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Código SKU *</label>
-              <input className="rmg-input" placeholder="Ej: 352420" value={ajuste.codigo}
+              <input className="rmg-input font-mono" placeholder="Ej: 352420" value={ajuste.codigo}
                 onChange={e => setAjuste(a => ({ ...a, codigo: e.target.value }))} required/>
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cantidad *</label>
-              <input type="number" className="rmg-input" placeholder="+10 entrada, -5 merma" value={ajuste.cantidad}
-                onChange={e => setAjuste(a => ({ ...a, cantidad: e.target.value }))} required/>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Tipo de ajuste *</label>
+              <select className="rmg-input" value={ajuste.signo} onChange={e => setAjuste(a => ({ ...a, signo: Number(e.target.value) }))}>
+                <option value={1}>+ Entrada (suma stock)</option>
+                <option value={-1}>− Merma / baja (resta stock)</option>
+              </select>
             </div>
-            <div className="md:col-span-2">
+            <div>
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cantidad *</label>
+              <CantidadPresentacion
+                unidadesPorPack={ajuste.unidades_por_pack}
+                presentacion={ajuste.presentacion}
+                cantidad={ajuste.cantidad}
+                onChange={v => setAjuste(a => ({ ...a, cantidad: v }))}
+              />
+            </div>
+            <div className="md:col-span-4">
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Motivo *</label>
               <input className="rmg-input" placeholder="Ej: Merma por daño, inventario físico..." value={ajuste.motivo}
                 onChange={e => setAjuste(a => ({ ...a, motivo: e.target.value }))} required/>
@@ -181,7 +237,7 @@ export default function BodegasPage() {
             </div>
           </form>
           <p className="text-xs mt-3" style={{ color: 'var(--rmg-muted)' }}>
-            Usa cantidad positiva para entradas y negativa para mermas/bajas.
+            Busca el producto para ver su presentación (si viene en cajas, ingresa cajas + sueltas) y elige si el ajuste suma o resta stock.
           </p>
         </div>
       )}
@@ -217,6 +273,7 @@ export default function BodegasPage() {
             </select>
             <select className="rmg-input w-auto" value={alertaFiltro} onChange={e => setAlertaFiltro(e.target.value)}>
               <option value="">Todo el stock</option>
+              <option value="agotado">✕ Agotado</option>
               <option value="critico">⚠ Crítico</option>
               <option value="bajo">↓ Bajo</option>
               <option value="ok">✓ OK</option>
@@ -241,11 +298,12 @@ export default function BodegasPage() {
           )}
 
           <div className="rmg-card overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-                  {['SKU','Marca / Descripción','Cat.','Stock','Mínimo','Estado',''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                  {['SKU','Marca / Descripción','Cat.','Stock','Presentación','Valorización','Últ. venta','Estado',''].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -253,7 +311,7 @@ export default function BodegasPage() {
                 {loadingStock
                   ? Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                        {Array.from({ length: 7 }).map((_, j) => (
+                        {Array.from({ length: 9 }).map((_, j) => (
                           <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                         ))}
                       </tr>
@@ -267,11 +325,11 @@ export default function BodegasPage() {
                           onClick={() => setProductoSeleccionado(isSelected ? null : p)}
                           style={{
                             borderBottom: '1px solid rgba(15, 35, 60,0.04)',
-                            background: isSelected ? 'rgba(56,182,255,0.06)' : p.alerta === 'critico' ? 'rgba(224,90,78,0.03)' : i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)',
+                            background: isSelected ? 'rgba(56,182,255,0.06)' : (p.alerta === 'critico' || p.alerta === 'agotado') ? 'rgba(224,90,78,0.03)' : i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)',
                             cursor: 'pointer',
                           }}
-                          className="hover:bg-white/[0.02] transition-colors">
-                          <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo}</td>
+                          className="hover:bg-black/[0.02] transition-colors">
+                          <td className="px-4 py-3 font-mono text-xs font-bold whitespace-nowrap" style={{ color: 'var(--rmg-blt)' }}>{p.codigo}</td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-xs" style={{ color: 'var(--rmg-off)' }}>{p.marca}</div>
                             <div className="text-xs mt-0.5 max-w-xs truncate" style={{ color: 'var(--rmg-muted)' }}>{p.descripcion}</div>
@@ -284,10 +342,25 @@ export default function BodegasPage() {
                               </div>
                               <span className="font-bold w-10 text-right" style={{ color: alertInfo.color }}>{p.stock_actual}</span>
                             </div>
+                            <div className="text-[10px] mt-0.5" style={{ color: 'var(--rmg-muted)' }}>mín. {p.stock_minimo}</div>
                           </td>
-                          <td className="px-4 py-3 text-xs text-center" style={{ color: 'var(--rmg-muted)' }}>{p.stock_minimo}</td>
+                          <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>
+                            {p.unidades_por_pack > 1 ? (
+                              <>
+                                <div>{p.cajas_completas} caja(s) × {p.unidades_por_pack}</div>
+                                <div className="text-[10px]">+ {p.unidades_sueltas} sueltas</div>
+                              </>
+                            ) : (p.presentacion || '—')}
+                          </td>
+                          <td className="px-4 py-3 text-xs whitespace-nowrap">
+                            <div style={{ color: 'var(--rmg-blt)' }}>costo {formatCLP(p.valor_costo || 0)}</div>
+                            <div style={{ color: 'var(--rmg-teal)' }}>venta {formatCLP(p.valor_venta || 0)}</div>
+                          </td>
+                          <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: p.dias_sin_venta === null ? 'var(--rmg-muted)' : p.dias_sin_venta > 60 ? 'var(--rmg-red)' : 'var(--rmg-off)' }}>
+                            {p.dias_sin_venta === null ? 'nunca' : `hace ${p.dias_sin_venta} d.`}
+                          </td>
                           <td className="px-4 py-3">
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
                               style={{ background: alertInfo.bg, color: alertInfo.color }}>
                               {alertInfo.label}
                             </span>
@@ -301,6 +374,7 @@ export default function BodegasPage() {
                 }
               </tbody>
             </table>
+            </div>
             {!loadingStock && stockFiltrado.length === 0 && (
               <div className="py-12 text-center" style={{ color: 'var(--rmg-muted)' }}>
                 <Package size={28} className="mx-auto mb-2 opacity-20"/>

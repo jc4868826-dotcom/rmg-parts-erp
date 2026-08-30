@@ -11,10 +11,11 @@ import {
 import toast from 'react-hot-toast'
 import { useAuth } from '@context/AuthContext'
 import DocumentosPanel from '@components/DocumentosPanel'
+import CantidadPresentacion from '@components/CantidadPresentacion'
 
 const HOY = new Date().toISOString().split('T')[0]
 const MEDIO_PAGO = ['Contado', 'Crédito 30 días', 'Crédito 60 días', 'Crédito 90 días']
-const ITEM_INIT = { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0 }
+const ITEM_INIT = { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, presentacion: '', unidades_por_pack: null }
 const FORM_INIT = {
   proveedor_id: '', proveedor: '', fecha_requerida: '', medio_pago: 'Contado',
   observaciones: '', items: [{ ...ITEM_INIT }],
@@ -98,6 +99,8 @@ function SkuRow({ item, idx, onUpdate, onRemove, showRemove }) {
     onUpdate(idx, 'codigo', p.codigo_sku)
     onUpdate(idx, 'descripcion', p.descripcion)
     onUpdate(idx, 'precio_unitario', p.costo_unidad_neto || 0)
+    onUpdate(idx, 'presentacion', p.presentacion || '')
+    onUpdate(idx, 'unidades_por_pack', p.unidades_por_pack || null)
   }
 
   const sub = Number(item.precio_unitario || 0) * Number(item.cantidad || 0)
@@ -136,8 +139,13 @@ function SkuRow({ item, idx, onUpdate, onRemove, showRemove }) {
       <td className="px-3 py-2 min-w-40">
         <input className="rmg-input text-xs" placeholder="Descripción" value={item.descripcion} onChange={e => onUpdate(idx, 'descripcion', e.target.value)} />
       </td>
-      <td className="px-3 py-2 w-20">
-        <input type="number" min="0.01" step="any" className="rmg-input text-xs text-center" value={item.cantidad} onChange={e => onUpdate(idx, 'cantidad', e.target.value)} />
+      <td className="px-3 py-2 w-24">
+        <CantidadPresentacion
+          unidadesPorPack={item.unidades_por_pack}
+          presentacion={item.presentacion}
+          cantidad={item.cantidad}
+          onChange={v => onUpdate(idx, 'cantidad', v)}
+        />
       </td>
       <td className="px-3 py-2 w-32">
         <input type="number" min="0" className="rmg-input text-xs text-right" value={item.precio_unitario} onChange={e => onUpdate(idx, 'precio_unitario', e.target.value)} />
@@ -299,7 +307,7 @@ export default function OCPage() {
       medio_pago: oc.medio_pago || 'Contado',
       observaciones: oc.observaciones || '',
       items: (oc.items || []).length
-        ? oc.items.map(i => ({ codigo: i.codigo || '', descripcion: i.descripcion || '', cantidad: i.cantidad || 1, precio_unitario: i.precio_unitario || 0 }))
+        ? oc.items.map(i => ({ codigo: i.codigo || '', descripcion: i.descripcion || '', cantidad: i.cantidad || 1, precio_unitario: i.precio_unitario || 0, presentacion: i.presentacion || '', unidades_por_pack: i.unidades_por_pack || null }))
         : [{ ...ITEM_INIT }],
     })
     setOcEditando(oc.id)
@@ -314,6 +322,8 @@ export default function OCPage() {
       cantidad_solicitada: i.cantidad,
       ya_recibido: i.cantidad_recibida_total || 0,
       cantidad_recibida: 0,
+      presentacion: i.presentacion || '',
+      unidades_por_pack: i.unidades_por_pack || null,
     })))
     setRecepcionActiva(true)
   }
@@ -839,9 +849,11 @@ export default function OCPage() {
                         <td className="px-3 py-2 text-center text-xs" style={{ color: 'var(--rmg-teal)' }}>{linea.ya_recibido}</td>
                         <td className="px-3 py-2 text-center text-xs font-bold" style={{ color: pendiente > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{pendiente}</td>
                         <td className="px-3 py-2 w-28">
-                          <input type="number" min="0" max={pendiente} className="rmg-input text-xs text-center"
-                            value={recepcionLineas[i].cantidad_recibida}
-                            onChange={e => setRecepcionLineas(ls => ls.map((l, j) => j === i ? { ...l, cantidad_recibida: Number(e.target.value) } : l))}
+                          <CantidadPresentacion
+                            unidadesPorPack={linea.unidades_por_pack}
+                            presentacion={linea.presentacion}
+                            cantidad={recepcionLineas[i].cantidad_recibida}
+                            onChange={v => setRecepcionLineas(ls => ls.map((l, j) => j === i ? { ...l, cantidad_recibida: Math.min(v, pendiente) } : l))}
                           />
                         </td>
                       </tr>

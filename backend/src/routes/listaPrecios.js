@@ -40,7 +40,7 @@ router.get('/buscar', (req, res) => {
     const rows = db.prepare(`
       SELECT
         codigo_sku, descripcion, producto_generico, marca, proveedor,
-        presentacion, tipo_envase, categoria, segmento_negocio,
+        presentacion, tipo_envase, unidades_por_pack, categoria, segmento_negocio,
         precio_neto, costo_neto,
         costo_unidad_neto, precio_venta_neto,
         costo_compra, precio_venta,

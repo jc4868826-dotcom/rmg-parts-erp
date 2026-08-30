@@ -1,92 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, calcularTotalesCotizacion } from '@utils/format'
-import { ArrowLeft, Plus, Trash2, Send, Search, X, ShoppingCart } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Send, ShoppingCart } from 'lucide-react'
 import toast from 'react-hot-toast'
 import DocumentosPanel from '@components/DocumentosPanel'
-
-function ProductoSearch({ item, onSelect, initialQuery = '' }) {
-  const [query, setQuery]     = useState(initialQuery)
-  const [open, setOpen]       = useState(false)
-  const [debouncedQ, setDQ]   = useState('')
-  const wrapRef               = useRef(null)
-
-  useEffect(() => {
-    const t = setTimeout(() => setDQ(query), 300)
-    return () => clearTimeout(t)
-  }, [query])
-
-  const { data: resultados = [], isFetching } = useQuery({
-    queryKey: ['lp-buscar', debouncedQ],
-    queryFn: () => api.get('/lista-precios/buscar', { params: { q: debouncedQ } }).then(r => r.data),
-    enabled: debouncedQ.length >= 2,
-    staleTime: 60_000,
-  })
-
-  useEffect(() => {
-    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const handleSelect = (p) => {
-    onSelect(p)
-    setQuery(p.codigo_sku)
-    setOpen(false)
-  }
-
-  const handleClear = () => {
-    setQuery('')
-    setOpen(false)
-    onSelect({ codigo_sku: '', descripcion: '', precio_neto: 0, precio_venta_neto: 0, presentacion: '' })
-  }
-
-  return (
-    <div ref={wrapRef} className="relative">
-      <div className="relative">
-        <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--rmg-muted)' }} />
-        <input
-          className="rmg-input text-xs pl-6 pr-6"
-          placeholder="Buscar SKU, producto…"
-          value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true) }}
-          onFocus={() => query.length >= 2 && setOpen(true)}
-          autoComplete="off"
-        />
-        {query && (
-          <button type="button" onClick={handleClear} className="absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--rmg-muted)' }}>
-            <X size={11}/>
-          </button>
-        )}
-      </div>
-      {open && debouncedQ.length >= 2 && (
-        <div className="absolute z-50 left-0 right-0 mt-1 rounded-lg border overflow-hidden shadow-xl"
-          style={{ background: 'var(--rmg-surface)', borderColor: 'rgba(56,182,255,0.25)', maxHeight: 260, overflowY: 'auto' }}>
-          {isFetching && (
-            <div className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>Buscando…</div>
-          )}
-          {!isFetching && resultados.length === 0 && (
-            <div className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>Sin resultados</div>
-          )}
-          {resultados.map(p => (
-            <button key={p.codigo_sku} type="button" onMouseDown={() => handleSelect(p)}
-              className="w-full text-left px-3 py-2.5 hover:bg-black/5 transition-colors border-b"
-              style={{ borderColor: 'rgba(15, 35, 60,0.04)' }}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo_sku}</span>
-                <span className="font-bold text-xs" style={{ color: 'var(--rmg-teal)' }}>{formatCLP(p.precio_neto || p.precio_venta_neto)}</span>
-              </div>
-              <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--rmg-off)' }}>{p.descripcion}</div>
-              <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{p.marca} · {p.presentacion}</div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+import ProductoSearch from '@components/ProductoSearch'
+import CantidadPresentacion from '@components/CantidadPresentacion'
 
 export default function CotizacionForm() {
   const { id } = useParams()
@@ -99,7 +20,7 @@ export default function CotizacionForm() {
   const [validezDias, setValidez]   = useState(15)
   const [notas, setNotas]           = useState('')
   const [items, setItems]           = useState([
-    { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0 }
+    { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0, presentacion: '', unidades_por_pack: null }
   ])
   const [saving, setSaving]         = useState(false)
   const [loaded, setLoaded]         = useState(false)
@@ -125,11 +46,13 @@ export default function CotizacionForm() {
       setNotas(cotizacion.notas || '')
       if (cotizacion.items?.length) {
         setItems(cotizacion.items.map(i => ({
-          codigo:          i.codigo || '',
-          descripcion:     i.descripcion || '',
-          cantidad:        i.cantidad || 1,
-          precio_unitario: i.precio_unitario || 0,
-          descuento_pct:   i.descuento_pct || 0,
+          codigo:             i.codigo || '',
+          descripcion:        i.descripcion || '',
+          cantidad:           i.cantidad || 1,
+          precio_unitario:    i.precio_unitario || 0,
+          descuento_pct:      i.descuento_pct || 0,
+          presentacion:       i.presentacion || '',
+          unidades_por_pack:  i.unidades_por_pack || null,
         })))
       }
       setLoaded(true)
@@ -139,7 +62,7 @@ export default function CotizacionForm() {
   const totales = calcularTotalesCotizacion(items)
 
   const addItem = () => setItems(prev => [
-    ...prev, { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0 }
+    ...prev, { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0, presentacion: '', unidades_por_pack: null }
   ])
 
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i))
@@ -160,6 +83,8 @@ export default function CotizacionForm() {
         codigo: p.codigo_sku || '',
         descripcion: p.descripcion || '',
         precio_unitario: p.precio_neto || p.precio_venta_neto || 0,
+        presentacion: p.presentacion || '',
+        unidades_por_pack: p.unidades_por_pack || null,
       }
       return next
     })
@@ -279,7 +204,7 @@ export default function CotizacionForm() {
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         <td className="px-4 py-2 min-w-52">
-                          <ProductoSearch item={item} initialQuery={item.codigo || ''} onSelect={(p) => handleProductoSelect(i, p)} />
+                          <ProductoSearch initialQuery={item.codigo || ''} onSelect={(p) => handleProductoSelect(i, p)} />
                         </td>
                         <td className="px-4 py-2 w-28">
                           <input className="rmg-input text-xs font-mono" value={item.codigo}
@@ -289,9 +214,13 @@ export default function CotizacionForm() {
                           <input className="rmg-input text-xs" value={item.descripcion}
                             onChange={e => updateItem(i, 'descripcion', e.target.value)} placeholder="Descripción" />
                         </td>
-                        <td className="px-4 py-2 w-20">
-                          <input className="rmg-input text-xs text-center" type="number" min="1"
-                            value={item.cantidad} onChange={e => updateItem(i, 'cantidad', Number(e.target.value))} />
+                        <td className="px-4 py-2 w-24">
+                          <CantidadPresentacion
+                            unidadesPorPack={item.unidades_por_pack}
+                            presentacion={item.presentacion}
+                            cantidad={item.cantidad}
+                            onChange={v => updateItem(i, 'cantidad', v)}
+                          />
                         </td>
                         <td className="px-4 py-2 w-32">
                           <input className="rmg-input text-xs text-right" type="number" min="0"

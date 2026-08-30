@@ -5,6 +5,8 @@ import { formatCLP, formatFecha } from '@utils/format'
 import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard } from 'lucide-react'
 import toast from 'react-hot-toast'
 import DocumentosPanel from '@components/DocumentosPanel'
+import ProductoSearch from '@components/ProductoSearch'
+import CantidadPresentacion from '@components/CantidadPresentacion'
 
 const MES_ACTUAL = new Date().toISOString().slice(0, 7)
 const HOY = new Date().toISOString().split('T')[0]
@@ -12,7 +14,7 @@ const ESTADOS = ['Pendiente', 'Pagado', 'Anulado']
 const ESTADOS_LOGISTICOS = ['en_proceso', 'despachada', 'recibida_cliente']
 const FORMAS_PAGO = ['Contado', 'Transferencia', 'Crédito 30 días', 'Crédito 60 días', 'Cheque']
 const TIPOS_DOC = ['Nota de Venta', 'Factura', 'Boleta']
-const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, precio_unitario: 0, costo_unitario: 0 }
+const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, precio_unitario: 0, costo_unitario: 0, presentacion: '', unidades_por_pack: null }
 const FORM_INIT = { fecha: HOY, cliente_nombre: '', numero_documento: '', tipo_documento: 'Nota de Venta', estado: 'Pendiente', forma_pago: 'Contado', notas: '', items: [{ ...ITEM_INIT }] }
 const CUENTAS = ['1781310106 Banco de Chile', '000-0-00000 Banco BCI', '000-0-00000 Banco Santander', 'Caja chica']
 const PAGO_INIT = { metodo_pago: 'Transferencia', cuenta_bancaria: CUENTAS[0], fecha_pago: HOY, notas: '' }
@@ -84,6 +86,19 @@ export default function VentasPage() {
   const removeItem = (idx) => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))
   const updateItem = (idx, field, val) => setForm(f => {
     const items = [...f.items]; items[idx] = { ...items[idx], [field]: val }; return { ...f, items }
+  })
+  const handleProductoSelect = (idx, p) => setForm(f => {
+    const items = [...f.items]
+    items[idx] = {
+      ...items[idx],
+      sku: p.codigo_sku || '',
+      descripcion: p.descripcion || '',
+      precio_unitario: p.precio_neto || p.precio_venta_neto || 0,
+      costo_unitario: p.costo_neto || p.costo_unidad_neto || 0,
+      presentacion: p.presentacion || '',
+      unidades_por_pack: p.unidades_por_pack || null,
+    }
+    return { ...f, items }
   })
 
   const calcTotal = (items) => items.reduce((s, i) => s + (Number(i.precio_unitario || 0) * Number(i.cantidad || 0)), 0)
@@ -185,7 +200,7 @@ export default function VentasPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-                    {['SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Costo', 'Subtotal', ''].map(h => (
+                    {['Buscar producto', 'SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Costo', 'Subtotal', ''].map(h => (
                       <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
                   </tr>
@@ -195,9 +210,17 @@ export default function VentasPage() {
                     const sub = Number(item.precio_unitario || 0) * Number(item.cantidad || 0)
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                        <td className="px-3 py-2 w-24"><input className="rmg-input text-xs" placeholder="SKU" value={item.sku} onChange={e => updateItem(i, 'sku', e.target.value)} /></td>
+                        <td className="px-3 py-2 min-w-44"><ProductoSearch initialQuery={item.sku || ''} onSelect={p => handleProductoSelect(i, p)} /></td>
+                        <td className="px-3 py-2 w-24"><input className="rmg-input text-xs font-mono" placeholder="SKU" value={item.sku} onChange={e => updateItem(i, 'sku', e.target.value)} /></td>
                         <td className="px-3 py-2 min-w-40"><input className="rmg-input text-xs" placeholder="Descripción" value={item.descripcion} onChange={e => updateItem(i, 'descripcion', e.target.value)} /></td>
-                        <td className="px-3 py-2 w-20"><input type="number" min="0" className="rmg-input text-xs text-center" value={item.cantidad} onChange={e => updateItem(i, 'cantidad', e.target.value)} /></td>
+                        <td className="px-3 py-2 w-24">
+                          <CantidadPresentacion
+                            unidadesPorPack={item.unidades_por_pack}
+                            presentacion={item.presentacion}
+                            cantidad={item.cantidad}
+                            onChange={v => updateItem(i, 'cantidad', v)}
+                          />
+                        </td>
                         <td className="px-3 py-2 w-28"><input type="number" min="0" className="rmg-input text-xs text-right" value={item.precio_unitario} onChange={e => updateItem(i, 'precio_unitario', e.target.value)} /></td>
                         <td className="px-3 py-2 w-28"><input type="number" min="0" className="rmg-input text-xs text-right" value={item.costo_unitario} onChange={e => updateItem(i, 'costo_unitario', e.target.value)} /></td>
                         <td className="px-3 py-2 font-bold text-right" style={{ color: 'var(--rmg-off)' }}>{formatCLP(sub)}</td>

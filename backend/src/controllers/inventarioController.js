@@ -1,5 +1,17 @@
 const { db, uuidv4 } = require('../../config/database')
 
+// Umbral de "sin movimiento" — más allá de esto un SKU con stock se considera
+// estancado (capital de trabajo inmovilizado), independiente de cuánto stock tenga.
+const DIAS_SIN_MOVIMIENTO_CRITICO = 60
+const STOCK_BAJO_UMBRAL = 5
+
+function diasDesde(fechaSqlite) {
+  if (!fechaSqlite) return null
+  const iso = fechaSqlite.includes('T') ? fechaSqlite : fechaSqlite.replace(' ', 'T') + 'Z'
+  const ms = Date.now() - new Date(iso).getTime()
+  return Math.floor(ms / 86400000)
+}
+
 const getStock = (_req, res) => {
   try {
     const rows = db.prepare(`
@@ -10,6 +22,7 @@ const getStock = (_req, res) => {
         MAX(categoria)                     AS categoria,
         MAX(proveedor)                     AS proveedor,
         MAX(presentacion)                  AS presentacion,
+        MAX(unidades_por_pack)             AS unidades_por_pack,
         MAX(costo_unidad_neto)             AS precio_compra,
         MAX(precio_venta_neto)             AS precio_venta,
         MAX(COALESCE(stock_actual, 0))     AS stock_actual,
@@ -19,21 +32,56 @@ const getStock = (_req, res) => {
       GROUP BY codigo_sku
       ORDER BY categoria, descripcion
     `).all()
-    const result = rows.map(p => ({
-      codigo:       p.codigo,
-      descripcion:  p.descripcion,
-      marca:        p.marca,
-      categoria:    p.categoria,
-      proveedor:    p.proveedor,
-      presentacion: p.presentacion,
-      precio_compra: p.precio_compra,
-      precio_venta:  p.precio_venta,
-      unidad:       'unidad',
-      stock_actual:  p.stock_actual  || 0,
-      stock_minimo:  p.stock_minimo  || 5,
-      alerta: (p.stock_actual || 0) <= (p.stock_minimo || 5)       ? 'critico'
-            : (p.stock_actual || 0) <= (p.stock_minimo || 5) * 2   ? 'bajo' : 'ok',
-    }))
+
+    // Última salida (venta) por SKU — es la señal de si el producto "se mueve".
+    // Las entradas (compras) y ajustes no cuentan: lo que importa acá es si se vende.
+    const ultimasSalidas = db.prepare(`
+      SELECT codigo, MAX(created_at) AS fecha
+      FROM movimientos_stock
+      WHERE tipo = 'salida'
+      GROUP BY codigo
+    `).all()
+    const mapaUltimaSalida = new Map(ultimasSalidas.map(r => [r.codigo, r.fecha]))
+
+    const result = rows.map(p => {
+      const pack         = p.unidades_por_pack > 1 ? p.unidades_por_pack : null
+      const stockActual  = p.stock_actual || 0
+      const costo        = p.precio_compra || 0
+      const ventaUnit    = p.precio_venta || 0
+      const fechaUltimaVenta = mapaUltimaSalida.get(p.codigo) || null
+      const diasSinVenta = diasDesde(fechaUltimaVenta)
+
+      // agotado: no hay nada que vender — la urgencia máxima, independiente de rotación.
+      // critico: hay stock pero no se ha vendido en el umbral (o nunca) — capital inmovilizado.
+      // bajo:    se vende activamente pero queda poco — riesgo de quiebre pronto.
+      // ok:      rota bien y con stock suficiente.
+      let alerta = 'ok'
+      if (stockActual <= 0) alerta = 'agotado'
+      else if (diasSinVenta === null || diasSinVenta > DIAS_SIN_MOVIMIENTO_CRITICO) alerta = 'critico'
+      else if (stockActual < STOCK_BAJO_UMBRAL) alerta = 'bajo'
+
+      return {
+        codigo:             p.codigo,
+        descripcion:        p.descripcion,
+        marca:              p.marca,
+        categoria:          p.categoria,
+        proveedor:          p.proveedor,
+        presentacion:       p.presentacion,
+        unidades_por_pack:  pack,
+        precio_compra:      costo,
+        precio_venta:       ventaUnit,
+        unidad:             'unidad',
+        stock_actual:       stockActual,
+        stock_minimo:       p.stock_minimo || 5,
+        cajas_completas:    pack ? Math.floor(stockActual / pack) : null,
+        unidades_sueltas:   pack ? stockActual % pack : null,
+        valor_costo:        Math.round(stockActual * costo),
+        valor_venta:        Math.round(stockActual * ventaUnit),
+        fecha_ultima_venta: fechaUltimaVenta,
+        dias_sin_venta:     diasSinVenta,
+        alerta,
+      }
+    })
     res.json(result)
   } catch (err) {
     res.status(500).json({ error: err.message })

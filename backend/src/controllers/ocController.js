@@ -12,7 +12,18 @@ const nodemailer = require('nodemailer')
 
 function withDetails(oc) {
   if (!oc) return null
-  const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ? ORDER BY rowid').all(oc.id)
+  // Se enriquece cada línea con la presentación/pack del SKU (lista_precios), solo
+  // para referencia visual al comprar/recepcionar — la cantidad guardada en
+  // oc_items siempre está en unidades.
+  const items = db.prepare(`
+    SELECT oi.*, lp.unidades_por_pack AS unidades_por_pack, lp.presentacion AS presentacion
+    FROM oc_items oi
+    LEFT JOIN (
+      SELECT codigo_sku, MAX(unidades_por_pack) AS unidades_por_pack, MAX(presentacion) AS presentacion
+      FROM lista_precios GROUP BY codigo_sku
+    ) lp ON lp.codigo_sku = oi.codigo
+    WHERE oi.oc_id = ? ORDER BY oi.rowid
+  `).all(oc.id)
   const historial = db.prepare('SELECT * FROM oc_historial WHERE oc_id = ? ORDER BY fecha_evento ASC').all(oc.id)
   const recepciones = db.prepare('SELECT * FROM recepciones_oc WHERE oc_id = ? ORDER BY created_at DESC').all(oc.id)
   const recepcionesConLineas = recepciones.map(r => ({

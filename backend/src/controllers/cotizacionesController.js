@@ -1,8 +1,19 @@
 const { db, uuidv4 } = require('../../config/database')
 
+// Enriquece cada línea con la presentación/pack del SKU (lista_precios), solo
+// para referencia visual — la cantidad guardada siempre está en unidades.
+const enriquecerConPack = (items) => {
+  const lp = db.prepare('SELECT MAX(unidades_por_pack) AS unidades_por_pack, MAX(presentacion) AS presentacion FROM lista_precios WHERE codigo_sku = ?')
+  return items.map(i => {
+    if (!i.codigo) return i
+    const info = lp.get(i.codigo)
+    return { ...i, unidades_por_pack: info?.unidades_por_pack || null, presentacion: info?.presentacion || null }
+  })
+}
+
 const withItems = (cot) => {
   if (!cot) return null
-  const items = db.prepare('SELECT * FROM cotizacion_items WHERE cotizacion_id = ?').all(cot.id)
+  const items = enriquecerConPack(db.prepare('SELECT * FROM cotizacion_items WHERE cotizacion_id = ?').all(cot.id))
   let cliente_rut = null, cliente_email = null, cliente_telefono = null, cliente_direccion = null
   if (cot.cliente_id) {
     const cl = db.prepare('SELECT rut, dv, email, telefono, celular, direccion, comuna FROM clientes WHERE id = ?').get(cot.cliente_id)

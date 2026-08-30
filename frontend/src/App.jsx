@@ -19,7 +19,6 @@ import PipelinePage     from '@pages/PipelinePage'
 import CotizacionesPage from '@pages/CotizacionesPage'
 import CotizacionForm   from '@pages/CotizacionForm'
 import PedidosPage      from '@pages/PedidosPage'
-import InventarioPage   from '@pages/InventarioPage'
 import WhatsAppPage     from '@pages/WhatsAppPage'
 import ReportesPage     from '@pages/ReportesPage'
 import ConfiguracionPage from '@pages/ConfiguracionPage'
@@ -96,7 +95,6 @@ export default function App() {
               <Route path="cotizaciones/nueva"  element={<CotizacionForm />} />
               <Route path="cotizaciones/:id"    element={<CotizacionForm />} />
               <Route path="pedidos"             element={<PedidosPage />} />
-              <Route path="inventario"          element={<InventarioPage />} />
               <Route path="whatsapp"            element={<WhatsAppPage />} />
               <Route path="gastos"              element={<GastosPage />} />
               <Route path="agenda"              element={<AgendaPage />} />
