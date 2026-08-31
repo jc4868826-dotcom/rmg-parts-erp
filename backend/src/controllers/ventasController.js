@@ -12,9 +12,21 @@ const ESTADOS_LOGISTICOS = ['en_proceso', 'despachada', 'recibida_cliente']
 
 const hoy = () => new Date().toISOString().split('T')[0]
 
-const getLp = (codigo) => db.prepare(
-  'SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(COALESCE(costo_unidad_neto,0)) AS costo, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
-).get(codigo)
+// El costo (costo_unidad_neto) guardado en lista_precios para un SKU en
+// caja/pack es el precio de LA CAJA completa, no de la unidad — igual que se
+// corrigió en inventarioController.getStock() y listaPrecios.js /buscar. Acá
+// se dividía por unidades_por_pack solo en esos dos lugares; este getLp()
+// (usado para fijar costo_unitario al crear una Venta desde Cotización o
+// Pedido) seguía devolviendo el costo de caja tal cual, lo que inflaba el
+// costo de mercadería hasta ×unidades_por_pack en cualquier SKU con pack.
+const getLp = (codigo) => {
+  const p = db.prepare(
+    'SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(COALESCE(costo_unidad_neto,0)) AS costo_caja, MAX(unidades_por_pack) AS unidades_por_pack, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
+  ).get(codigo)
+  if (!p) return null
+  const pack = p.unidades_por_pack > 1 ? p.unidades_por_pack : null
+  return { ...p, costo: pack ? p.costo_caja / pack : p.costo_caja }
+}
 
 // Registra un movimiento de stock y actualiza lista_precios.stock_actual.
 // cantidad SIEMPRE positiva; el signo lo decide `tipo` ('salida' resta, 'entrada'/'ajuste' suma tal cual el llamador indique).
@@ -66,7 +78,7 @@ const getAll = (req, res) => {
         (SELECT json_group_array(json_object(
           'id', i.id, 'sku', i.sku, 'descripcion', i.descripcion,
           'cantidad', i.cantidad, 'precio_unitario', i.precio_unitario,
-          'costo_unitario', i.costo_unitario, 'subtotal', i.subtotal
+          'costo_unitario', i.costo_unitario, 'descuento_pct', COALESCE(i.descuento_pct,0), 'subtotal', i.subtotal
         )) FROM venta_items i WHERE i.venta_id = v.id) as items
       FROM ventas v
       LEFT JOIN clientes c ON c.id = v.cliente_id
@@ -102,11 +114,16 @@ const getOne = (req, res) => {
   }
 }
 
+// Subtotal de línea con descuento aplicado — mismo cálculo que cotizacion_items
+// y pedido_items, ahora también en venta_items (antes no existía descuento acá).
+const lineSubtotal = (item) =>
+  Number(item.cantidad || 0) * Number(item.precio_unitario || 0) * (1 - (Number(item.descuento_pct) || 0) / 100)
+
 // Inserta la venta + items + salida de stock. Usada por create / createFromCotizacion / createFromPedido.
 function _insertVenta({ numero_documento, tipo_documento, cliente_id, cliente_nombre, cotizacion_id,
                          pedido_id, forma_pago, notas, direccion_entrega, vendedor_id, items = [] }) {
   const numero = numero_documento || siguienteNumero()
-  const total = items.reduce((s, i) => s + (Number(i.precio_unitario || 0) * Number(i.cantidad || 0)), 0)
+  const total = items.reduce((s, i) => s + lineSubtotal(i), 0)
   const costo_total = items.reduce((s, i) => s + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
 
   const doCreate = db.transaction(() => {
@@ -122,10 +139,10 @@ function _insertVenta({ numero_documento, tipo_documento, cliente_id, cliente_no
     const ventaId = db.prepare('SELECT last_insert_rowid() as id').get().id
 
     for (const item of items) {
-      const sub = Number(item.precio_unitario || 0) * Number(item.cantidad || 0)
-      db.prepare(`INSERT INTO venta_items (venta_id, sku, descripcion, cantidad, precio_unitario, costo_unitario, subtotal) VALUES (?,?,?,?,?,?,?)`)
+      const sub = lineSubtotal(item)
+      db.prepare(`INSERT INTO venta_items (venta_id, sku, descripcion, cantidad, precio_unitario, costo_unitario, descuento_pct, subtotal) VALUES (?,?,?,?,?,?,?,?)`)
         .run(ventaId, item.sku || item.codigo || '', item.descripcion || '', Number(item.cantidad || 0),
-             Number(item.precio_unitario || 0), Number(item.costo_unitario || 0), sub)
+             Number(item.precio_unitario || 0), Number(item.costo_unitario || 0), Number(item.descuento_pct) || 0, sub)
 
       // El stock sale apenas la venta se genera (no al despachar) — así lo pidió el negocio.
       if (item.sku || item.codigo) {
@@ -177,6 +194,7 @@ const createFromCotizacion = (req, res) => {
       return {
         sku: i.codigo, descripcion: i.descripcion, cantidad: i.cantidad,
         precio_unitario: i.precio_unitario, costo_unitario: lp ? lp.costo : 0,
+        descuento_pct: i.descuento_pct || 0,
       }
     })
 
@@ -207,6 +225,7 @@ const createFromPedido = (req, res) => {
       return {
         sku: codigo, descripcion: i.descripcion, cantidad: i.cantidad,
         precio_unitario: i.precio_unitario, costo_unitario: lp ? lp.costo : 0,
+        descuento_pct: i.descuento_pct || 0,
       }
     })
 
@@ -244,13 +263,13 @@ const update = (req, res) => {
         }
         db.prepare('DELETE FROM venta_items WHERE venta_id = ?').run(req.params.id)
 
-        total = items.reduce((s, i) => s + (Number(i.precio_unitario || 0) * Number(i.cantidad || 0)), 0)
+        total = items.reduce((s, i) => s + lineSubtotal(i), 0)
         costo_total = items.reduce((s, i) => s + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
         for (const item of items) {
-          const sub = Number(item.precio_unitario || 0) * Number(item.cantidad || 0)
-          db.prepare(`INSERT INTO venta_items (venta_id, sku, descripcion, cantidad, precio_unitario, costo_unitario, subtotal) VALUES (?,?,?,?,?,?,?)`)
+          const sub = lineSubtotal(item)
+          db.prepare(`INSERT INTO venta_items (venta_id, sku, descripcion, cantidad, precio_unitario, costo_unitario, descuento_pct, subtotal) VALUES (?,?,?,?,?,?,?,?)`)
             .run(req.params.id, item.sku || item.codigo || '', item.descripcion || '', Number(item.cantidad || 0),
-                 Number(item.precio_unitario || 0), Number(item.costo_unitario || 0), sub)
+                 Number(item.precio_unitario || 0), Number(item.costo_unitario || 0), Number(item.descuento_pct) || 0, sub)
           const codigo = item.sku || item.codigo
           if (codigo) moverStock({ codigo, descripcion: item.descripcion, tipo: 'salida', cantidad: Number(item.cantidad || 0), motivo: `Corrección venta ${venta.numero_documento}`, referencia: String(venta.id) })
         }

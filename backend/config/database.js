@@ -2213,6 +2213,66 @@ function runMigrations() {
     }
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('stock_pack_correction_v1')
   }
+
+  // Migration venta_items_descuento_v1 — agrega descuento_pct a venta_items,
+  // que hasta ahora no existía (a diferencia de cotizacion_items, que sí lo
+  // tenía) — el % de descuento por línea no se podía ni capturar ni mostrar
+  // al vender.
+  const mVentaDesc = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('venta_items_descuento_v1')
+  if (!mVentaDesc) {
+    const viCols = db.prepare('PRAGMA table_info(venta_items)').all().map(c => c.name)
+    if (!viCols.includes('descuento_pct')) {
+      db.exec('ALTER TABLE venta_items ADD COLUMN descuento_pct REAL DEFAULT 0')
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('venta_items_descuento_v1')
+    console.log('✅ Migración venta_items_descuento_v1 — descuento_pct añadido a venta_items')
+  }
+
+  // Migration venta_items_costo_pack_v1 — corrige venta_items.costo_unitario
+  // para líneas de SKU en caja/pack: ventasController.getLp() usaba el costo
+  // de lista_precios tal cual, que para un pack es el precio de LA CAJA
+  // completa (mismo origen que stock_pack_correction_v1, pero del lado del
+  // costo, no del stock) — cada venta creada desde una Cotización o Pedido con
+  // un ítem en pack quedó con costo_unitario inflado ×unidades_por_pack, lo
+  // que disparaba el costo de mercadería muy por sobre el total de la venta.
+  // Se corrige solo cuando el costo guardado calza (con tolerancia de
+  // redondeo) con el costo de caja ACTUAL del SKU en lista_precios — la firma
+  // exacta del bug — y se recalcula costo_total de cada venta afectada.
+  const mVentaCostoPack = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('venta_items_costo_pack_v1')
+  if (!mVentaCostoPack) {
+    try {
+      const items = db.prepare(`
+        SELECT id, venta_id, sku, cantidad, costo_unitario
+        FROM venta_items
+        WHERE sku IS NOT NULL AND sku != '' AND COALESCE(costo_unitario,0) > 0
+      `).all()
+      const lpStmt = db.prepare(`
+        SELECT MAX(costo_unidad_neto) AS costo_caja, MAX(unidades_por_pack) AS unidades_por_pack
+        FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku
+      `)
+      const updItem = db.prepare('UPDATE venta_items SET costo_unitario = ? WHERE id = ?')
+      let corregidos = 0
+      const ventasAfectadas = new Set()
+      for (const it of items) {
+        const lp = lpStmt.get(it.sku)
+        if (!lp || !(lp.unidades_por_pack > 1) || !lp.costo_caja) continue
+        if (Math.abs(it.costo_unitario - lp.costo_caja) <= 1) {
+          updItem.run(lp.costo_caja / lp.unidades_por_pack, it.id)
+          ventasAfectadas.add(it.venta_id)
+          corregidos++
+        }
+      }
+      const sumStmt = db.prepare('SELECT COALESCE(SUM(costo_unitario * cantidad),0) AS total FROM venta_items WHERE venta_id = ?')
+      const updVenta = db.prepare('UPDATE ventas SET costo_total = ? WHERE id = ?')
+      for (const ventaId of ventasAfectadas) {
+        updVenta.run(sumStmt.get(ventaId).total, ventaId)
+      }
+      console.log(`✅ Migración venta_items_costo_pack_v1 — ${corregidos} ítems corregidos en ${ventasAfectadas.size} ventas (costo de caja usado como costo unitario)`)
+    } catch (e) {
+      console.warn('⚠️ venta_items_costo_pack_v1 error:', e.message)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('venta_items_costo_pack_v1')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

@@ -27,7 +27,7 @@ const ESTADOS = ['Pendiente', 'Pagado', 'Anulado']
 const ESTADOS_LOGISTICOS = ['en_proceso', 'despachada', 'recibida_cliente']
 const FORMAS_PAGO = ['Contado', 'Transferencia', 'Crédito 30 días', 'Crédito 60 días', 'Cheque']
 const TIPOS_DOC = ['Nota de Venta', 'Factura', 'Boleta']
-const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, precio_unitario: 0, costo_unitario: 0, presentacion: '', unidades_por_pack: null }
+const ITEM_INIT = { sku: '', descripcion: '', cantidad: 1, precio_unitario: 0, costo_unitario: 0, descuento_pct: 0, presentacion: '', unidades_por_pack: null }
 const FORM_INIT = { fecha: HOY, cliente_nombre: '', numero_documento: '', tipo_documento: 'Nota de Venta', estado: 'Pendiente', forma_pago: 'Contado', notas: '', items: [{ ...ITEM_INIT }] }
 const CUENTAS = ['1781310106 Banco de Chile', '000-0-00000 Banco BCI', '000-0-00000 Banco Santander', 'Caja chica']
 const PAGO_INIT = { metodo_pago: 'Transferencia', cuenta_bancaria: CUENTAS[0], fecha_pago: HOY, notas: '' }
@@ -116,7 +116,7 @@ export default function VentasPage() {
     return { ...f, items }
   })
 
-  const calcTotal = (items) => items.reduce((s, i) => s + (Number(i.precio_unitario || 0) * Number(i.cantidad || 0)), 0)
+  const calcTotal = (items) => items.reduce((s, i) => s + (Number(i.precio_unitario || 0) * Number(i.cantidad || 0) * (1 - (Number(i.descuento_pct) || 0) / 100)), 0)
   const calcCosto = (items) => items.reduce((s, i) => s + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
 
   const handleSubmit = (e) => {
@@ -212,41 +212,44 @@ export default function VentasPage() {
             {/* Items */}
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--rmg-muted)' }}>Ítems</div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-                    {['Buscar producto', 'SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Costo', 'Subtotal', ''].map(h => (
-                      <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.items.map((item, i) => {
-                    const sub = Number(item.precio_unitario || 0) * Number(item.cantidad || 0)
-                    return (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                        <td className="px-3 py-2 min-w-44"><ProductoSearch initialQuery={item.sku || ''} onSelect={p => handleProductoSelect(i, p)} /></td>
-                        <td className="px-3 py-2 w-24"><input className="rmg-input text-xs font-mono" placeholder="SKU" value={item.sku} onChange={e => updateItem(i, 'sku', e.target.value)} /></td>
-                        <td className="px-3 py-2 min-w-40"><input className="rmg-input text-xs" placeholder="Descripción" value={item.descripcion} onChange={e => updateItem(i, 'descripcion', e.target.value)} /></td>
-                        <td className="px-3 py-2 w-24">
-                          <CantidadPresentacion
-                            unidadesPorPack={item.unidades_por_pack}
-                            presentacion={item.presentacion}
-                            cantidad={item.cantidad}
-                            onChange={v => updateItem(i, 'cantidad', v)}
-                          />
-                        </td>
-                        <td className="px-3 py-2 w-28"><input type="number" min="0" className="rmg-input text-xs text-right" value={item.precio_unitario} onChange={e => updateItem(i, 'precio_unitario', e.target.value)} /></td>
-                        <td className="px-3 py-2 w-28"><input type="number" min="0" className="rmg-input text-xs text-right" value={item.costo_unitario} onChange={e => updateItem(i, 'costo_unitario', e.target.value)} /></td>
-                        <td className="px-3 py-2 font-bold text-right" style={{ color: 'var(--rmg-off)' }}>{formatCLP(sub)}</td>
-                        <td className="px-3 py-2">
-                          {form.items.length > 1 && <button type="button" onClick={() => removeItem(i)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><X size={13}/></button>}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
+                      {['Buscar producto', 'SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Costo', 'Desc %', 'Subtotal', ''].map(h => (
+                        <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {form.items.map((item, i) => {
+                      const sub = Number(item.precio_unitario || 0) * Number(item.cantidad || 0) * (1 - (Number(item.descuento_pct) || 0) / 100)
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
+                          <td className="px-3 py-2 min-w-44"><ProductoSearch initialQuery={item.sku || ''} onSelect={p => handleProductoSelect(i, p)} /></td>
+                          <td className="px-3 py-2 w-24"><input className="rmg-input text-xs font-mono" placeholder="SKU" value={item.sku} onChange={e => updateItem(i, 'sku', e.target.value)} /></td>
+                          <td className="px-3 py-2 min-w-40"><input className="rmg-input text-xs" placeholder="Descripción" value={item.descripcion} onChange={e => updateItem(i, 'descripcion', e.target.value)} /></td>
+                          <td className="px-3 py-2 w-24">
+                            <CantidadPresentacion
+                              unidadesPorPack={item.unidades_por_pack}
+                              presentacion={item.presentacion}
+                              cantidad={item.cantidad}
+                              onChange={v => updateItem(i, 'cantidad', v)}
+                            />
+                          </td>
+                          <td className="px-3 py-2 w-36"><input type="number" min="0" step="any" className="rmg-input text-xs text-right" value={item.precio_unitario} onChange={e => updateItem(i, 'precio_unitario', e.target.value)} /></td>
+                          <td className="px-3 py-2 w-36"><input type="number" min="0" step="any" className="rmg-input text-xs text-right" value={item.costo_unitario} onChange={e => updateItem(i, 'costo_unitario', e.target.value)} /></td>
+                          <td className="px-3 py-2 w-20"><input type="number" min="0" max="100" step="any" className="rmg-input text-xs text-center" value={item.descuento_pct} onChange={e => updateItem(i, 'descuento_pct', e.target.value)} /></td>
+                          <td className="px-3 py-2 font-bold text-right whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{formatCLP(sub)}</td>
+                          <td className="px-3 py-2">
+                            {form.items.length > 1 && <button type="button" onClick={() => removeItem(i)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><X size={13}/></button>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
               <div className="flex justify-between items-center mt-2">
                 <button type="button" onClick={addItem} className="btn-secondary flex items-center gap-1 text-xs"><Plus size={13}/> Agregar ítem</button>
                 <div className="text-right">
@@ -414,26 +417,29 @@ export default function VentasPage() {
 
                 <div>
                   <div className="text-xs uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--rmg-muted)' }}>Ítems</div>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
-                        {['SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Subtotal'].map(h => (
-                          <th key={h} className="text-left px-2 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(v.items || []).map((it, idx) => (
-                        <tr key={it.id || idx} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                          <td className="px-2 py-2 font-mono" style={{ color: 'var(--rmg-blt)' }}>{it.sku}</td>
-                          <td className="px-2 py-2" style={{ color: 'var(--rmg-off)' }}>{it.descripcion}</td>
-                          <td className="px-2 py-2 text-right" style={{ color: 'var(--rmg-muted)' }}>{it.cantidad}</td>
-                          <td className="px-2 py-2 text-right" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(it.precio_unitario)}</td>
-                          <td className="px-2 py-2 text-right font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(it.subtotal)}</td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
+                          {['SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Desc %', 'Subtotal'].map(h => (
+                            <th key={h} className="text-left px-2 py-2 font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {(v.items || []).map((it, idx) => (
+                          <tr key={it.id || idx} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
+                            <td className="px-2 py-2 font-mono" style={{ color: 'var(--rmg-blt)' }}>{it.sku}</td>
+                            <td className="px-2 py-2" style={{ color: 'var(--rmg-off)' }}>{it.descripcion}</td>
+                            <td className="px-2 py-2 text-right" style={{ color: 'var(--rmg-muted)' }}>{it.cantidad}</td>
+                            <td className="px-2 py-2 text-right whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(it.precio_unitario)}</td>
+                            <td className="px-2 py-2 text-right" style={{ color: it.descuento_pct > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{it.descuento_pct > 0 ? `${it.descuento_pct}%` : '—'}</td>
+                            <td className="px-2 py-2 text-right font-bold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{formatCLP(it.subtotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-6 pt-2 border-t text-sm" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>

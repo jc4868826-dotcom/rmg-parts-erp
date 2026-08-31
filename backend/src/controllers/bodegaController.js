@@ -120,10 +120,20 @@ const eliminarMovimiento = (req, res) => {
 const getStockConMovimientos = (req, res) => {
   try {
     const codigo = req.params.codigo
-    const p = db.prepare(
-      'SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(marca) AS marca, MAX(categoria) AS categoria, MAX(costo_unidad_neto) AS precio_compra, MAX(precio_venta_neto) AS precio_venta, MAX(COALESCE(stock_actual,0)) AS stock_actual, MAX(COALESCE(stock_minimo,5)) AS stock_minimo FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
+    const raw = db.prepare(
+      'SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(marca) AS marca, MAX(categoria) AS categoria, MAX(costo_unidad_neto) AS precio_compra, MAX(precio_venta_neto) AS precio_venta, MAX(unidades_por_pack) AS unidades_por_pack, MAX(COALESCE(stock_actual,0)) AS stock_actual, MAX(COALESCE(stock_minimo,5)) AS stock_minimo FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
     ).get(codigo)
-    if (!p) return res.status(404).json({ error: 'Producto no encontrado en maestro de precios' })
+    if (!raw) return res.status(404).json({ error: 'Producto no encontrado en maestro de precios' })
+    // costo_unidad_neto/precio_venta_neto guardan el precio de LA CAJA completa
+    // cuando el SKU viene en pack — se divide acá igual que en inventarioController
+    // y listaPrecios.js /buscar, para no mostrar el costo de caja como si fuera
+    // costo unitario.
+    const pack = raw.unidades_por_pack > 1 ? raw.unidades_por_pack : null
+    const p = {
+      ...raw,
+      precio_compra: pack ? raw.precio_compra / pack : raw.precio_compra,
+      precio_venta:  pack ? raw.precio_venta / pack : raw.precio_venta,
+    }
     const movimientos = db.prepare(
       'SELECT * FROM movimientos_stock WHERE codigo = ? ORDER BY created_at DESC'
     ).all(codigo)
