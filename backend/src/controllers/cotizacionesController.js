@@ -50,19 +50,46 @@ const getOne = (req, res) => {
   }
 }
 
+// El número de cotización es UNIQUE en la tabla. Antes se generaba como
+// COT-2026-{COUNT(*)+1} — si alguna vez se eliminó una cotización, o el conteo
+// quedó desalineado del máximo real, ese número YA existía y el INSERT fallaba
+// con 500. Como el conteo no cambia entre reintentos, cada reintento generaba
+// el mismo número y volvía a chocar — eso es lo que se veía en los logs como
+// "POST /cotizaciones 500" repetido sin poder guardar nunca. Ahora se calcula
+// desde el máximo correlativo real ya usado (no del conteo de filas), y si aun
+// así hay un choque (carrera entre dos guardados simultáneos) se reintenta.
+function nextCotizacionNumero() {
+  const rows = db.prepare("SELECT numero FROM cotizaciones WHERE numero LIKE 'COT-2026-%'").all()
+  let maxN = 0
+  for (const r of rows) {
+    const m = /^COT-2026-(\d+)$/.exec(r.numero)
+    if (m) { const n = parseInt(m[1], 10); if (n > maxN) maxN = n }
+  }
+  return `COT-2026-${String(maxN + 1).padStart(3, '0')}`
+}
+
 const _insertCotizacion = (body, extra = {}) => {
-  const count = db.prepare('SELECT COUNT(*) as n FROM cotizaciones').get().n
-  const numero = extra.numero || `COT-2026-${String(count + 1).padStart(3, '0')}`
   const id = uuidv4()
   const { cliente_id, cliente, estado, condicion_pago, canal_origen, notas,
           neto, iva, total, items } = { ...body, ...extra }
 
-  db.prepare(`INSERT INTO cotizaciones
-    (id,numero,cliente_id,cliente,estado,neto,iva,total,condicion_pago,canal_origen,notas)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-  ).run(id, numero, cliente_id || null, cliente || null, estado || 'borrador',
-    neto || 0, iva || 0, total || 0,
-    condicion_pago || 'Contado', canal_origen || null, notas || null)
+  let numero = extra.numero || nextCotizacionNumero()
+  for (let intento = 0; ; intento++) {
+    try {
+      db.prepare(`INSERT INTO cotizaciones
+        (id,numero,cliente_id,cliente,estado,neto,iva,total,condicion_pago,canal_origen,notas)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(id, numero, cliente_id || null, cliente || null, estado || 'borrador',
+        neto || 0, iva || 0, total || 0,
+        condicion_pago || 'Contado', canal_origen || null, notas || null)
+      break
+    } catch (err) {
+      // Solo reintenta un choque de número autogenerado, no un numero explícito
+      // (landing/pública) ni ningún otro tipo de error.
+      if (extra.numero || intento >= 5 || !/UNIQUE/i.test(err.message)) throw err
+      numero = nextCotizacionNumero()
+    }
+  }
 
   if (Array.isArray(items)) {
     const ins = db.prepare(`INSERT INTO cotizacion_items
