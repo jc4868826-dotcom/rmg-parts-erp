@@ -13,12 +13,13 @@ function insertCaja(tipo, categoria, descripcion, monto, fecha_pago, estado, ori
 
 const getFacturas = (req, res) => {
   try {
-    const { estado, segmento } = req.query
+    const { estado, segmento, cliente_id } = req.query
     let sql = 'SELECT * FROM facturas_cxc'
     const params = []
     const where = []
     if (estado) { where.push('estado = ?'); params.push(estado) }
     if (segmento) { where.push('segmento = ?'); params.push(segmento) }
+    if (cliente_id) { where.push('cliente_id = ?'); params.push(cliente_id) }
     if (where.length) sql += ' WHERE ' + where.join(' AND ')
     sql += ' ORDER BY fecha_vencimiento ASC'
 

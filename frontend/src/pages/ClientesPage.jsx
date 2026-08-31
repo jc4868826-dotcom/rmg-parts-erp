@@ -69,7 +69,7 @@ function cleanPhone(phone) {
 
 // ─── Modal: New / Edit Client ─────────────────────────────────────────────────
 
-function ClienteModal({ cliente, onClose, onSaved }) {
+export function ClienteModal({ cliente, onClose, onSaved }) {
   const [form, setForm] = useState(cliente ? {
     rut:            cliente.rut         || '',
     dv:             cliente.dv          || '',

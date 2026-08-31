@@ -1,9 +1,17 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, labelSegmento, formatFecha } from '@utils/format'
-import { ArrowLeft, Phone, Mail, MapPin, CreditCard, FileText, MessageCircle, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Phone, Mail, MapPin, CreditCard, FileText, MessageCircle, TrendingUp, Pencil } from 'lucide-react'
+import { ClienteModal } from './ClientesPage'
+
+const ESTADO_FACTURA = {
+  al_dia:   { label: 'Al día',    bg: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' },
+  vencida:  { label: 'Vencida',   bg: 'rgba(244,162,60,0.12)', color: 'var(--rmg-gold)' },
+  critica:  { label: 'Crítica',   bg: 'rgba(224,90,78,0.12)',  color: 'var(--rmg-red)' },
+  cobrada:  { label: 'Cobrada',   bg: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blt)' },
+}
 
 const ETAPA_STYLES = {
   prospecto: { label: 'Prospecto', color: 'rgba(90,143,168,0.9)' },
@@ -18,7 +26,9 @@ const TIPO_ICON = { visita: '🚗', llamada: '📞', whatsapp: '💬', email: '�
 export default function ClienteDetalle() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [tab, setTab] = useState('resumen')
+  const [showEdit, setShowEdit] = useState(false)
 
   const { data: cliente, isLoading } = useQuery({
     queryKey: ['cliente', id],
@@ -28,6 +38,12 @@ export default function ClienteDetalle() {
   const { data: actividades = [] } = useQuery({
     queryKey: ['actividades', id],
     queryFn: () => api.get(`/pipeline/${id}/actividades`).then(r => r.data),
+  })
+
+  const { data: facturas = [], isLoading: loadingFacturas } = useQuery({
+    queryKey: ['cxc-cliente', id],
+    queryFn: () => api.get('/cxc', { params: { cliente_id: id } }).then(r => r.data),
+    enabled: tab === 'cuenta-corriente',
   })
 
   if (isLoading) return (
@@ -57,6 +73,9 @@ export default function ClienteDetalle() {
           </div>
           <p className="text-sm mt-1" style={{ color: 'var(--rmg-muted)' }}>RUT: {cliente.rut} · Cliente desde {formatFecha(cliente.created_at)}</p>
         </div>
+        <button onClick={() => setShowEdit(true)} className="btn-secondary flex items-center gap-2 text-sm">
+          <Pencil size={14} /> Editar
+        </button>
         <button className="btn-primary flex items-center gap-2 text-sm">
           <FileText size={15} /> Nueva cotización
         </button>
@@ -64,7 +83,11 @@ export default function ClienteDetalle() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b" style={{ borderColor: 'rgba(56,182,255,0.1)' }}>
-        {[{ k: 'resumen', l: 'Resumen' }, { k: 'actividades', l: `Actividades (${actividades.length})` }].map(t => (
+        {[
+          { k: 'resumen', l: 'Resumen' },
+          { k: 'cuenta-corriente', l: 'Cuenta corriente' },
+          { k: 'actividades', l: `Actividades (${actividades.length})` },
+        ].map(t => (
           <button key={t.k} onClick={() => setTab(t.k)}
             className="px-4 py-2.5 text-sm font-medium transition-all border-b-2"
             style={tab === t.k
@@ -152,6 +175,80 @@ export default function ClienteDetalle() {
         </div>
       )}
 
+      {tab === 'cuenta-corriente' && (
+        <div className="space-y-4">
+          {/* Resumen rápido — igual que antes, ahora respaldado por el detalle abajo */}
+          <div className="rmg-card p-5">
+            {cliente.credito_activo ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Saldo pendiente</div>
+                  <div className="font-bold text-lg" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(cliente.saldo_pendiente)}</div>
+                </div>
+                <div>
+                  <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Límite de crédito</div>
+                  <div className="font-bold text-lg" style={{ color: 'var(--rmg-off)' }}>{formatCLP(cliente.limite_credito)}</div>
+                </div>
+                <div>
+                  <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Plazo</div>
+                  <div className="font-bold text-lg" style={{ color: 'var(--rmg-teal)' }}>{cliente.dias_credito} días</div>
+                </div>
+                <div>
+                  <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Facturas</div>
+                  <div className="font-bold text-lg" style={{ color: 'var(--rmg-blt)' }}>{facturas.length}</div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>Cliente al contado — sin línea de crédito activa.</p>
+            )}
+          </div>
+
+          {/* Ledger de facturas CxC de este cliente */}
+          <div className="rmg-card overflow-hidden">
+            <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
+              <span className="text-sm font-bold">Facturas por cobrar</span>
+              <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{facturas.length} factura{facturas.length !== 1 ? 's' : ''}</span>
+            </div>
+            {loadingFacturas ? (
+              <div className="p-5 space-y-2">
+                {[1, 2, 3].map(i => <div key={i} className="h-8 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.05)' }} />)}
+              </div>
+            ) : facturas.length === 0 ? (
+              <div className="py-10 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin facturas registradas para este cliente</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.02)' }}>
+                    {['N° Factura', 'Emisión', 'Vencimiento', 'Monto', 'Estado', 'Días'].map(h => (
+                      <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {facturas.map(f => {
+                    const est = ESTADO_FACTURA[f.estado] || ESTADO_FACTURA.al_dia
+                    return (
+                      <tr key={f.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
+                        <td className="px-4 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{f.numero}</td>
+                        <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{f.fecha_emision || '—'}</td>
+                        <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{f.fecha_vencimiento || '—'}</td>
+                        <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(f.monto)}</td>
+                        <td className="px-4 py-2.5">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{est.label}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs" style={{ color: f.dias_vencida > 0 && f.estado !== 'cobrada' ? 'var(--rmg-red)' : 'var(--rmg-muted)' }}>
+                          {f.estado === 'cobrada' ? '—' : (f.dias_vencida > 0 ? `${f.dias_vencida} d. vencida` : `faltan ${-f.dias_vencida} d.`)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
       {tab === 'actividades' && (
         <div className="space-y-3">
           {actividades.length === 0 && (
@@ -175,6 +272,14 @@ export default function ClienteDetalle() {
             </div>
           ))}
         </div>
+      )}
+
+      {showEdit && (
+        <ClienteModal
+          cliente={cliente}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['cliente', id] })}
+        />
       )}
     </div>
   )

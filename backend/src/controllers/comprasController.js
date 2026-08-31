@@ -80,12 +80,21 @@ const updateProveedor = (req, res) => {
 // ── CxP (Cuentas por Pagar) — se completan cuando ocController registra la factura ──
 const getCxP = (req, res) => {
   try {
-    const { estado } = req.query
+    const { estado, proveedor_id } = req.query
     let sql = 'SELECT * FROM facturas_cxp'
     const params = []
-    if (estado) { sql += ' WHERE estado = ?'; params.push(estado) }
+    const where = []
+    if (estado) { where.push('estado = ?'); params.push(estado) }
+    if (proveedor_id) { where.push('proveedor_id = ?'); params.push(proveedor_id) }
+    if (where.length) sql += ' WHERE ' + where.join(' AND ')
     sql += ' ORDER BY fecha_vencimiento ASC'
-    res.json(db.prepare(sql).all(...params))
+    const hoy = new Date()
+    const rows = db.prepare(sql).all(...params).map(f => {
+      const vence = new Date(f.fecha_vencimiento)
+      const dias_vencida = Math.round((hoy - vence) / (1000 * 60 * 60 * 24))
+      return { ...f, dias_vencida }
+    })
+    res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
