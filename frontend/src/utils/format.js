@@ -18,6 +18,20 @@ export const formatCLP = (valor, decimales = 0) => {
 }
 
 /**
+ * IVA Chile (19%). `ventas.total` (y sus agregados en Cuentas Corrientes,
+ * Dashboard, EDR) se guarda y trata como NETO en todo el sistema — estas
+ * funciones son solo de despliegue: calculan el IVA y el total con IVA a
+ * partir de ese neto, sin tocar lo que se guarda en la base de datos.
+ * @example calcularIVA(100000) → 19000
+ */
+export const calcularIVA = (neto) => Math.round((Number(neto) || 0) * 0.19)
+
+/**
+ * @example totalConIVA(100000) → 119000
+ */
+export const totalConIVA = (neto) => (Number(neto) || 0) + calcularIVA(neto)
+
+/**
  * Formatea porcentaje
  * @example formatPct(26.1) → "26,1%"
  */

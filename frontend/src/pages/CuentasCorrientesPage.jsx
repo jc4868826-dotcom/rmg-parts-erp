@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@utils/api'
-import { formatCLP, formatFecha, labelSegmento, colorSegmento } from '@utils/format'
+import { formatCLP, formatFecha, labelSegmento, colorSegmento, calcularIVA, totalConIVA } from '@utils/format'
 import {
   Search, X, Wallet, Users, ChevronDown, ChevronRight, Calendar,
   Package, Clock, Check, AlertCircle,
@@ -59,7 +59,10 @@ function VentaRow({ v }) {
           style={{ background: est.bg, color: est.color }}>
           <EstIcon size={11} />{est.label}
         </span>
-        <span className="font-bold text-sm precio-clp w-28 text-right" style={{ color: 'var(--rmg-off)' }}>{formatCLP(v.total)}</span>
+        <span className="text-right w-32">
+          <span className="block font-bold text-sm precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(v.total)} <span className="font-normal text-[10px]" style={{ color: 'var(--rmg-muted)' }}>neto</span></span>
+          <span className="block text-[10px] precio-clp" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(totalConIVA(v.total))} c/IVA</span>
+        </span>
       </button>
       {open && (
         <div className="px-4 py-3" style={{ borderTop: '1px solid rgba(15, 35, 60,0.06)' }}>
@@ -129,8 +132,9 @@ function ClienteDetalleModal({ cliente, onClose }) {
           </button>
         </div>
 
-        {/* Resumen cuenta corriente */}
-        <div className="grid grid-cols-4 gap-3 p-5 pb-0">
+        {/* Resumen cuenta corriente — montos guardados como NETO; se muestra
+            también el equivalente con IVA (19%) para no dejarlo a interpretación. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-5 pb-0">
           {[
             { label: 'Compras', value: cliente.num_compras, color: 'var(--rmg-blt)', isCurrency: false },
             { label: 'Total comprado', value: cliente.total_comprado, color: 'var(--rmg-off)' },
@@ -142,6 +146,11 @@ function ClienteDetalleModal({ cliente, onClose }) {
               <div className="font-black text-base precio-clp" style={{ color: k.color }}>
                 {k.isCurrency === false ? k.value : formatCLP(k.value)}
               </div>
+              {k.isCurrency !== false && (
+                <div className="text-[10px] precio-clp mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                  neto · {formatCLP(totalConIVA(k.value))} c/IVA
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -214,7 +223,8 @@ export default function CuentasCorrientesPage() {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — montos NETO (mismo criterio que el resto del sistema), con el
+          equivalente c/IVA (19%) como referencia debajo de cada monto. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Clientes con movimientos', value: clientes.length, color: 'var(--rmg-blt)', isCurrency: false },
@@ -227,6 +237,11 @@ export default function CuentasCorrientesPage() {
             <div className="font-black text-2xl precio-clp" style={{ fontFamily: 'Inter Tight, sans-serif', color: k.color }}>
               {isLoading ? '—' : (k.isCurrency === false ? k.value : formatCLP(k.value))}
             </div>
+            {k.isCurrency !== false && (
+              <div className="text-xs precio-clp mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                {isLoading ? '—' : `neto · ${formatCLP(totalConIVA(k.value))} c/IVA`}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -273,7 +288,7 @@ export default function CuentasCorrientesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-                {['Cliente', 'Segmento', 'N° Compras', 'Total Comprado', 'Total Pagado', 'Saldo Pendiente', 'Última Compra', ''].map(h => (
+                {['Cliente', 'Segmento', 'N° Compras', 'Total Comprado (Neto)', 'Total Pagado (Neto)', 'Saldo Pendiente (Neto)', 'Última Compra', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -304,10 +319,19 @@ export default function CuentasCorrientesPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs font-semibold precio-clp" style={{ color: 'var(--rmg-off)' }}>{c.num_compras}</td>
-                      <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total_comprado)}</td>
-                      <td className="px-4 py-3 precio-clp" style={{ color: 'var(--rmg-teal)' }}>{formatCLP(c.total_pagado)}</td>
-                      <td className="px-4 py-3 precio-clp font-semibold" style={{ color: c.saldo_pendiente > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>
-                        {formatCLP(c.saldo_pendiente)}
+                      <td className="px-4 py-3 precio-clp">
+                        <div className="font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total_comprado)}</div>
+                        <div className="text-[10px]" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(totalConIVA(c.total_comprado))} c/IVA</div>
+                      </td>
+                      <td className="px-4 py-3 precio-clp">
+                        <div style={{ color: 'var(--rmg-teal)' }}>{formatCLP(c.total_pagado)}</div>
+                        <div className="text-[10px]" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(totalConIVA(c.total_pagado))} c/IVA</div>
+                      </td>
+                      <td className="px-4 py-3 precio-clp">
+                        <div className="font-semibold" style={{ color: c.saldo_pendiente > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>
+                          {formatCLP(c.saldo_pendiente)}
+                        </div>
+                        <div className="text-[10px]" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(totalConIVA(c.saldo_pendiente))} c/IVA</div>
                       </td>
                       <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>
                         <span className="flex items-center gap-1"><Calendar size={11} />{formatFecha(c.ultima_compra)}</span>

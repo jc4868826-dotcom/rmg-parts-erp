@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
-import { formatCLP, formatFecha } from '@utils/format'
+import { formatCLP, formatFecha, calcularIVA, totalConIVA } from '@utils/format'
 import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard, User } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -152,12 +152,16 @@ export default function VentasPage() {
         <input type="month" className="rmg-input text-xs py-1.5 w-36" value={mes} onChange={e => setMes(e.target.value)} />
       </div>
 
-      {/* Cards resumen */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Cards resumen — total/ventas.total se guarda NETO en todo el sistema;
+          acá se muestra el neto y, al lado, el IVA y el total con IVA, para
+          que no haya que adivinar cuál es cuál. */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
-          { label: 'Ingresos', value: totalMes, color: 'var(--rmg-blt)' },
+          { label: 'Ingresos (Neto)', value: totalMes, color: 'var(--rmg-blt)' },
+          { label: 'IVA (19%)', value: calcularIVA(totalMes), color: 'var(--rmg-muted)' },
+          { label: 'Ingresos c/IVA', value: totalConIVA(totalMes), color: 'var(--rmg-blt)' },
           { label: 'Costo Mercadería', value: costoMes, color: 'var(--rmg-gold)' },
-          { label: 'Margen Bruto', value: margenMes, color: margenMes >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)' },
+          { label: 'Margen Bruto (Neto)', value: margenMes, color: margenMes >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)' },
         ].map(c => (
           <div key={c.label} className="rmg-card p-4">
             <div className="text-xs uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--rmg-muted)' }}>{c.label}</div>
@@ -250,11 +254,13 @@ export default function VentasPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex justify-between items-center mt-2">
+              <div className="flex justify-between items-end mt-2">
                 <button type="button" onClick={addItem} className="btn-secondary flex items-center gap-1 text-xs"><Plus size={13}/> Agregar ítem</button>
                 <div className="text-right">
                   <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Costo: {formatCLP(calcCosto(form.items))}</div>
-                  <div className="font-black text-lg" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>Total: {formatCLP(calcTotal(form.items))}</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-off)' }}>Neto: {formatCLP(calcTotal(form.items))}</div>
+                  <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>IVA (19%): {formatCLP(calcularIVA(calcTotal(form.items)))}</div>
+                  <div className="font-black text-lg" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>Total c/IVA: {formatCLP(totalConIVA(calcTotal(form.items)))}</div>
                 </div>
               </div>
             </div>
@@ -316,7 +322,7 @@ export default function VentasPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-bold">Registrar pago</h2>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{pagoModal.numero_documento || `Venta #${pagoModal.id}`} · {formatCLP(pagoModal.total)}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{pagoModal.numero_documento || `Venta #${pagoModal.id}`} · Neto {formatCLP(pagoModal.total)} · c/IVA {formatCLP(totalConIVA(pagoModal.total))}</p>
               </div>
               <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
             </div>
@@ -442,7 +448,7 @@ export default function VentasPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-6 pt-2 border-t text-sm" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
+                <div className="flex flex-wrap justify-end gap-x-5 gap-y-2 pt-2 border-t text-sm" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
                   <div className="text-right">
                     <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Costo</div>
                     <div className="font-semibold" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(v.costo_total)}</div>
@@ -452,8 +458,16 @@ export default function VentasPage() {
                     <div className="font-semibold" style={{ color: margen >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>{margen.toFixed(1)}%</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Total</div>
-                    <div className="font-black text-lg" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(v.total)}</div>
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Neto</div>
+                    <div className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(v.total)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>IVA (19%)</div>
+                    <div className="font-semibold" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(calcularIVA(v.total))}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Total c/IVA</div>
+                    <div className="font-black text-lg" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(totalConIVA(v.total))}</div>
                   </div>
                 </div>
 
@@ -476,7 +490,7 @@ export default function VentasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.015)' }}>
-                {['Fecha y hora', 'Cliente', 'Doc.', 'Emitido por', 'Total', 'Costo', 'Estado', 'Logística', 'Forma Pago', 'Acciones'].map(h => (
+                {['Fecha y hora', 'Cliente', 'Doc.', 'Emitido por', 'Neto', 'c/IVA', 'Costo', 'Estado', 'Logística', 'Forma Pago', 'Acciones'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -485,7 +499,7 @@ export default function VentasPage() {
               {isLoading
                 ? Array.from({ length: 4 }).map((_, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                      {Array.from({ length: 10 }).map((_, j) => (
+                      {Array.from({ length: 11 }).map((_, j) => (
                         <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>
                       ))}
                     </tr>
@@ -516,6 +530,7 @@ export default function VentasPage() {
                         <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>{v.numero_documento || '—'}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.vendedor_nombre || '—'}</td>
                         <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-blt)' }}>{formatCLP(v.total)}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(v.total))}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.costo_total)}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{v.estado}</span>
@@ -550,6 +565,7 @@ export default function VentasPage() {
                 <tr style={{ background: 'rgba(15, 35, 60,0.03)', borderTop: '1px solid rgba(56,182,255,0.1)' }}>
                   <td colSpan={4} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Total mes</td>
                   <td className="px-4 py-3 font-black text-base" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(totalMes)}</td>
+                  <td className="px-4 py-3 font-bold text-sm" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(totalMes))}</td>
                   <td className="px-4 py-3 font-bold text-sm" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(costoMes)}</td>
                   <td colSpan={4} />
                 </tr>
