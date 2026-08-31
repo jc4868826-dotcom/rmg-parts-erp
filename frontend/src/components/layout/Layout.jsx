@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -32,6 +32,7 @@ const NAV_SECTIONS = [
       { to: '/cotizaciones', icon: FileText,        label: 'Cotizaciones',    badge: '2' },
       { to: '/pedidos',      icon: ShoppingCart,    label: 'Pedidos',         badge: null },
       { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: null },
+      { to: '/cuentas-corrientes', icon: Wallet,    label: 'Cuentas Corrientes', badge: null },
       { to: '/facturas',     icon: BookOpen,        label: 'Imprimir Nota de Venta', badge: null },
       { to: '/cxc',          icon: DollarSign,      label: 'CxC · Cobrar',    badge: null },
     ],

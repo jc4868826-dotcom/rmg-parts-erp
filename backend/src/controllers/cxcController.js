@@ -35,6 +35,43 @@ const getFacturas = (req, res) => {
   }
 }
 
+// Cuentas corrientes de clientes — a diferencia de getFacturas (que lee de
+// facturas_cxc, tabla que solo se llena vía crearFactura manual y en la
+// práctica queda casi vacía), esto agrega directo desde `ventas`, que es el
+// registro real de cada venta emitida. Solo devuelve clientes activos que
+// tienen al menos un movimiento (venta no anulada) — nunca el listado
+// completo de clientes — y admite filtro por nombre/rut, segmento y rango
+// de fechas (aplicado sobre v.fecha, la fecha de la venta).
+const getCuentasCorrientes = (req, res) => {
+  try {
+    const { q, segmento, desde, hasta } = req.query
+    let sql = `
+      SELECT c.id as cliente_id, c.razon_social as nombre, c.rut, c.dv, c.segmento,
+             c.telefono, c.celular, c.email,
+             COUNT(v.id) as num_compras,
+             COALESCE(SUM(v.total),0) as total_comprado,
+             COALESCE(SUM(CASE WHEN v.estado='Pagado' THEN v.total ELSE 0 END),0) as total_pagado,
+             COALESCE(SUM(CASE WHEN v.estado='Pendiente' THEN v.total ELSE 0 END),0) as saldo_pendiente,
+             MAX(v.fecha) as ultima_compra
+      FROM clientes c
+      JOIN ventas v ON v.cliente_id = c.id AND v.estado != 'Anulado'
+      WHERE c.activo = 1`
+    const params = []
+    if (desde)     { sql += ' AND v.fecha >= ?';   params.push(desde) }
+    if (hasta)     { sql += ' AND v.fecha <= ?';   params.push(hasta) }
+    if (segmento)  { sql += ' AND c.segmento = ?'; params.push(segmento) }
+    if (q)         { sql += ' AND (c.razon_social LIKE ? OR c.rut LIKE ?)'; params.push(`%${q}%`, `%${q}%`) }
+    sql += ' GROUP BY c.id ORDER BY ultima_compra DESC'
+    const rows = db.prepare(sql).all(...params).map(r => ({
+      ...r,
+      rut_formateado: r.rut ? (r.dv ? `${r.rut}-${r.dv}` : r.rut) : null,
+    }))
+    res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const getResumen = (_req, res) => {
   try {
     const hoy = new Date()
@@ -89,4 +126,4 @@ const crearFactura = (req, res) => {
   }
 }
 
-module.exports = { getFacturas, getResumen, marcarCobrada, crearFactura }
+module.exports = { getFacturas, getResumen, marcarCobrada, crearFactura, getCuentasCorrientes }

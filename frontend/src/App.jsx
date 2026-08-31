@@ -37,6 +37,7 @@ import FlujoCajaPage   from '@pages/FlujoCajaPage'
 import AsistenteIAPage from '@pages/AsistenteIAPage'
 import ConfigurarLandingPage from '@pages/ConfigurarLandingPage'
 import VentasPage from '@pages/VentasPage'
+import CuentasCorrientesPage from '@pages/CuentasCorrientesPage'
 import EDRPage from '@pages/EDRPage'
 import CampanasPage from '@pages/CampanasPage'
 import BackupsPage   from '@pages/BackupsPage'
@@ -113,6 +114,7 @@ export default function App() {
               <Route path="asistente"         element={<AsistenteIAPage />} />
               <Route path="configurar-landing" element={<ConfigurarLandingPage />} />
               <Route path="ventas"            element={<VentasPage />} />
+              <Route path="cuentas-corrientes" element={<CuentasCorrientesPage />} />
               <Route path="edr"               element={<EDRPage />} />
               <Route path="campanas"          element={<CampanasPage />} />
               <Route path="backups"           element={<BackupsPage />} />
