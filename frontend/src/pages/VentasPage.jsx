@@ -1,9 +1,22 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard, User } from 'lucide-react'
 import toast from 'react-hot-toast'
+
+// La fecha de venta (v.fecha) es solo día. La hora real de emisión viene de
+// created_at (datetime completo) — se muestran juntas para responder "cuándo
+// exactamente se emitió", no solo qué día.
+function formatFechaHora(createdAt, fechaFallback) {
+  if (!createdAt) return formatFecha(fechaFallback)
+  const d = new Date(createdAt.replace(' ', 'T'))
+  if (isNaN(d.getTime())) return formatFecha(fechaFallback)
+  const fecha = d.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })
+  const hora  = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+  return `${fecha} · ${hora}`
+}
 import DocumentosPanel from '@components/DocumentosPanel'
 import ProductoSearch from '@components/ProductoSearch'
 import CantidadPresentacion from '@components/CantidadPresentacion'
@@ -32,10 +45,12 @@ const LOGISTICO_STYLE = {
 }
 
 export default function VentasPage() {
+  const navigate = useNavigate()
   const [mes, setMes]             = useState(MES_ACTUAL)
   const [showForm, setShowForm]   = useState(false)
   const [editando, setEditando]   = useState(null)
   const [form, setForm]           = useState(FORM_INIT)
+  const [detalleVenta, setDetalleVenta] = useState(null)
   const qc = useQueryClient()
 
   const { data: ventas = [], isLoading } = useQuery({
@@ -345,6 +360,107 @@ export default function VentasPage() {
         </div>
       )}
 
+      {/* Modal detalle de venta — se abre al hacer click en cualquier fila */}
+      {detalleVenta && (() => {
+        const v = detalleVenta
+        const est = ESTADO_STYLE[v.estado] || ESTADO_STYLE.Pendiente
+        const margen = v.total > 0 ? ((v.total - v.costo_total) / v.total) * 100 : 0
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+            onMouseDown={e => { if (e.target === e.currentTarget) setDetalleVenta(null) }}>
+            <div className="rmg-card w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
+              <div className="flex items-start justify-between p-5 border-b" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
+                <div>
+                  <h2 className="font-black text-lg" style={{ fontFamily: 'Inter Tight, sans-serif' }}>{v.numero_documento || `Venta #${v.id}`}</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{v.estado}</span>
+                    <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.tipo_documento}</span>
+                    {(v.cotizacion_id || v.pedido_id) && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}>
+                        {v.cotizacion_id ? 'desde cotización' : 'desde pedido'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setDetalleVenta(null)} className="p-1.5 rounded-lg hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+              </div>
+
+              <div className="p-5 space-y-5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Cliente</div>
+                    {v.cliente_id
+                      ? <button type="button" onClick={() => { setDetalleVenta(null); navigate(`/clientes/${v.cliente_id}`) }}
+                          className="font-semibold hover:underline text-left" style={{ color: 'var(--rmg-blt)' }}>
+                          {v.cliente_nombre || '—'}
+                        </button>
+                      : <div className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{v.cliente_nombre || '—'}</div>
+                    }
+                    {v.cliente_rut && <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.cliente_rut}</div>}
+                  </div>
+                  <div>
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Fecha y hora</div>
+                    <div className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{formatFechaHora(v.created_at, v.fecha)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs flex items-center gap-1" style={{ color: 'var(--rmg-muted)' }}><User size={11}/> Emitido por</div>
+                    <div className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{v.vendedor_nombre || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Forma de pago</div>
+                    <div className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{v.forma_pago || '—'}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--rmg-muted)' }}>Ítems</div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
+                        {['SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Subtotal'].map(h => (
+                          <th key={h} className="text-left px-2 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(v.items || []).map((it, idx) => (
+                        <tr key={it.id || idx} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
+                          <td className="px-2 py-2 font-mono" style={{ color: 'var(--rmg-blt)' }}>{it.sku}</td>
+                          <td className="px-2 py-2" style={{ color: 'var(--rmg-off)' }}>{it.descripcion}</td>
+                          <td className="px-2 py-2 text-right" style={{ color: 'var(--rmg-muted)' }}>{it.cantidad}</td>
+                          <td className="px-2 py-2 text-right" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(it.precio_unitario)}</td>
+                          <td className="px-2 py-2 text-right font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(it.subtotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-end gap-6 pt-2 border-t text-sm" style={{ borderColor: 'rgba(15, 35, 60,0.07)' }}>
+                  <div className="text-right">
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Costo</div>
+                    <div className="font-semibold" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(v.costo_total)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Margen</div>
+                    <div className="font-semibold" style={{ color: margen >= 0 ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>{margen.toFixed(1)}%</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Total</div>
+                    <div className="font-black text-lg" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(v.total)}</div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-1">
+                  <button onClick={() => setDocsVenta(v)} className="btn-secondary flex items-center gap-1.5 text-xs"><Paperclip size={13}/> Documentos</button>
+                  <button onClick={() => { setDetalleVenta(null); setEditando({ ...v }) }} className="btn-secondary flex items-center gap-1.5 text-xs"><Pencil size={13}/> Editar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Tabla */}
       <div className="rmg-card overflow-hidden">
         <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
@@ -354,7 +470,7 @@ export default function VentasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.015)' }}>
-                {['Fecha', 'Cliente', 'Doc.', 'Total', 'Costo', 'Estado', 'Logística', 'Forma Pago', 'Acciones'].map(h => (
+                {['Fecha y hora', 'Cliente', 'Doc.', 'Emitido por', 'Total', 'Costo', 'Estado', 'Logística', 'Forma Pago', 'Acciones'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -363,7 +479,7 @@ export default function VentasPage() {
               {isLoading
                 ? Array.from({ length: 4 }).map((_, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 10 }).map((_, j) => (
                         <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>
                       ))}
                     </tr>
@@ -371,25 +487,34 @@ export default function VentasPage() {
                 : ventas.map((v, i) => {
                     const est = ESTADO_STYLE[v.estado] || ESTADO_STYLE.Pendiente
                     return (
-                      <tr key={v.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
-                        className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(v.fecha)}</td>
+                      <tr key={v.id} onClick={() => setDetalleVenta(v)}
+                        style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)', cursor: 'pointer' }}
+                        className="hover:bg-white/[0.03] transition-colors">
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFechaHora(v.created_at, v.fecha)}</td>
                         <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>
-                          {v.cliente_nombre || '—'}
+                          {v.cliente_id
+                            ? <button type="button" onClick={e => { e.stopPropagation(); navigate(`/clientes/${v.cliente_id}`) }}
+                                className="hover:underline text-left" title="Ver ficha / cuenta corriente del cliente">
+                                {v.cliente_nombre || '—'}
+                              </button>
+                            : (v.cliente_nombre || '—')
+                          }
+                          {v.cliente_rut && <div className="text-[10px]" style={{ color: 'var(--rmg-muted)' }}>{v.cliente_rut}</div>}
                           {(v.cotizacion_id || v.pedido_id) && (
-                            <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full align-middle"
+                            <span className="mt-0.5 inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full align-middle"
                               style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}>
                               {v.cotizacion_id ? 'desde cotización' : 'desde pedido'}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>{v.numero_documento || '—'}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.vendedor_nombre || '—'}</td>
                         <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-blt)' }}>{formatCLP(v.total)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.costo_total)}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{v.estado}</span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <select className="rmg-input text-xs py-1"
                             value={v.estado_logistico || 'en_proceso'}
                             disabled={estadoLogMut.isPending}
@@ -399,7 +524,7 @@ export default function VentasPage() {
                           </select>
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.forma_pago}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1">
                             {v.estado !== 'Pagado' && (
                               <button onClick={() => { setPagoModal(v); setPago(PAGO_INIT) }} title="Registrar pago" className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
@@ -417,10 +542,10 @@ export default function VentasPage() {
             {!isLoading && ventas.length > 0 && (
               <tfoot>
                 <tr style={{ background: 'rgba(15, 35, 60,0.03)', borderTop: '1px solid rgba(56,182,255,0.1)' }}>
-                  <td colSpan={3} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Total mes</td>
+                  <td colSpan={4} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Total mes</td>
                   <td className="px-4 py-3 font-black text-base" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(totalMes)}</td>
                   <td className="px-4 py-3 font-bold text-sm" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(costoMes)}</td>
-                  <td colSpan={3} />
+                  <td colSpan={4} />
                 </tr>
               </tfoot>
             )}

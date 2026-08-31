@@ -43,10 +43,18 @@ export default function ProductoSearch({ initialQuery = '', onSelect, placeholde
     staleTime: 60_000,
   })
 
+  // El dropdown no puede simplemente heredar el ancho del input: este buscador
+  // vive casi siempre dentro de una celda de tabla angosta (p.ej. 176px), y a
+  // ese ancho la descripción del producto queda truncada e ilegible. Se fuerza
+  // un ancho mínimo y se recorta contra el borde derecho de la ventana — así
+  // el resultado siempre se puede leer completo, sin salirse de la pantalla.
+  const DROPDOWN_MIN_WIDTH = 340
   const updateRect = () => {
     if (inputRef.current) {
       const r = inputRef.current.getBoundingClientRect()
-      setRect({ top: r.bottom, left: r.left, width: r.width })
+      const width = Math.max(r.width, DROPDOWN_MIN_WIDTH)
+      const left = Math.min(r.left, window.innerWidth - width - 8)
+      setRect({ top: r.bottom, left: Math.max(left, 8), width })
     }
   }
 
@@ -123,7 +131,7 @@ export default function ProductoSearch({ initialQuery = '', onSelect, placeholde
                 <span className="font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{p.codigo_sku}</span>
                 <span className="font-bold text-xs" style={{ color: 'var(--rmg-teal)' }}>{formatCLP(p.precio_neto || p.precio_venta_neto)}</span>
               </div>
-              <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--rmg-off)' }}>{p.descripcion}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-off)' }}>{p.descripcion}</div>
               <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
                 {p.marca} · {p.presentacion}{p.unidades_por_pack > 1 ? ` (${p.unidades_por_pack} und/caja)` : ''}
               </div>

@@ -21,6 +21,12 @@ function getDateRange(periodo, desde, hasta) {
   }
 }
 
+// El dashboard usa claves de segmento en PLURAL ('talleres','flotas',...) para
+// las metas/etiquetas, pero clientes.segmento se guarda en SINGULAR ('taller',
+// 'flota',...) — sin este mapeo, todo filtro o breakdown por segmento comparaba
+// 'talleres' contra 'taller' y nunca encontraba coincidencias (quedaba en $0).
+const SEG_DB = { talleres: 'taller', flotas: 'flota', concesionarios: 'concesionario', construccion: 'construccion' }
+
 const getResumen = (req, res) => {
   try {
     const { periodo = 'mes', segmento = 'todos', desde, hasta } = req.query
@@ -43,7 +49,14 @@ const getResumen = (req, res) => {
     }
     const meta = metaMap[segmento] || metaMap.todos
 
-    // ── Ventas reales (ventas pagadas) ───────────────────
+    // ── Ventas reales ─────────────────────────────────────
+    // "Venta del período" es la venta REGISTRADA (facturada/emitida), no solo la
+    // cobrada — una vez que la Venta se crea ya generó salida de stock, así que
+    // el negocio ya se hizo. El cobro efectivo (pagada vs pendiente) se sigue
+    // por separado en "Cuentas por cobrar" y "Flujo de caja" (caja_movimientos).
+    // Se filtra por v.fecha (fecha de la venta), no v.fecha_pago (que queda NULL
+    // hasta que se registra el pago) — antes esto dejaba el período en $0 apenas
+    // había una venta pendiente de cobro.
     // "ventas.total" ya se trata como neto en el resto del sistema (EDR no le aplica IVA aparte),
     // así que total_bruto y total_neto son el mismo valor — se mantienen ambos por compatibilidad
     // con lo que ya consume el frontend del dashboard.
@@ -51,13 +64,13 @@ const getResumen = (req, res) => {
       SELECT COALESCE(SUM(v.total),0) as total_bruto,
              COALESCE(SUM(v.total),0) as total_neto
       FROM ventas v
-      WHERE v.estado = 'Pagado'
-        AND v.fecha_pago >= ? AND v.fecha_pago <= ?`
+      WHERE v.estado != 'Anulado'
+        AND v.fecha >= ? AND v.fecha <= ?`
     const ventaParams = [dateFrom, dateTo]
 
     if (segmento !== 'todos') {
       ventaSQL += ` AND EXISTS (SELECT 1 FROM clientes c WHERE c.id = v.cliente_id AND c.segmento = ?)`
-      ventaParams.push(segmento)
+      ventaParams.push(SEG_DB[segmento] || segmento)
     }
     const ventaData = db.prepare(ventaSQL).get(...ventaParams)
     const venta = ventaData.total_bruto
@@ -100,7 +113,7 @@ const getResumen = (req, res) => {
              COALESCE(SUM(vi.cantidad * COALESCE(vi.costo_unitario,0)),0) as costo_total
       FROM venta_items vi
       JOIN ventas v ON v.id = vi.venta_id
-      WHERE v.estado='Pagado' AND v.fecha_pago>=? AND v.fecha_pago<=?
+      WHERE v.estado!='Anulado' AND v.fecha>=? AND v.fecha<=?
     `).get(dateFrom, dateTo)
     const margenBrutoMonto = margenQuery.venta_neto - margenQuery.costo_total
     const margenBrutoPct   = neto > 0 ? (margenBrutoMonto / neto * 100) : 0
@@ -109,9 +122,9 @@ const getResumen = (req, res) => {
     const segs = ['talleres','flotas','concesionarios','construccion'].map(seg => {
       const r = db.prepare(`
         SELECT COALESCE(SUM(v.total),0) as actual FROM ventas v
-        WHERE v.estado='Pagado' AND v.fecha_pago>=? AND v.fecha_pago<=?
+        WHERE v.estado!='Anulado' AND v.fecha>=? AND v.fecha<=?
           AND EXISTS (SELECT 1 FROM clientes c WHERE c.id=v.cliente_id AND c.segmento=?)
-      `).get(dateFrom, dateTo, seg)
+      `).get(dateFrom, dateTo, SEG_DB[seg] || seg)
       return { segmento: seg, actual: r.actual, meta: metaMap[seg] }
     })
 
@@ -133,14 +146,14 @@ const getResumen = (req, res) => {
     // ── Lista de clientes reales ─────────────────────────
     let clientesSQL = `
       SELECT c.razon_social as nombre, c.segmento,
-             MAX(v.fecha_pago) as ultima,
+             MAX(v.fecha) as ultima,
              COALESCE(SUM(v.total),0) as monto
       FROM clientes c
-      LEFT JOIN ventas v ON v.cliente_id=c.id AND v.estado='Pagado'
-        AND v.fecha_pago>=? AND v.fecha_pago<=?
+      LEFT JOIN ventas v ON v.cliente_id=c.id AND v.estado!='Anulado'
+        AND v.fecha>=? AND v.fecha<=?
       WHERE c.activo=1`
     const clParams = [dateFrom, dateTo]
-    if (segmento !== 'todos') { clientesSQL += ' AND c.segmento=?'; clParams.push(segmento) }
+    if (segmento !== 'todos') { clientesSQL += ' AND c.segmento=?'; clParams.push(SEG_DB[segmento] || segmento) }
     clientesSQL += ' GROUP BY c.id ORDER BY monto DESC LIMIT 8'
     const clientesList = db.prepare(clientesSQL).all(...clParams)
 

@@ -62,13 +62,15 @@ const getAll = (req, res) => {
   try {
     const { mes, estado_logistico, cliente_id, cotizacion_id, pedido_id } = req.query
     let sql = `
-      SELECT v.*,
+      SELECT v.*, c.rut as cliente_rut, u.nombre as vendedor_nombre,
         (SELECT json_group_array(json_object(
           'id', i.id, 'sku', i.sku, 'descripcion', i.descripcion,
           'cantidad', i.cantidad, 'precio_unitario', i.precio_unitario,
           'costo_unitario', i.costo_unitario, 'subtotal', i.subtotal
         )) FROM venta_items i WHERE i.venta_id = v.id) as items
-      FROM ventas v`
+      FROM ventas v
+      LEFT JOIN clientes c ON c.id = v.cliente_id
+      LEFT JOIN usuarios u ON u.id = v.vendedor_id`
     const where = [], params = []
     if (mes)              { where.push('v.fecha LIKE ?');            params.push(`${mes}%`) }
     if (estado_logistico) { where.push('v.estado_logistico = ?');    params.push(estado_logistico) }
@@ -86,7 +88,13 @@ const getAll = (req, res) => {
 
 const getOne = (req, res) => {
   try {
-    const venta = db.prepare('SELECT * FROM ventas WHERE id = ?').get(req.params.id)
+    const venta = db.prepare(`
+      SELECT v.*, c.rut as cliente_rut, u.nombre as vendedor_nombre
+      FROM ventas v
+      LEFT JOIN clientes c ON c.id = v.cliente_id
+      LEFT JOIN usuarios u ON u.id = v.vendedor_id
+      WHERE v.id = ?
+    `).get(req.params.id)
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
     res.json(withItems(venta))
   } catch (err) {
