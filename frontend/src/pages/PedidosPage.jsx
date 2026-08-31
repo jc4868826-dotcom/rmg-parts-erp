@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
@@ -42,6 +43,21 @@ export default function PedidosPage() {
     queryKey: ['pedidos', estadoFiltro],
     queryFn: () => api.get('/pedidos', { params: { estado: estadoFiltro || undefined } }).then(r => r.data),
   })
+
+  // Permite llegar a un pedido específico desde otra pantalla (ej: CxC → "ver
+  // pedido de origen") enlazando a /pedidos?expand=<pedido_id> — expande esa
+  // fila y hace scroll hacia ella en cuanto la lista termina de cargar.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const expandId = searchParams.get('expand')
+    if (!expandId || isLoading) return
+    setExpandido(prev => ({ ...prev, [expandId]: true }))
+    setTimeout(() => {
+      document.getElementById(`pedido-row-${expandId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+    setSearchParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading])
 
   const { data: clientes = [] } = useQuery({
     queryKey: ['clientes'],
@@ -185,7 +201,7 @@ export default function PedidosPage() {
                   const est = ESTADO_STYLES[p.estado] || ESTADO_STYLES.pendiente
                   const expanded = expandido[p.id]
                   return [
-                    <tr key={p.id} style={{ borderBottom: expanded ? 'none' : '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
+                    <tr key={p.id} id={`pedido-row-${p.id}`} style={{ borderBottom: expanded ? 'none' : '1px solid rgba(15, 35, 60,0.04)', background: expandido[p.id] ? 'rgba(56,182,255,0.06)' : i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}
                       className="hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 w-8">
                         <button onClick={() => setExpandido(prev => ({ ...prev, [p.id]: !prev[p.id] }))}

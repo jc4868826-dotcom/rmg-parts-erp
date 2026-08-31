@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
@@ -13,6 +14,7 @@ const ESTADO_STYLES = {
 
 export default function CxPPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [filtroEstado, setFiltroEstado] = useState('')
 
   const { data: facturas = [], isLoading } = useQuery({
@@ -114,7 +116,15 @@ export default function CxPPage() {
                       style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
                       <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{f.numero}</td>
                       <td className="px-4 py-3 font-medium text-sm" style={{ color: 'var(--rmg-off)' }}>{f.proveedor}</td>
-                      <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--rmg-muted)' }}>{f.oc_numero}</td>
+                      <td className="px-4 py-3 font-mono text-xs">
+                        {f.oc_id
+                          ? <button type="button" onClick={() => navigate(`/compras?id=${f.oc_id}`)}
+                              className="hover:underline" style={{ color: 'var(--rmg-blt)' }} title="Ver orden de compra">
+                              {f.oc_numero}
+                            </button>
+                          : <span style={{ color: 'var(--rmg-muted)' }}>{f.oc_numero || '—'}</span>
+                        }
+                      </td>
                       <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(f.monto)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(f.fecha_emision)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(f.fecha_vencimiento)}</td>

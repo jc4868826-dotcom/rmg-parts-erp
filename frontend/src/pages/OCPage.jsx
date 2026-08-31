@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
 import {
@@ -298,6 +298,19 @@ export default function OCPage() {
   })
 
   const abrirDetalle = (oc) => { setOcId(oc.id); setDetalleTab('detalle'); setVista('detalle') }
+
+  // Permite abrir una OC específica desde otra pantalla (CxP, Proveedores, Bodega...)
+  // enlazando a /compras?id=<oc_id> — así el "N° OC" mencionado en cualquier pestaña
+  // se puede visualizar con un click, sin duplicar la vista de detalle en cada lugar.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const idParam = searchParams.get('id')
+    if (idParam) {
+      setOcId(idParam); setDetalleTab('detalle'); setVista('detalle')
+      setSearchParams({}, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const abrirEdicion = (oc) => {
     setForm({

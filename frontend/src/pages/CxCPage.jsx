@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
@@ -17,6 +18,7 @@ const ESTADO_STYLES = {
 
 export default function CxCPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [filtroEstado, setFiltroEstado] = useState('')
 
   const { data: facturas = [], isLoading } = useQuery({
@@ -144,7 +146,15 @@ export default function CxCPage() {
                   return (
                     <tr key={f.id}
                       style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: f.estado === 'critica' ? 'rgba(224,90,78,0.02)' : i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
-                      <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{f.numero}</td>
+                      <td className="px-4 py-3 font-mono text-xs font-bold">
+                        {f.pedido_id
+                          ? <button type="button" onClick={() => navigate(`/pedidos?expand=${f.pedido_id}`)}
+                              className="hover:underline" style={{ color: 'var(--rmg-blt)' }} title="Ver pedido de origen">
+                              {f.numero}
+                            </button>
+                          : <span style={{ color: 'var(--rmg-blt)' }}>{f.numero}</span>
+                        }
+                      </td>
                       <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>{f.cliente}</td>
                       <td className="px-4 py-3">
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
