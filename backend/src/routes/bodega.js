@@ -7,5 +7,6 @@ router.post('/ajuste',               c.ajustarStock)
 // este endpoint no lo usa ningún frontend y quedaba como una tercera implementación
 // de la misma recepción, con su propia forma de nombrar el estado.
 router.get('/producto/:codigo',      c.getStockConMovimientos)
+router.delete('/movimientos/:id',    c.eliminarMovimiento)
 
 module.exports = router

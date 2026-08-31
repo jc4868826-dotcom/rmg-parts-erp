@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP } from '@utils/format'
-import { Warehouse, ArrowDown, ArrowUp, RefreshCw, Plus, X, AlertTriangle, Package, Search, Download, ChevronRight, Wallet, TrendingUp } from 'lucide-react'
+import { Warehouse, ArrowDown, ArrowUp, RefreshCw, Plus, X, AlertTriangle, Package, Search, Download, ChevronRight, Wallet, TrendingUp, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
 import ProductoSearch from '@components/ProductoSearch'
@@ -27,6 +28,7 @@ const ALERTAS_LABEL = {
 
 export default function BodegasPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [tab, setTab] = useState('stock')
   const [tipoFiltro, setTipoFiltro] = useState('')
   const [showAjuste, setShowAjuste] = useState(false)
@@ -64,6 +66,23 @@ export default function BodegasPage() {
     },
     onError: () => toast.error('Error al ajustar stock'),
   })
+
+  const eliminarMovMut = useMutation({
+    mutationFn: (id) => api.delete(`/bodega/movimientos/${id}`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries(['movimientos-stock'])
+      qc.invalidateQueries(['movimientos-producto'])
+      qc.invalidateQueries(['inventario'])
+      toast.success('Movimiento eliminado — stock corregido')
+    },
+    onError: () => toast.error('Error al eliminar el movimiento'),
+  })
+
+  const handleEliminarMov = (m) => {
+    const detalle = `${m.codigo} · ${TIPO_STYLES[m.tipo]?.label || m.tipo} · ${m.cantidad > 0 ? '+' : ''}${m.cantidad} und${m.motivo ? ` · ${m.motivo}` : ''}`
+    if (!window.confirm(`¿Eliminar este movimiento?\n\n${detalle}\n\nEsto corregirá el stock actual del SKU revirtiendo el efecto de este movimiento. No se puede deshacer.`)) return
+    eliminarMovMut.mutate(m.id)
+  }
 
   // Stock real (unidades) por SKU, según el sistema — se usa para calcular la
   // diferencia cuando el ajuste es "fijar stock exacto" (conteo físico).
@@ -460,7 +479,7 @@ export default function BodegasPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
-                      {['Fecha','Tipo','Cantidad','Stock ant.','Stock nuevo','Motivo/Referencia'].map(h => (
+                      {['Fecha','Tipo','Cantidad','Stock ant.','Stock nuevo','Motivo/Referencia',''].map(h => (
                         <th key={h} className="text-left px-3 py-2 uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                       ))}
                     </tr>
@@ -483,7 +502,22 @@ export default function BodegasPage() {
                           </td>
                           <td className="px-3 py-2 text-center" style={{ color: 'var(--rmg-muted)' }}>{m.stock_anterior}</td>
                           <td className="px-3 py-2 text-center font-semibold" style={{ color: 'var(--rmg-off)' }}>{m.stock_nuevo}</td>
-                          <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{m.motivo}{m.referencia ? ` · ${m.referencia}` : ''}</td>
+                          <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>
+                            {m.motivo}
+                            {m.tipo === 'entrada' && m.referencia && (
+                              <> · <button type="button" onClick={(e) => { e.stopPropagation(); navigate(`/compras?id=${m.referencia}`) }}
+                                  className="hover:underline font-semibold" style={{ color: 'var(--rmg-blt)' }} title="Ver orden de compra">
+                                  Ver OC →
+                                </button></>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleEliminarMov(m) }}
+                              title="Eliminar movimiento (corrige el stock)" disabled={eliminarMovMut.isPending}
+                              className="hover:opacity-70 transition-opacity disabled:opacity-30" style={{ color: 'var(--rmg-red)' }}>
+                              <Trash2 size={13}/>
+                            </button>
+                          </td>
                         </tr>
                       )
                     })}
@@ -513,7 +547,7 @@ export default function BodegasPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-                  {['Fecha','Tipo','Código','Descripción','Cantidad','Stock ant.','Stock nuevo','Motivo'].map(h => (
+                  {['Fecha','Tipo','Código','Descripción','Cantidad','Stock ant.','Stock nuevo','Motivo',''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
                 </tr>
@@ -547,7 +581,22 @@ export default function BodegasPage() {
                           </td>
                           <td className="px-4 py-3 text-xs text-center" style={{ color: 'var(--rmg-muted)' }}>{m.stock_anterior}</td>
                           <td className="px-4 py-3 text-xs text-center font-semibold" style={{ color: 'var(--rmg-off)' }}>{m.stock_nuevo}</td>
-                          <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{m.motivo}{m.referencia ? ` · ${m.referencia}` : ''}</td>
+                          <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                            {m.motivo}
+                            {m.tipo === 'entrada' && m.referencia && (
+                              <> · <button type="button" onClick={() => navigate(`/compras?id=${m.referencia}`)}
+                                  className="hover:underline font-semibold" style={{ color: 'var(--rmg-blt)' }} title="Ver orden de compra">
+                                  Ver OC →
+                                </button></>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button type="button" onClick={() => handleEliminarMov(m)}
+                              title="Eliminar movimiento (corrige el stock)" disabled={eliminarMovMut.isPending}
+                              className="hover:opacity-70 transition-opacity disabled:opacity-30" style={{ color: 'var(--rmg-red)' }}>
+                              <Trash2 size={14}/>
+                            </button>
+                          </td>
                         </tr>
                       )
                     })

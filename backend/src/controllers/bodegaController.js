@@ -88,6 +88,35 @@ const recibirOC = (req, res) => {
   }
 }
 
+// Elimina un movimiento del historial y revierte su efecto neto sobre el
+// stock actual del SKU (stock_nuevo - stock_anterior de ESE movimiento),
+// sin importar el orden en que haya ocurrido respecto a otros movimientos
+// posteriores. Pensado para limpiar movimientos de prueba / error cargados
+// antes de que existiera la conversión caja→unidad, sin tener que recalcular
+// manualmente el stock desde cero.
+const eliminarMovimiento = (req, res) => {
+  try {
+    const mov = db.prepare('SELECT * FROM movimientos_stock WHERE id = ?').get(req.params.id)
+    if (!mov) return res.status(404).json({ error: 'Movimiento no encontrado' })
+
+    const delta = (mov.stock_nuevo ?? 0) - (mov.stock_anterior ?? 0)
+    const p = getLp(mov.codigo)
+    let stock_actual = null
+
+    db.transaction(() => {
+      if (p) {
+        stock_actual = p.stock_actual - delta
+        db.prepare('UPDATE lista_precios SET stock_actual = ? WHERE codigo_sku = ?').run(stock_actual, mov.codigo)
+      }
+      db.prepare('DELETE FROM movimientos_stock WHERE id = ?').run(mov.id)
+    })()
+
+    res.json({ ok: true, id: mov.id, codigo: mov.codigo, stock_actual })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const getStockConMovimientos = (req, res) => {
   try {
     const codigo = req.params.codigo
@@ -104,4 +133,4 @@ const getStockConMovimientos = (req, res) => {
   }
 }
 
-module.exports = { getMovimientos, ajustarStock, recibirOC, getStockConMovimientos }
+module.exports = { getMovimientos, ajustarStock, recibirOC, getStockConMovimientos, eliminarMovimiento }
