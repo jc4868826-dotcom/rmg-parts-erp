@@ -23,6 +23,18 @@ function _getCatalogoIng() {
   return _catalogoIngCache
 }
 
+// ─── Autenticación simple servidor-a-servidor para el bot Cata ──────────
+// Distinto de las rutas públicas de arriba: estas dos rutas exponen precio real
+// y datos de pedidos, así que exigen una clave compartida en el header x-api-key
+// (variable de entorno CATA_API_KEY). No es login de usuario — es solo para que
+// el bot de WhatsApp (server.js de "negocio sistemas") pueda consultarlas.
+function _requireCataApiKey(req, res, next) {
+  const configured = process.env.CATA_API_KEY
+  if (!configured) return res.status(503).json({ error: 'CATA_API_KEY no configurada en el servidor' })
+  if (req.headers['x-api-key'] !== configured) return res.status(401).json({ error: 'No autorizado' })
+  next()
+}
+
 // POST /api/public/cotizaciones
 router.post('/cotizaciones', createCotizacionLanding)
 
@@ -188,6 +200,79 @@ router.get('/landing/banners', (_req, res) => {
       ORDER BY orden ASC, id ASC
     `).all()
     res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/public/catalogo-precios — como /catalogo pero CON precio neto real.
+// Protegida con x-api-key porque a diferencia del catálogo institucional (sin precio,
+// pensado para que cualquiera lo vea en la landing), este endpoint sí expone el precio
+// mayorista real de RMG Parts — solo debe consumirlo el bot Cata, servidor a servidor.
+// Dedupe por SKU quedándose con el precio más bajo (mismo criterio que ya usa
+// "Artículos únicos" en ListaPreciosPage.jsx y el asistente ZARA).
+router.get('/catalogo-precios', _requireCataApiKey, (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT codigo_sku, descripcion, producto_generico, marca, proveedor,
+             categoria, presentacion, tipo_envase, segmento_negocio, rubro, aplicacion,
+             unidades_por_pack, precio_venta_neto
+      FROM lista_precios
+      WHERE codigo_sku IS NOT NULL AND precio_venta_neto IS NOT NULL
+      ORDER BY proveedor, categoria
+    `).all()
+    const minPorSku = new Map()
+    for (const r of rows) {
+      const prev = minPorSku.get(r.codigo_sku)
+      if (!prev || (r.precio_venta_neto || 0) < (prev.precio_venta_neto || 0)) minPorSku.set(r.codigo_sku, r)
+    }
+    res.json(Array.from(minPorSku.values()))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/public/pedido-estado?rut=...&numero=...   o   ?rut=...&nombre=...
+// Para que Cata pueda responder "¿me despacharon mi pedido?" incluso si el cliente
+// escribe desde un número de WhatsApp distinto al que tiene registrado. Exige el RUT
+// MÁS (número de pedido O nombre) — nunca alcanza con uno solo, para que no cualquiera
+// pueda consultar el pedido de otra persona adivinando un RUT. Devuelve solo estado y
+// fechas de despacho — nunca montos ni el resto de los pedidos del cliente.
+router.get('/pedido-estado', _requireCataApiKey, (req, res) => {
+  try {
+    const { rut, numero, nombre } = req.query
+    if (!rut || (!numero && !nombre)) {
+      return res.status(400).json({ error: 'Se requiere rut y (numero de pedido o nombre completo)' })
+    }
+    const norm = (s) => String(s || '').toUpperCase().replace(/[.\-]/g, '')
+    const rutNorm = norm(rut)
+
+    const clientes = db.prepare(`SELECT id, razon_social, contacto_nombre, rut FROM clientes WHERE activo = 1 AND rut IS NOT NULL`).all()
+    const cliente = clientes.find(c => norm(c.rut) === rutNorm)
+    if (!cliente) return res.json({ encontrado: false, mensaje: 'No encontramos un cliente con ese RUT' })
+
+    let pedido = null
+    if (numero) {
+      pedido = db.prepare(`SELECT * FROM pedidos WHERE cliente_id = ? AND numero = ?`).get(cliente.id, String(numero).trim())
+    }
+    if (!pedido && nombre) {
+      const nombreNorm = String(nombre).trim().toLowerCase()
+      const nombreCliente = String(cliente.contacto_nombre || cliente.razon_social || '').trim().toLowerCase()
+      const coincide = nombreNorm.length > 2 && nombreCliente && (nombreCliente.includes(nombreNorm) || nombreNorm.includes(nombreCliente))
+      if (coincide) {
+        pedido = db.prepare(`SELECT * FROM pedidos WHERE cliente_id = ? ORDER BY created_at DESC LIMIT 1`).get(cliente.id)
+      }
+    }
+    if (!pedido) return res.json({ encontrado: false, mensaje: 'No encontramos un pedido que coincida con esos datos' })
+
+    res.json({
+      encontrado: true,
+      numero: pedido.numero,
+      estado: pedido.estado,
+      fecha_entrega_programada: pedido.fecha_entrega_programada || null,
+      fecha_entrega_real: pedido.fecha_entrega_real || null,
+      guia_despacho: pedido.guia_despacho || null,
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
