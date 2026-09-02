@@ -25,6 +25,11 @@ import CantidadPresentacion from '@components/CantidadPresentacion'
 const MES_ACTUAL = new Date().toISOString().slice(0, 7)
 const HOY = new Date().toISOString().split('T')[0]
 const ESTADOS = ['Pendiente', 'Pagado', 'Anulado']
+// Solo para el modal Editar — incluye el intermedio de validación, ya que el
+// gerente puede necesitar corregir el estado a mano (además de vía "Adjuntar
+// comprobante" / Aprobar-Rechazar en la fila). Al crear una venta nueva no
+// tiene sentido partir ya "en validación", por eso ESTADOS arriba no lo incluye.
+const ESTADOS_EDITABLES = ['Pendiente', 'en_validacion_pago', 'Pagado', 'Anulado']
 const ESTADOS_LOGISTICOS = ['en_proceso', 'despachada', 'recibida_cliente']
 const FORMAS_PAGO = ['Contado', 'Transferencia', 'Crédito 30 días', 'Crédito 60 días', 'Cheque']
 const TIPOS_DOC = ['Nota de Venta', 'Factura', 'Boleta']
@@ -40,9 +45,9 @@ const ESTADO_STYLE = {
   en_validacion_pago: { color: 'var(--rmg-blue)', bg: 'rgba(56,182,255,0.12)' },
 }
 
-// El comprobante deja la venta "en_validacion_pago" — este intermedio no es
-// seleccionable a mano en los formularios (ESTADOS arriba), solo se llega vía
-// "Adjuntar comprobante" y solo un gerente lo saca de ahí (Aprobar/Rechazar).
+// El comprobante deja la venta "en_validacion_pago" — normalmente se llega vía
+// "Adjuntar comprobante" y solo un gerente lo saca de ahí (Aprobar/Rechazar),
+// pero también es seleccionable a mano desde el modal Editar (ESTADOS_EDITABLES).
 const ESTADO_LABEL = {
   Pendiente: 'Pendiente', Pagado: 'Pagado', Anulado: 'Anulado',
   en_validacion_pago: 'En validación de pago',
@@ -335,7 +340,7 @@ export default function VentasPage() {
                 <input type="date" className="rmg-input" value={editando.fecha} onChange={e => setEditando(p => ({ ...p, fecha: e.target.value }))} /></div>
               <div><label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Estado</label>
                 <select className="rmg-input" value={editando.estado} onChange={e => setEditando(p => ({ ...p, estado: e.target.value }))}>
-                  {ESTADOS.map(s => <option key={s}>{s}</option>)}
+                  {ESTADOS_EDITABLES.map(s => <option key={s} value={s}>{ESTADO_LABEL[s] || s}</option>)}
                 </select></div>
               <div className="col-span-2"><label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cliente</label>
                 <input className="rmg-input" value={editando.cliente_nombre || ''} onChange={e => setEditando(p => ({ ...p, cliente_nombre: e.target.value }))} /></div>

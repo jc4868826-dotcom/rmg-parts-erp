@@ -285,11 +285,36 @@ const update = (req, res) => {
         }
       }
 
+      const estadoFinal = estado ?? venta.estado
+      const fechaPagoFinal = fecha_pago ?? venta.fecha_pago
+
       db.prepare(`UPDATE ventas SET fecha=?, cliente_nombre=?, cliente_id=?, numero_documento=?, tipo_documento=?, total=?, costo_total=?, estado=?, forma_pago=?, fecha_pago=?, notas=?, direccion_entrega=? WHERE id=?`)
         .run(fecha ?? venta.fecha, cliente_nombre ?? venta.cliente_nombre, cliente_id ?? venta.cliente_id,
              numero_documento ?? venta.numero_documento, tipo_documento ?? venta.tipo_documento, total, costo_total,
-             estado ?? venta.estado, forma_pago ?? venta.forma_pago, fecha_pago ?? venta.fecha_pago,
+             estadoFinal, forma_pago ?? venta.forma_pago, fechaPagoFinal,
              notas ?? venta.notas, direccion_entrega ?? venta.direccion_entrega, req.params.id)
+
+      // Este modal de edición permite cambiar `estado` a mano, sin pasar por
+      // registrarPago()/validarPago() — sin esto, una venta marcada "Pagado"
+      // desde acá nunca generaba su ingreso en caja_movimientos y desaparecía
+      // del Flujo de Caja. Sincroniza el mismo movimiento que esas rutas
+      // generarían, y lo revierte si el estado se corrige hacia atrás.
+      if (estado && estado !== venta.estado) {
+        const movimientoExistente = db.prepare(
+          "SELECT id FROM caja_movimientos WHERE origen_tabla = 'ventas' AND origen_id = ? AND estado = 'confirmado'"
+        ).get(venta.id)
+
+        if (estadoFinal === 'Pagado' && !movimientoExistente) {
+          db.prepare(`
+            INSERT INTO caja_movimientos
+              (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
+            VALUES ('ingreso','venta',?,?,?,?,'confirmado','ventas',?,NULL)
+          `).run(`Pago ${venta.numero_documento} — ${venta.cliente_nombre || ''} (editado)`,
+                 totalConIva(total), hoy(), fechaPagoFinal || hoy(), venta.id)
+        } else if (estadoFinal !== 'Pagado' && movimientoExistente) {
+          db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla = 'ventas' AND origen_id = ? AND estado = 'confirmado'").run(venta.id)
+        }
+      }
     })
     doUpdate()
 
