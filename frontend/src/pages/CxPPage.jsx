@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
-import { CreditCard, Check, Clock, AlertTriangle } from 'lucide-react'
+import { CreditCard, Check, Clock, AlertTriangle, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ESTADO_STYLES = {
@@ -30,6 +30,25 @@ export default function CxPPage() {
     },
     onError: () => toast.error('Error al registrar pago'),
   })
+
+  // Para corregir facturas mal cargadas (dato de prueba, sin OC real, etc.).
+  // Si ya está "pagada" el backend exige gerente/administrador, porque borrarla
+  // también revierte el egreso que generó en el Flujo de Caja.
+  const eliminarMut = useMutation({
+    mutationFn: (id) => api.delete(`/compras/cxp/${id}`).then(r => r.data),
+    onSuccess: (data) => {
+      qc.invalidateQueries(['cxp'])
+      toast.success(`Factura ${data.eliminada?.numero || ''} eliminada`)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar'),
+  })
+
+  const handleEliminar = (f) => {
+    const msg = f.estado === 'pagada'
+      ? `"${f.numero}" ya está pagada — eliminarla también quita el egreso del Flujo de Caja. ¿Eliminar de todas formas?`
+      : `¿Eliminar la factura "${f.numero}"?`
+    if (confirm(msg)) eliminarMut.mutate(f.id)
+  }
 
   const hoy = new Date()
   const facturasConDias = facturas.map(f => {
@@ -142,13 +161,20 @@ export default function CxPPage() {
                         {f.fecha_pago ? formatFecha(f.fecha_pago) : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        {f.estado !== 'pagada' && (
-                          <button onClick={() => pagarMut.mutate(f.id)}
-                            className="text-xs px-2 py-1 rounded-lg font-medium transition-all"
-                            style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
-                            Pagar
+                        <div className="flex items-center gap-1.5">
+                          {f.estado !== 'pagada' && (
+                            <button onClick={() => pagarMut.mutate(f.id)}
+                              className="text-xs px-2 py-1 rounded-lg font-medium transition-all"
+                              style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
+                              Pagar
+                            </button>
+                          )}
+                          <button onClick={() => handleEliminar(f)} disabled={eliminarMut.isPending}
+                            title="Eliminar factura" className="p-1.5 rounded hover:bg-red-500/10 disabled:opacity-50"
+                            style={{ color: 'var(--rmg-red)' }}>
+                            <Trash2 size={13}/>
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   )

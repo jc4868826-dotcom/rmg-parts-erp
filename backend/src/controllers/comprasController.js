@@ -121,8 +121,13 @@ const deleteCxP = (req, res) => {
   try {
     const f = db.prepare('SELECT * FROM facturas_cxp WHERE id = ?').get(req.params.id)
     if (!f) return res.status(404).json({ error: 'Factura CxP no encontrada' })
-    if (f.estado === 'pagada') {
-      return res.status(400).json({ error: 'No se puede eliminar una factura ya pagada' })
+    // Una factura pendiente la puede borrar cualquiera (es solo corregir un
+    // dato antes de pagar). Una ya "pagada" ya generó un egreso real en
+    // caja_movimientos, así que borrarla (lo que también revierte ese egreso,
+    // abajo) queda reservado a gerente/administrador — para limpiar registros
+    // erróneos, no para que cualquiera borre historial de pagos reales.
+    if (f.estado === 'pagada' && !['gerente', 'administrador'].includes(req.user?.rol)) {
+      return res.status(403).json({ error: 'Solo gerente o administrador pueden eliminar una factura ya pagada' })
     }
     db.prepare('DELETE FROM caja_movimientos WHERE origen_tabla = ? AND origen_id = ?')
       .run('facturas_cxp', req.params.id)
