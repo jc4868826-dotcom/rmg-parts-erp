@@ -96,28 +96,32 @@ function buildMovimientos(filtroDesde, filtroHasta) {
   return movs
 }
 
-// Calcula saldo acumulado desde el inicio de los datos hasta fecha_corte
+// Calcula el saldo de caja acumulado DESDE EL INICIO del sistema hasta fecha_corte
+// (todos los ingresos confirmados menos todos los gastos y egresos confirmados).
+//
+// Fuente única de verdad: caja_movimientos. Esa tabla ya recibe automáticamente
+// cada movimiento real de caja apenas ocurre — ventas.registrarPago() inserta el
+// ingreso al marcar una venta 'Pagado', gastos.create() inserta el egreso al
+// crear un gasto 'pagado', y lo mismo para OC pagadas / CxP pagadas / CxC
+// cobradas — además de los movimientos manuales.
+//
+// ANTES este cálculo TAMBIÉN sumaba de nuevo, directo desde la tabla `ventas`
+// (estado='Pagado') y restaba de nuevo, directo desde la tabla `gastos`
+// (estado='pagado') — pero esos mismos montos YA estaban contados a través de
+// caja_movimientos, así que cada venta pagada y cada gasto pagado se contaban
+// DOS VECES. Eso es lo que descuadraba el "Saldo Actual (HOY)" en el dashboard.
+// La corrección es dejar caja_movimientos como única fuente.
 function calcSaldoAlCorte(fechaCorte) {
-  let saldo = 0
-  // Ventas confirmadas hasta el corte
   try {
-    const vDate = `CASE forma_pago WHEN 'Crédito 30 días' THEN date(fecha,'+30 days') WHEN 'Crédito 60 días' THEN date(fecha,'+60 days') WHEN 'Crédito 90 días' THEN date(fecha,'+90 days') ELSE fecha END`
-    const r = db.prepare(`SELECT COALESCE(SUM(total),0) as s FROM ventas WHERE estado='Pagado' AND (${vDate}) <= ?`).get(fechaCorte)
-    saldo += r.s
-  } catch (_) {}
-  // Egresos confirmados hasta el corte (caja_movimientos confirmados)
-  try {
-    const r = db.prepare(`SELECT COALESCE(SUM(CASE tipo WHEN 'ingreso' THEN monto ELSE -monto END),0) as s FROM caja_movimientos WHERE estado='confirmado' AND fecha_pago <= ?`).get(fechaCorte)
-    saldo += r.s
-  } catch (_) {}
-  // Gastos pagados hasta el corte
-  try {
-    const gcols = db.prepare('PRAGMA table_info(gastos)').all().map(c => c.name)
-    const gDate = gcols.includes('fecha_vencimiento') ? 'COALESCE(fecha_vencimiento,fecha)' : 'fecha'
-    const r = db.prepare(`SELECT COALESCE(SUM(monto),0) as s FROM gastos WHERE estado='pagado' AND ${gDate} <= ?`).get(fechaCorte)
-    saldo -= r.s
-  } catch (_) {}
-  return saldo
+    const r = db.prepare(`
+      SELECT COALESCE(SUM(CASE tipo WHEN 'ingreso' THEN monto ELSE -monto END),0) as s
+      FROM caja_movimientos
+      WHERE estado = 'confirmado' AND fecha_pago <= ?
+    `).get(fechaCorte)
+    return r.s
+  } catch (_) {
+    return 0
+  }
 }
 
 const getMovimientos = (req, res) => {
