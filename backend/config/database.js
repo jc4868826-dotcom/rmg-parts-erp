@@ -2195,6 +2195,40 @@ function runMigrations() {
     console.log('✅ Migración venta_validacion_pago_v1 — estado en_validacion_pago + documentos_adjuntos.categoria + ventas.motivo_rechazo_pago')
   }
 
+  // Migration caja_movimientos_venta_iva_v1 — corrige los ingresos de venta ya
+  // registrados en caja_movimientos. ventas.total se guarda NETO en todo el
+  // sistema, pero registrarPago()/validarPago() (ventasController.js) insertaban
+  // ese neto directo como el monto del ingreso en caja — cuando el dinero que
+  // realmente entra a la cuenta corriente al pagarse una venta es el total CON
+  // IVA (19%). Eso hacía que el Flujo de Caja (y el "Saldo Actual") subestimara
+  // cada ingreso de venta en un 19%. Se corrige cada fila ya insertada, y solo
+  // si su monto todavía coincide con el neto (venta.total) — así no se toca dos
+  // veces si esta migración ya corrió, ni se pisa un monto editado a mano después.
+  const mCajaVentaIva = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('caja_movimientos_venta_iva_v1')
+  if (!mCajaVentaIva) {
+    try {
+      const rows = db.prepare(`
+        SELECT cm.id AS cm_id, cm.monto AS cm_monto, v.total AS venta_total
+        FROM caja_movimientos cm
+        JOIN ventas v ON v.id = CAST(cm.origen_id AS INTEGER)
+        WHERE cm.origen_tabla = 'ventas'
+      `).all()
+      const upd = db.prepare('UPDATE caja_movimientos SET monto = ? WHERE id = ?')
+      let corregidos = 0
+      for (const r of rows) {
+        if (Math.round(r.cm_monto) === Math.round(r.venta_total)) {
+          const totalConIva = r.venta_total + Math.round(r.venta_total * 0.19)
+          upd.run(totalConIva, r.cm_id)
+          corregidos++
+        }
+      }
+      console.log(`✅ Migración caja_movimientos_venta_iva_v1 — ${corregidos}/${rows.length} ingresos de venta corregidos a total con IVA`)
+    } catch (e) {
+      console.warn('⚠️ caja_movimientos_venta_iva_v1 error:', e.message)
+    }
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('caja_movimientos_venta_iva_v1')
+  }
+
   // Migration stock_pack_correction_v1 — corrige stock_actual de SKU con presentación
   // en pack (unidades_por_pack > 1) que quedó cargado en CAJAS antes de que existiera
   // la conversión caja→unidad (CantidadPresentacion). Ej: un SKU de caja de 12 con

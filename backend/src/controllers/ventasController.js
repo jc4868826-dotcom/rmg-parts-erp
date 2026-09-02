@@ -13,6 +13,15 @@ const ESTADOS_LOGISTICOS = ['en_proceso', 'despachada', 'recibida_cliente']
 
 const hoy = () => new Date().toISOString().split('T')[0]
 
+// venta.total se guarda NETO en todo el sistema (ver utils/format.js del
+// frontend) — pero el dinero que realmente entra a la cuenta corriente al
+// pagar una venta es el total CON IVA (19%), no el neto. El Flujo de Caja
+// debe reflejar el movimiento de caja real, así que cualquier ingreso que se
+// registre en caja_movimientos a partir de una venta usa este monto, nunca
+// venta.total directo. Misma fórmula que calcularIVA()/totalConIVA() del
+// frontend, para que el número calce en toda la app.
+const totalConIva = (neto) => (Number(neto) || 0) + Math.round((Number(neto) || 0) * 0.19)
+
 // El costo (costo_unidad_neto) guardado en lista_precios para un SKU en
 // caja/pack es el precio de LA CAJA completa, no de la unidad — igual que se
 // corrigió en inventarioController.getStock() y listaPrecios.js /buscar. Acá
@@ -326,7 +335,7 @@ const registrarPago = (req, res) => {
         INSERT INTO caja_movimientos
           (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
         VALUES ('ingreso','venta',?,?,?,?,'confirmado','ventas',?,?)
-      `).run(descripcion, venta.total,
+      `).run(descripcion, totalConIva(venta.total),
              hoy(), fecha_pago || hoy(), venta.id, cuenta_bancaria || null)
     })
     doPago()
@@ -397,7 +406,7 @@ const validarPago = (req, res) => {
           INSERT INTO caja_movimientos
             (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
           VALUES ('ingreso','venta',?,?,?,?,'confirmado','ventas',?,?)
-        `).run(`Pago validado ${venta.numero_documento} — ${venta.cliente_nombre || ''}`, venta.total,
+        `).run(`Pago validado ${venta.numero_documento} — ${venta.cliente_nombre || ''}`, totalConIva(venta.total),
                hoy(), fechaFinal, venta.id, cuenta_bancaria || null)
       })
       doAprobar()

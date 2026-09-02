@@ -14,12 +14,17 @@ function buildMovimientos(filtroDesde, filtroHasta) {
       WHEN 'Crédito 60 días' THEN date(fecha,'+60 days')
       WHEN 'Crédito 90 días' THEN date(fecha,'+90 days')
       ELSE fecha END`
+    // venta.total se guarda NETO en todo el sistema — el monto que realmente
+    // entra a caja al pagarse es el total CON IVA (19%). Misma fórmula que
+    // ventasController usa al registrar el ingreso real en caja_movimientos
+    // (total + round(total*0.19)), para que el Flujo de Caja coincida con lo
+    // que efectivamente se acredita en la cuenta corriente.
     movs.push(...db.prepare(`
       SELECT id AS origen_id, id,
         'ventas' AS origen_tabla, 'Venta' AS origen_label,
         'ingreso' AS tipo, 'Venta' AS categoria,
         COALESCE(cliente_nombre,'Cliente') || ' · ' || COALESCE(numero_documento,'') AS descripcion,
-        total AS monto,
+        (total + ROUND(total * 0.19)) AS monto,
         (${vDate}) AS fecha_pago,
         CASE WHEN estado='Pagado' THEN 'confirmado' ELSE 'proyectado' END AS estado,
         NULL AS cuenta_bancaria
