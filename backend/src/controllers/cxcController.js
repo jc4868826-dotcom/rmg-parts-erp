@@ -126,4 +126,53 @@ const crearFactura = (req, res) => {
   }
 }
 
-module.exports = { getFacturas, getResumen, marcarCobrada, crearFactura, getCuentasCorrientes }
+// Ventas que requieren atención de CxC: las que están "en_validacion_pago"
+// (comprobante subido, esperando que un gerente confirme que el depósito
+// realmente llegó a la cuenta corriente — ver ventasController.validarPago) y
+// las ventas a crédito aún no pagadas. A diferencia de getFacturas (que lee
+// facturas_cxc, tabla que solo se llena manual y en la práctica queda casi
+// vacía), esto lee directo de `ventas`, el registro real de cada venta.
+const getVentasPendientes = (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT id, numero_documento, cliente_nombre, cliente_id, total, fecha, forma_pago, estado, motivo_rechazo_pago
+      FROM ventas
+      WHERE estado = 'en_validacion_pago'
+         OR (estado = 'Pendiente' AND forma_pago LIKE 'Crédito%')
+      ORDER BY CASE estado WHEN 'en_validacion_pago' THEN 0 ELSE 1 END, fecha ASC
+    `).all()
+
+    const getComprobante = db.prepare(`
+      SELECT id, nombre_archivo FROM documentos_adjuntos
+      WHERE entidad = 'venta' AND entidad_id = ? AND categoria = 'comprobante_pago'
+      ORDER BY created_at DESC LIMIT 1
+    `)
+
+    const hoy = new Date()
+    const out = rows.map(v => {
+      const diasCredito = v.forma_pago === 'Crédito 30 días' ? 30
+        : v.forma_pago === 'Crédito 60 días' ? 60
+        : v.forma_pago === 'Crédito 90 días' ? 90
+        : null
+      let fecha_vencimiento = null, dias_vencida = null
+      if (diasCredito) {
+        const venc = new Date(v.fecha)
+        venc.setDate(venc.getDate() + diasCredito)
+        fecha_vencimiento = venc.toISOString().split('T')[0]
+        dias_vencida = Math.round((hoy - venc) / (1000 * 60 * 60 * 24))
+      }
+      const tipo = v.estado === 'en_validacion_pago' ? 'validacion' : 'credito'
+      const comprobante = tipo === 'validacion' ? getComprobante.get(v.id) : null
+      return {
+        ...v, tipo, fecha_vencimiento, dias_vencida,
+        comprobante_id: comprobante?.id || null,
+        comprobante_nombre: comprobante?.nombre_archivo || null,
+      }
+    })
+    res.json(out)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = { getFacturas, getResumen, marcarCobrada, crearFactura, getCuentasCorrientes, getVentasPendientes }

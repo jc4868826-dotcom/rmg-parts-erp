@@ -34,7 +34,7 @@ const NAV_SECTIONS = [
       { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: null },
       { to: '/cuentas-corrientes', icon: Wallet,    label: 'Cuentas Corrientes', badge: null },
       { to: '/facturas',     icon: BookOpen,        label: 'Imprimir Nota de Venta', badge: null },
-      { to: '/cxc',          icon: DollarSign,      label: 'CxC · Cobrar',    badge: null },
+      { to: '/cxc',          icon: DollarSign,      label: 'CxC · Cobrar',    badge: 'cxc' },
     ],
   },
   {
@@ -43,7 +43,7 @@ const NAV_SECTIONS = [
       { to: '/proveedores',  icon: Building2,       label: 'Proveedores',     badge: null },
       { to: '/compras',      icon: Truck,           label: 'Órdenes de Compra', badge: 'oc' },
       { to: '/bodegas',      icon: Warehouse,       label: 'Bodegas',         badge: null },
-      { to: '/cxp',          icon: CreditCard,      label: 'CxP · Pagar',     badge: null },
+      { to: '/cxp',          icon: CreditCard,      label: 'CxP · Pagar',     badge: 'cxp' },
     ],
   },
   {
@@ -116,6 +116,28 @@ export default function Layout() {
   const ocBadgeGerente = (ocPendientes?.pendAuth ?? 0) + (ocPendientes?.recibidasBodega ?? 0)
   const ocBadgeTotal   = ocBadgeAdmin + ocBadgeGerente
 
+  // Facturas de proveedor (OC facturadas y otras) en espera de pago — CxP.
+  // Se registran solas apenas una OC llega a "facturada" (ocController.registrarFactura),
+  // así que este conteo es justamente "cuántas OC u otras cuentas están pendientes de
+  // que alguien autorice/registre el pago", visible de un vistazo en el sidebar.
+  const { data: cxpPendientes } = useQuery({
+    queryKey: ['cxp-pendientes-badge'],
+    queryFn: () => api.get('/compras/cxp', { params: { estado: 'pendiente' } }).then(r => r.data),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const cxpBadgeCount = Array.isArray(cxpPendientes) ? cxpPendientes.length : null
+
+  // Ventas en validación de pago (comprobante subido, esperando gerente) + ventas
+  // a crédito pendientes de cobro — todas las que hoy le importan a CxC.
+  const { data: cxcPendientes } = useQuery({
+    queryKey: ['cxc-pendientes-badge'],
+    queryFn: () => api.get('/cxc/ventas').then(r => r.data),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const cxcBadgeCount = Array.isArray(cxcPendientes) ? cxcPendientes.length : null
+
   const handleLogout = async () => {
     await logout()
     navigate('/login')
@@ -170,6 +192,10 @@ export default function Layout() {
                     ? (prospeccionCount !== null ? String(prospeccionCount) : null)
                     : badge === 'oc'
                     ? (ocBadgeTotal > 0 ? String(ocBadgeTotal) : null)
+                    : badge === 'cxp'
+                    ? (cxpBadgeCount > 0 ? String(cxpBadgeCount) : null)
+                    : badge === 'cxc'
+                    ? (cxcBadgeCount > 0 ? String(cxcBadgeCount) : null)
                     : badge
                   return (
                   <NavLink

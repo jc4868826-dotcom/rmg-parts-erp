@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
+import { useAuth } from '@context/AuthContext'
 import { formatCLP, formatFecha } from '@utils/format'
-import { DollarSign, AlertTriangle, Check, Clock } from 'lucide-react'
+import { DollarSign, AlertTriangle, Check, Clock, X, Paperclip, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const SEG_COLOR = { taller: 'var(--rmg-blt)', flota: 'var(--rmg-teal)', concesionario: 'var(--rmg-purple)', construccion: 'var(--rmg-gold)' }
@@ -16,9 +17,16 @@ const ESTADO_STYLES = {
   cobrada: { label: 'Cobrada',  color: 'rgba(90,143,168,0.8)', bg: 'rgba(90,143,168,0.1)', icon: Check },
 }
 
+const TIPO_VENTA_STYLES = {
+  validacion: { label: 'En validación de pago', color: 'var(--rmg-blue)', bg: 'rgba(56,182,255,0.12)' },
+  credito:    { label: 'Venta a crédito',       color: 'var(--rmg-purple)', bg: 'rgba(130,90,224,0.12)' },
+}
+
 export default function CxCPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const esGerente = user?.rol === 'gerente'
   const [filtroEstado, setFiltroEstado] = useState('')
 
   const { data: facturas = [], isLoading } = useQuery({
@@ -30,6 +38,45 @@ export default function CxCPage() {
     queryKey: ['cxc-resumen'],
     queryFn: () => api.get('/cxc/resumen').then(r => r.data),
   })
+
+  // Ventas en validación de pago (comprobante subido, esperando confirmación de
+  // gerente) + ventas a crédito aún no pagadas — el "por gestionar" real de CxC,
+  // a diferencia de la tabla de facturas manuales de más abajo.
+  const { data: ventasPendientes = [], isLoading: isLoadingVentas } = useQuery({
+    queryKey: ['cxc-ventas'],
+    queryFn: () => api.get('/cxc/ventas').then(r => r.data),
+  })
+
+  const invalidateVentas = () => {
+    qc.invalidateQueries({ queryKey: ['cxc-ventas'] })
+    qc.invalidateQueries({ queryKey: ['cxc-pendientes-badge'] })
+    qc.invalidateQueries({ queryKey: ['ventas'] })
+  }
+
+  const aprobarMut = useMutation({
+    mutationFn: (id) => api.post(`/ventas/${id}/validar-pago`, { aprobado: true }).then(r => r.data),
+    onSuccess: () => { invalidateVentas(); toast.success('Pago validado — ingreso confirmado en flujo de caja') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al validar el pago'),
+  })
+
+  const rechazarMut = useMutation({
+    mutationFn: ({ id, motivo }) => api.post(`/ventas/${id}/validar-pago`, { aprobado: false, motivo }).then(r => r.data),
+    onSuccess: () => { invalidateVentas(); toast.success('Pago rechazado — la venta vuelve a Pendiente') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al rechazar el pago'),
+  })
+
+  const cobrarCreditoMut = useMutation({
+    mutationFn: (id) => api.post(`/ventas/${id}/pago`, {}).then(r => r.data),
+    onSuccess: () => { invalidateVentas(); toast.success('Venta a crédito marcada como pagada') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar el pago'),
+  })
+
+  const handleRechazar = (id) => {
+    const motivo = window.prompt('Motivo del rechazo (ej: el depósito no aparece en la cuenta corriente):')
+    if (motivo === null) return
+    if (!motivo.trim()) { toast.error('Indica un motivo'); return }
+    rechazarMut.mutate({ id, motivo: motivo.trim() })
+  }
 
   const cobrarMut = useMutation({
     mutationFn: (id) => api.post(`/cxc/${id}/cobrar`).then(r => r.data),
@@ -57,6 +104,100 @@ export default function CxCPage() {
       <div>
         <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Cuentas por Cobrar</h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>CxC · Facturas emitidas · Estado de cobro</p>
+      </div>
+
+      {/* Ventas por gestionar — validación de pago + créditos pendientes */}
+      <div className="rmg-card overflow-hidden">
+        <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(56,182,255,0.08)' }}>
+          <span className="font-bold text-sm flex items-center gap-1.5"><ShieldCheck size={14} style={{ color: 'var(--rmg-blue)' }}/> Ventas por gestionar</span>
+          <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{ventasPendientes.length} pendientes</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
+                {['Doc.', 'Cliente', 'Tipo', 'Monto', 'Fecha', 'Vencimiento', 'Comprobante', ''].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingVentas
+                ? Array.from({ length: 2 }).map((_, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
+                      {Array.from({ length: 8 }).map((_, j) => (
+                        <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
+                      ))}
+                    </tr>
+                  ))
+                : ventasPendientes.map((v, i) => {
+                    const tipoStyle = TIPO_VENTA_STYLES[v.tipo] || TIPO_VENTA_STYLES.credito
+                    return (
+                      <tr key={v.id}
+                        style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
+                        <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{v.numero_documento || `#${v.id}`}</td>
+                        <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>{v.cliente_nombre || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: tipoStyle.bg, color: tipoStyle.color }}>
+                            {tipoStyle.label}
+                          </span>
+                          {v.motivo_rechazo_pago && (
+                            <div className="text-[10px] mt-1" style={{ color: 'var(--rmg-red)' }} title={v.motivo_rechazo_pago}>
+                              Último rechazo: {v.motivo_rechazo_pago}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(v.total)}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(v.fecha)}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: v.dias_vencida > 0 ? 'var(--rmg-red)' : 'var(--rmg-muted)' }}>
+                          {v.fecha_vencimiento ? `${formatFecha(v.fecha_vencimiento)}${v.dias_vencida > 0 ? ` (+${v.dias_vencida}d)` : ''}` : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {v.comprobante_id ? (
+                            <a href={`${api.defaults.baseURL}/documentos/archivo/${v.comprobante_id}`} target="_blank" rel="noopener noreferrer"
+                              className="text-xs flex items-center gap-1 hover:underline" style={{ color: 'var(--rmg-blue)' }}>
+                              <Paperclip size={11}/> Ver
+                            </a>
+                          ) : <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {v.tipo === 'validacion' ? (
+                            esGerente ? (
+                              <div className="flex gap-1">
+                                <button onClick={() => aprobarMut.mutate(v.id)} disabled={aprobarMut.isPending}
+                                  className="text-xs px-2 py-1 rounded-lg font-medium transition-all flex items-center gap-1 disabled:opacity-50"
+                                  style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
+                                  <Check size={12}/> Aprobar
+                                </button>
+                                <button onClick={() => handleRechazar(v.id)} disabled={rechazarMut.isPending}
+                                  className="text-xs px-2 py-1 rounded-lg font-medium transition-all flex items-center gap-1 disabled:opacity-50"
+                                  style={{ background: 'rgba(224,90,78,0.12)', color: 'var(--rmg-red)' }}>
+                                  <X size={12}/> Rechazar
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Esperando gerente</span>
+                            )
+                          ) : (
+                            <button onClick={() => cobrarCreditoMut.mutate(v.id)} disabled={cobrarCreditoMut.isPending}
+                              className="text-xs px-2 py-1 rounded-lg font-medium transition-all"
+                              style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
+                              Marcar cobrada
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })
+              }
+            </tbody>
+          </table>
+        </div>
+        {!isLoadingVentas && ventasPendientes.length === 0 && (
+          <div className="py-8 text-center text-sm" style={{ color: 'var(--rmg-muted)' }}>
+            Sin ventas en validación de pago ni créditos pendientes
+          </div>
+        )}
       </div>
 
       {/* KPIs */}

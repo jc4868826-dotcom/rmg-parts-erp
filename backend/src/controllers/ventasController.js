@@ -7,6 +7,7 @@
  * editables libremente por un usuario autorizado, no un avance forzado.
  */
 const { db, uuidv4 } = require('../../config/database')
+const { tipoDeDocumento } = require('../middleware/documentos')
 
 const ESTADOS_LOGISTICOS = ['en_proceso', 'despachada', 'recibida_cliente']
 
@@ -335,6 +336,83 @@ const registrarPago = (req, res) => {
   }
 }
 
+// Sube el comprobante de depósito/transferencia y deja la venta "en_validacion_pago" —
+// a diferencia de registrarPago() (arriba), ACÁ el pago todavía no se da por hecho:
+// no se toca caja_movimientos hasta que un gerente confirme con validarPago() que
+// el depósito realmente entró a la cuenta corriente. Pensado para Transferencia/
+// Cheque, donde el vendedor recibe un comprobante pero no puede verificar el banco.
+const subirComprobantePago = (req, res) => {
+  try {
+    const venta = db.prepare('SELECT * FROM ventas WHERE id = ?').get(req.params.id)
+    if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
+    if (venta.estado !== 'Pendiente') {
+      return res.status(400).json({ error: `Solo se puede adjuntar comprobante desde estado Pendiente (estado actual: ${venta.estado})` })
+    }
+    if (!req.file) return res.status(400).json({ error: 'Adjunta el comprobante (PDF o imagen)' })
+
+    const tipo = tipoDeDocumento(req.file.mimetype)
+    if (!tipo) return res.status(400).json({ error: 'Formato no permitido — usa PDF, Excel o imagen' })
+
+    const doSubir = db.transaction(() => {
+      db.prepare(`INSERT INTO documentos_adjuntos
+        (id, entidad, entidad_id, tipo, categoria, nombre_archivo, mime_type, contenido_base64, subido_por)
+        VALUES (?,?,?,?,?,?,?,?,?)`)
+        .run(uuidv4(), 'venta', venta.id, tipo, 'comprobante_pago', req.file.originalname, req.file.mimetype,
+          req.file.buffer.toString('base64'), req.user?.id || null)
+
+      db.prepare("UPDATE ventas SET estado = 'en_validacion_pago', motivo_rechazo_pago = NULL WHERE id = ?").run(venta.id)
+    })
+    doSubir()
+
+    res.json(withItems(db.prepare('SELECT * FROM ventas WHERE id = ?').get(venta.id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// Solo gerente: valida (o rechaza) el comprobante subido. Aprobar es el único
+// momento en que la venta genera su ingreso en caja_movimientos — antes de esto
+// no impacta el flujo de caja, aunque ya tenga comprobante adjunto. Rechazar
+// devuelve la venta a "Pendiente" con el motivo, para que el vendedor corrija
+// o vuelva a subir el comprobante correcto.
+const validarPago = (req, res) => {
+  try {
+    const venta = db.prepare('SELECT * FROM ventas WHERE id = ?').get(req.params.id)
+    if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
+    if (venta.estado !== 'en_validacion_pago') {
+      return res.status(400).json({ error: `La venta no está en validación de pago (estado actual: ${venta.estado})` })
+    }
+    if (req.user?.rol !== 'gerente') {
+      return res.status(403).json({ error: 'Solo gerente puede validar el pago' })
+    }
+
+    const { aprobado, motivo, cuenta_bancaria, fecha_pago } = req.body
+    const fechaFinal = fecha_pago || hoy()
+
+    if (aprobado) {
+      const doAprobar = db.transaction(() => {
+        db.prepare("UPDATE ventas SET estado = 'Pagado', fecha_pago = ?, motivo_rechazo_pago = NULL WHERE id = ?")
+          .run(fechaFinal, venta.id)
+        db.prepare(`
+          INSERT INTO caja_movimientos
+            (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
+          VALUES ('ingreso','venta',?,?,?,?,'confirmado','ventas',?,?)
+        `).run(`Pago validado ${venta.numero_documento} — ${venta.cliente_nombre || ''}`, venta.total,
+               hoy(), fechaFinal, venta.id, cuenta_bancaria || null)
+      })
+      doAprobar()
+    } else {
+      if (!motivo || !motivo.trim()) return res.status(400).json({ error: 'Indica el motivo del rechazo' })
+      db.prepare("UPDATE ventas SET estado = 'Pendiente', motivo_rechazo_pago = ? WHERE id = ?")
+        .run(motivo.trim(), venta.id)
+    }
+
+    res.json(withItems(db.prepare('SELECT * FROM ventas WHERE id = ?').get(venta.id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const remove = (req, res) => {
   try {
     const venta = db.prepare('SELECT * FROM ventas WHERE id = ?').get(req.params.id)
@@ -358,5 +436,5 @@ const remove = (req, res) => {
 module.exports = {
   ESTADOS_LOGISTICOS,
   getAll, getOne, create, createFromCotizacion, createFromPedido,
-  update, cambiarEstadoLogistico, registrarPago, remove,
+  update, cambiarEstadoLogistico, registrarPago, subirComprobantePago, validarPago, remove,
 }

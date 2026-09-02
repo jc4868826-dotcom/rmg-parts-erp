@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
+import { useAuth } from '@context/AuthContext'
 import { formatCLP, formatFecha, calcularIVA, totalConIVA } from '@utils/format'
-import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard, User } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard, User, Upload, Check, ShieldAlert } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 // La fecha de venta (v.fecha) es solo día. La hora real de emisión viene de
@@ -36,6 +37,15 @@ const ESTADO_STYLE = {
   Pagado:  { color: 'var(--rmg-teal)',   bg: 'rgba(45,201,138,0.12)' },
   Pendiente:{ color: 'var(--rmg-gold)',   bg: 'rgba(244,162,60,0.12)' },
   Anulado: { color: 'var(--rmg-red)',    bg: 'rgba(224,90,78,0.12)'  },
+  en_validacion_pago: { color: 'var(--rmg-blue)', bg: 'rgba(56,182,255,0.12)' },
+}
+
+// El comprobante deja la venta "en_validacion_pago" — este intermedio no es
+// seleccionable a mano en los formularios (ESTADOS arriba), solo se llega vía
+// "Adjuntar comprobante" y solo un gerente lo saca de ahí (Aprobar/Rechazar).
+const ESTADO_LABEL = {
+  Pendiente: 'Pendiente', Pagado: 'Pagado', Anulado: 'Anulado',
+  en_validacion_pago: 'En validación de pago',
 }
 
 const LOGISTICO_STYLE = {
@@ -46,6 +56,8 @@ const LOGISTICO_STYLE = {
 
 export default function VentasPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const esGerente = user?.rol === 'gerente'
   const [mes, setMes]             = useState(MES_ACTUAL)
   const [showForm, setShowForm]   = useState(false)
   const [editando, setEditando]   = useState(null)
@@ -97,6 +109,45 @@ export default function VentasPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar pago'),
   })
 
+  // Comprobante de depósito/transferencia — deja la venta "en_validacion_pago",
+  // NO la marca Pagado directo (a diferencia de pagoMut arriba). Un input file
+  // oculto compartido, disparado por venta vía subiendoParaId.
+  const fileInputRef = useRef(null)
+  const [subiendoParaId, setSubiendoParaId] = useState(null)
+
+  const comprobanteMut = useMutation({
+    mutationFn: ({ id, file }) => {
+      const fd = new FormData()
+      fd.append('archivo', file)
+      return api.post(`/ventas/${id}/comprobante`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data)
+    },
+    onSuccess: () => { invalidate(); toast.success('Comprobante subido — venta en validación de pago') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al subir comprobante'),
+  })
+
+  const abrirSelectorComprobante = (id) => { setSubiendoParaId(id); fileInputRef.current?.click() }
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !subiendoParaId) return
+    comprobanteMut.mutate({ id: subiendoParaId, file })
+  }
+
+  // Solo gerente: confirma que el depósito realmente llegó (genera el ingreso
+  // en caja) o rechaza (la venta vuelve a Pendiente para reintentar).
+  const validarMut = useMutation({
+    mutationFn: ({ id, aprobado, motivo }) => api.post(`/ventas/${id}/validar-pago`, { aprobado, motivo }).then(r => r.data),
+    onSuccess: (_, vars) => { invalidate(); toast.success(vars.aprobado ? 'Pago validado — ingreso confirmado en flujo de caja' : 'Pago rechazado') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al validar el pago'),
+  })
+
+  const handleRechazarPago = (id) => {
+    const motivo = window.prompt('Motivo del rechazo (ej: el depósito no aparece en la cuenta corriente):')
+    if (motivo === null) return
+    if (!motivo.trim()) { toast.error('Indica un motivo'); return }
+    validarMut.mutate({ id, aprobado: false, motivo: motivo.trim() })
+  }
+
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { ...ITEM_INIT }] }))
   const removeItem = (idx) => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))
   const updateItem = (idx, field, val) => setForm(f => {
@@ -136,6 +187,7 @@ export default function VentasPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      <input ref={fileInputRef} type="file" accept="application/pdf,image/*,.xls,.xlsx,.csv" style={{ display: 'none' }} onChange={handleFileChange} />
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Ventas</h1>
@@ -382,7 +434,7 @@ export default function VentasPage() {
                 <div>
                   <h2 className="font-black text-lg" style={{ fontFamily: 'Inter Tight, sans-serif' }}>{v.numero_documento || `Venta #${v.id}`}</h2>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{v.estado}</span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{ESTADO_LABEL[v.estado] || v.estado}</span>
                     <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.tipo_documento}</span>
                     {(v.cotizacion_id || v.pedido_id) && (
                       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}>
@@ -533,7 +585,10 @@ export default function VentasPage() {
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(v.total))}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.costo_total)}</td>
                         <td className="px-4 py-3">
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{v.estado}</span>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{ESTADO_LABEL[v.estado] || v.estado}</span>
+                          {v.motivo_rechazo_pago && v.estado === 'Pendiente' && (
+                            <div className="text-[10px] mt-1" style={{ color: 'var(--rmg-red)' }} title={v.motivo_rechazo_pago}>Pago rechazado: {v.motivo_rechazo_pago}</div>
+                          )}
                         </td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <select className="rmg-input text-xs py-1"
@@ -546,9 +601,22 @@ export default function VentasPage() {
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.forma_pago}</td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                          <div className="flex gap-1">
-                            {v.estado !== 'Pagado' && (
-                              <button onClick={() => { setPagoModal(v); setPago(PAGO_INIT) }} title="Registrar pago" className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
+                          <div className="flex gap-1 items-center">
+                            {v.estado === 'Pendiente' && (
+                              <>
+                                <button onClick={() => { setPagoModal(v); setPago(PAGO_INIT) }} title="Registrar pago (directo — sin validación)" className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
+                                <button onClick={() => abrirSelectorComprobante(v.id)} disabled={comprobanteMut.isPending} title="Adjuntar comprobante de depósito/transferencia" className="p-1.5 rounded hover:bg-black/5 disabled:opacity-50" style={{ color: 'var(--rmg-blue)' }}><Upload size={13}/></button>
+                              </>
+                            )}
+                            {v.estado === 'en_validacion_pago' && (
+                              esGerente ? (
+                                <>
+                                  <button onClick={() => validarMut.mutate({ id: v.id, aprobado: true })} disabled={validarMut.isPending} title="Aprobar — confirmar que el depósito llegó" className="p-1.5 rounded hover:bg-black/5 disabled:opacity-50" style={{ color: 'var(--rmg-teal)' }}><Check size={13}/></button>
+                                  <button onClick={() => handleRechazarPago(v.id)} disabled={validarMut.isPending} title="Rechazar pago" className="p-1.5 rounded hover:bg-red-500/10 disabled:opacity-50" style={{ color: 'var(--rmg-red)' }}><X size={13}/></button>
+                                </>
+                              ) : (
+                                <span title="Esperando validación de gerente" className="p-1.5" style={{ color: 'var(--rmg-blue)' }}><ShieldAlert size={13}/></span>
+                              )
                             )}
                             <button onClick={() => setDocsVenta(v)} title="Documentos" className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-blue)' }}><Paperclip size={13}/></button>
                             <button onClick={() => setEditando({ ...v })} className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>

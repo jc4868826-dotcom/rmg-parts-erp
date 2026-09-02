@@ -2173,6 +2173,28 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('oc_cuenta_bancaria_v1')
   }
 
+  // Migration venta_validacion_pago_v1 — agrega el estado intermedio "en_validacion_pago"
+  // al flujo de Ventas: al subir el comprobante de depósito/transferencia, la venta
+  // pasa a este estado (no a "Pagado" directo) y recién cuando un gerente confirma
+  // que el depósito realmente entró a la cuenta corriente se marca "Pagado" y se
+  // genera el ingreso en caja_movimientos — igual que ya ocurre con OC → factura →
+  // pago_autorizado. `ventas.estado` no tiene CHECK, así que el nuevo valor no
+  // requiere alterar la columna, pero sí se agregan:
+  //  - documentos_adjuntos.categoria: para poder distinguir el comprobante de pago
+  //    de cualquier otro documento adjunto a la venta (antes todos eran genéricos).
+  //  - ventas.motivo_rechazo_pago: motivo que deja el gerente si rechaza el pago
+  //    (el depósito no llegó, comprobante inválido, etc.), igual que
+  //    ordenes_compra.motivo_rechazo.
+  const mVentaValidacion = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('venta_validacion_pago_v1')
+  if (!mVentaValidacion) {
+    const docCols = db.prepare('PRAGMA table_info(documentos_adjuntos)').all().map(c => c.name)
+    if (!docCols.includes('categoria')) db.exec('ALTER TABLE documentos_adjuntos ADD COLUMN categoria TEXT')
+    const vColsValidacion = db.prepare('PRAGMA table_info(ventas)').all().map(c => c.name)
+    if (!vColsValidacion.includes('motivo_rechazo_pago')) db.exec('ALTER TABLE ventas ADD COLUMN motivo_rechazo_pago TEXT')
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('venta_validacion_pago_v1')
+    console.log('✅ Migración venta_validacion_pago_v1 — estado en_validacion_pago + documentos_adjuntos.categoria + ventas.motivo_rechazo_pago')
+  }
+
   // Migration stock_pack_correction_v1 — corrige stock_actual de SKU con presentación
   // en pack (unidades_por_pack > 1) que quedó cargado en CAJAS antes de que existiera
   // la conversión caja→unidad (CantidadPresentacion). Ej: un SKU de caja de 12 con
