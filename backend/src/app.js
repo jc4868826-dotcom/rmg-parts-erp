@@ -107,6 +107,7 @@ app.use('/api/oc',                  require('./routes/oc'));          // Órdene
 app.use('/api/backup',              require('./routes/backup'));      // Backup automático y manual
 app.use('/api/asesor',              require('./routes/asesor'));      // Asesor de Productos Vistony
 app.use('/api/usuarios',            require('./routes/usuarios'));    // Usuarios y perfiles (gerente/administrador)
+app.use('/api/chilecompra',         require('./routes/chilecompra')); // Asistente de oportunidades ChileCompra
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {
@@ -135,6 +136,7 @@ app.use((err, req, res, next) => {
 // ─── Start ──────────────────────────────────────────────────
 initDB()
   .then(() => {
+    require('./jobs/chilecompraCron').iniciarCron();
     app.listen(PORT, () => {
       console.log(`
   ╔══════════════════════════════════════╗

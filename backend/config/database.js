@@ -2329,6 +2329,86 @@ function runMigrations() {
     }
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('venta_items_costo_pack_v1')
   }
+
+  // Migration chilecompra_v1 — Asistente de oportunidades ChileCompra/Mercado Público.
+  // Pipeline: detectada → analizando → descartada | preparando_postulacion →
+  // publicada → adjudicada | no_adjudicada. Los anexos (PDF/Excel) se guardan
+  // reutilizando el módulo genérico documentos_adjuntos (entidad
+  // 'oportunidad_chilecompra'), no una tabla propia.
+  const mChileCompra = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('chilecompra_v1')
+  if (!mChileCompra) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS oportunidades_chilecompra (
+        id TEXT PRIMARY KEY,
+        fuente TEXT NOT NULL,                 -- 'compra_agil' | 'licitacion'
+        codigo_externo TEXT NOT NULL,         -- ID del proceso en Mercado Público
+        nombre TEXT,
+        descripcion TEXT,
+        organismo_nombre TEXT,
+        organismo_rut TEXT,
+        region TEXT,
+        comuna TEXT,
+        direccion_entrega TEXT,
+        fecha_publicacion TEXT,
+        fecha_cierre TEXT,
+        presupuesto_estimado INTEGER,
+        url_portal TEXT,
+        estado TEXT NOT NULL DEFAULT 'detectada',
+        motivo_descarte TEXT,
+        resumen_ia TEXT,                      -- resumen en texto libre generado al leer los anexos
+        plazo_entrega TEXT,
+        tiene_exigencia_garantia INTEGER,      -- 0/1/NULL — NULL = aún no se leyeron los anexos
+        tiene_exigencia_sds INTEGER,
+        tiene_demandas INTEGER,
+        cobertura_catalogo_pct REAL,          -- % de ítems solicitados que RMG puede cubrir
+        score_rentabilidad REAL,
+        score_seguridad REAL,
+        score_total REAL,
+        adjudicado_a TEXT,
+        adjudicado_monto INTEGER,
+        detalle_raw_json TEXT,                -- payload crudo de la API al momento de la ingesta (auditoría/futuro)
+        detectada_por TEXT DEFAULT 'cron',    -- 'cron' | 'manual'
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(fuente, codigo_externo)
+      );
+      CREATE INDEX IF NOT EXISTS idx_chc_estado ON oportunidades_chilecompra(estado);
+      CREATE INDEX IF NOT EXISTS idx_chc_fecha_cierre ON oportunidades_chilecompra(fecha_cierre);
+      CREATE INDEX IF NOT EXISTS idx_chc_region ON oportunidades_chilecompra(region);
+
+      CREATE TABLE IF NOT EXISTS oportunidad_chilecompra_items (
+        id TEXT PRIMARY KEY,
+        oportunidad_id TEXT NOT NULL REFERENCES oportunidades_chilecompra(id) ON DELETE CASCADE,
+        descripcion_solicitada TEXT,
+        cantidad REAL,
+        unidad TEXT,
+        especificacion_tecnica TEXT,
+        precio_unitario_referencial INTEGER,
+        sku_match TEXT,                       -- codigo_sku de lista_precios, si hubo match
+        match_confianza REAL,                 -- 0-1, qué tan segura fue la IA del match
+        costo_unitario_rmg INTEGER,
+        precio_venta_sugerido INTEGER,
+        margen_pct_estimado REAL,
+        cubierto INTEGER DEFAULT 0            -- 0/1 — ¿RMG tiene SKU para este ítem?
+      );
+      CREATE INDEX IF NOT EXISTS idx_chc_items_oportunidad ON oportunidad_chilecompra_items(oportunidad_id);
+
+      CREATE TABLE IF NOT EXISTS oportunidad_chilecompra_historial (
+        id TEXT PRIMARY KEY,
+        oportunidad_id TEXT NOT NULL REFERENCES oportunidades_chilecompra(id) ON DELETE CASCADE,
+        tipo_evento TEXT NOT NULL,
+        usuario_id TEXT,
+        usuario_nombre TEXT,
+        estado_anterior TEXT,
+        estado_nuevo TEXT,
+        detalle TEXT,
+        fecha_evento TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_chc_historial_oportunidad ON oportunidad_chilecompra_historial(oportunidad_id);
+    `)
+    db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('chilecompra_v1')
+    console.log('✅ Migración chilecompra_v1 — tablas del asistente de oportunidades ChileCompra creadas')
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

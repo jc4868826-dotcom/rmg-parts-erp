@@ -7,7 +7,7 @@
 const { db, uuidv4 } = require('../../config/database')
 const { tipoDeDocumento } = require('../middleware/documentos')
 
-const ENTIDADES = ['cotizacion', 'pedido', 'venta', 'orden_compra']
+const ENTIDADES = ['cotizacion', 'pedido', 'venta', 'orden_compra', 'oportunidad_chilecompra']
 
 const publicRow = (d) => {
   if (!d) return d
