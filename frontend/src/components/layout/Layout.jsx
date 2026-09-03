@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -35,6 +35,12 @@ const NAV_SECTIONS = [
       { to: '/cuentas-corrientes', icon: Wallet,    label: 'Cuentas Corrientes', badge: null },
       { to: '/facturas',     icon: BookOpen,        label: 'Imprimir Nota de Venta', badge: null },
       { to: '/cxc',          icon: DollarSign,      label: 'CxC · Cobrar',    badge: 'cxc' },
+    ],
+  },
+  {
+    label: 'Canal Estatal',
+    items: [
+      { to: '/chilecompra',  icon: Landmark,        label: 'ChileCompra',     badge: 'chilecompra' },
     ],
   },
   {
@@ -138,6 +144,16 @@ export default function Layout() {
   })
   const cxcBadgeCount = Array.isArray(cxcPendientes) ? cxcPendientes.length : null
 
+  // Oportunidades ChileCompra recién detectadas por el cron/análisis manual,
+  // aún sin revisar — lo que le importa ver al usuario de un vistazo.
+  const { data: chcDetectadas } = useQuery({
+    queryKey: ['chilecompra-detectadas-badge'],
+    queryFn: () => api.get('/chilecompra', { params: { estado: 'detectada' } }).then(r => r.data),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const chcBadgeCount = Array.isArray(chcDetectadas) ? chcDetectadas.length : null
+
   const handleLogout = async () => {
     await logout()
     navigate('/login')
@@ -196,6 +212,8 @@ export default function Layout() {
                     ? (cxpBadgeCount > 0 ? String(cxpBadgeCount) : null)
                     : badge === 'cxc'
                     ? (cxcBadgeCount > 0 ? String(cxcBadgeCount) : null)
+                    : badge === 'chilecompra'
+                    ? (chcBadgeCount > 0 ? String(chcBadgeCount) : null)
                     : badge
                   return (
                   <NavLink
