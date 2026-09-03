@@ -21,19 +21,42 @@ function yaExiste(fuente, codigoExterno) {
   ).get(fuente, codigoExterno)
 }
 
+/**
+ * El endpoint licitaciones.json?fecha=X de ChileCompra NO devuelve solo lo publicado
+ * ese día — devuelve cualquier licitación con actividad relevante ese día (publicación,
+ * adjudicación, cambios de estado, etc.). Por eso, sin este filtro, "hacer análisis"
+ * traía licitaciones ya cerradas/adjudicadas hace meses (solo tuvieron un evento hoy).
+ * Solo nos interesan las que siguen realmente abiertas para ofertar.
+ */
+function siguAbierta(detalle) {
+  const cierre = detalle.Fechas?.FechaCierre || detalle.FechaCierre
+  if (!cierre) return false
+  if (new Date(cierre).getTime() <= Date.now()) return false
+  const estado = (detalle.Estado || '').toLowerCase()
+  if (['adjudicada', 'desierta', 'revocada', 'suspendida', 'cerrada'].some(e => estado.includes(e))) return false
+  return true
+}
+
+/**
+ * Los campos reales de organismo/región/comuna vienen anidados bajo "Comprador" en la
+ * respuesta de la API — no en la raíz del objeto (verificado contra la API real).
+ */
 function insertarDetectada({ fuente, codigoExterno, detalle }) {
+  const comprador = detalle.Comprador || {}
   const id = uuidv4()
   db.prepare(`
     INSERT INTO oportunidades_chilecompra
       (id, fuente, codigo_externo, nombre, organismo_nombre, organismo_rut, region, comuna,
-       fecha_publicacion, fecha_cierre, presupuesto_estimado, url_portal, estado,
-       detalle_raw_json, detectada_por)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'detectada', ?, ?)
+       direccion_entrega, fecha_publicacion, fecha_cierre, presupuesto_estimado, url_portal,
+       estado, detalle_raw_json, detectada_por)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'detectada', ?, ?)
   `).run(
     id, fuente, codigoExterno,
-    detalle.Nombre || null, detalle.NombreOrganismo || null, detalle.CodigoOrganismo || null,
-    detalle.RegionUnidad || detalle.Region || null, detalle.CiudadUnidad || null,
-    detalle.FechaPublicacion || null, detalle.FechaCierre || detalle.Fechas?.FechaCierre || null,
+    detalle.Nombre || null, comprador.NombreOrganismo || null, comprador.RutUnidad || null,
+    comprador.RegionUnidad?.trim() || null, comprador.ComunaUnidad || null,
+    comprador.DireccionUnidad || detalle.DireccionEntrega || null,
+    detalle.Fechas?.FechaPublicacion || detalle.FechaPublicacion || null,
+    detalle.Fechas?.FechaCierre || detalle.FechaCierre || null,
     detalle.MontoEstimado || null,
     fuente === 'licitacion'
       ? `https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${codigoExterno}`
@@ -66,6 +89,7 @@ async function ejecutarIngesta({ disparadoPor = 'cron', enviarEmail = false } = 
         try {
           const detalle = await api.fetchLicitacionDetalle(l.CodigoExterno)
           if (!detalle) continue
+          if (!siguAbierta(detalle)) continue // descarta cerradas/adjudicadas/vencidas
           const id = insertarDetectada({ fuente: 'licitacion', codigoExterno: l.CodigoExterno, detalle })
           nuevasIds.push(id)
         } catch (e) {

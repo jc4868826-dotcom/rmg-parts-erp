@@ -215,8 +215,9 @@ function OportunidadCard({ op, onClick }) {
           </span>
         )}
       </div>
+      <div className="text-[10px] font-mono font-semibold mb-0.5" style={{ color: 'var(--rmg-blue)' }}>{op.codigo_externo}</div>
       <div className="text-sm font-semibold line-clamp-2 mb-1" style={{ color: 'var(--rmg-off)' }}>{op.nombre || op.codigo_externo}</div>
-      <div className="text-xs truncate mb-2" style={{ color: 'var(--rmg-muted)' }}>{op.organismo_nombre || '—'}</div>
+      <div className="text-xs truncate mb-2" style={{ color: 'var(--rmg-muted)' }}>{op.organismo_nombre || 'Organismo no informado aún'}</div>
       <div className="flex items-center justify-between text-xs">
         <span className="flex items-center gap-1" style={{ color: 'var(--rmg-muted)' }}>
           <MapPin size={11} />{op.comuna || op.region || '—'}
