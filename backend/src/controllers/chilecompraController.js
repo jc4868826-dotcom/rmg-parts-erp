@@ -96,10 +96,19 @@ const getOportunidad = (req, res) => {
 
 // ── Fase 1 — ingesta manual ("hacer análisis ahora") ─────────────────────────
 // El cron diario llama a esta misma función; ver src/jobs/chilecompraCron.js.
+// Body opcional: { dias } (barre "hoy" y los N-1 días anteriores) o
+// { fecha_desde, fecha_hasta } (rango explícito, formato YYYY-MM-DD) — si no se
+// manda nada, usa CHILECOMPRA_DIAS_HACIA_ATRAS del .env (default: solo hoy).
 const ejecutarAnalisisAhora = async (req, res) => {
   const { ejecutarIngesta } = require('../jobs/chilecompraCron')
   try {
-    const resultado = await ejecutarIngesta({ disparadoPor: req.user?.email || 'manual' })
+    const { dias, fecha_desde, fecha_hasta } = req.body || {}
+    const resultado = await ejecutarIngesta({
+      disparadoPor: req.user?.email || 'manual',
+      diasHaciaAtras: dias,
+      fechaDesde: fecha_desde,
+      fechaHasta: fecha_hasta,
+    })
     res.json(resultado)
   } catch (err) {
     res.status(500).json({ error: err.message })

@@ -68,17 +68,44 @@ function insertarDetectada({ fuente, codigoExterno, detalle }) {
 }
 
 /**
- * @param {{disparadoPor?: string, enviarEmail?: boolean}} opts
+ * Arma la lista de fechas (Date, un elemento por día) a barrer en la ingesta.
+ * Prioridad: rango explícito (fechaDesde/fechaHasta) > diasHaciaAtras > default del .env.
+ * "diasHaciaAtras: 7" = hoy y los 6 días anteriores (8 días hoy inclusive sería 8).
  */
-async function ejecutarIngesta({ disparadoPor = 'cron', enviarEmail = false } = {}) {
+function construirFechas({ diasHaciaAtras, fechaDesde, fechaHasta } = {}) {
+  if (fechaDesde && fechaHasta) {
+    const fechas = []
+    const cur = new Date(fechaDesde)
+    const fin = new Date(fechaHasta)
+    while (cur <= fin) {
+      fechas.push(new Date(cur))
+      cur.setDate(cur.getDate() + 1)
+    }
+    return fechas
+  }
+  const dias = Number(diasHaciaAtras ?? DIAS_HACIA_ATRAS) || 1
+  const fechas = []
+  for (let i = 0; i < dias; i++) {
+    const f = new Date()
+    f.setDate(f.getDate() - i)
+    fechas.push(f)
+  }
+  return fechas
+}
+
+/**
+ * @param {{disparadoPor?: string, enviarEmail?: boolean, diasHaciaAtras?: number,
+ *          fechaDesde?: string|Date, fechaHasta?: string|Date}} opts
+ */
+async function ejecutarIngesta({ disparadoPor = 'cron', enviarEmail = false, diasHaciaAtras, fechaDesde, fechaHasta } = {}) {
   const errores = []
   let revisadas = 0
   const nuevasIds = []
+  const fechasABarrer = construirFechas({ diasHaciaAtras, fechaDesde, fechaHasta })
 
-  // ── Licitaciones (API estable) ──
-  for (let i = 0; i < DIAS_HACIA_ATRAS; i++) {
-    const fecha = new Date()
-    fecha.setDate(fecha.getDate() - i)
+  // ── Licitaciones (API estable) — se barren TODAS las fechas del rango en esta
+  // misma corrida, de una sola vez (no una por click) ──
+  for (const fecha of fechasABarrer) {
     try {
       const listado = await api.fetchLicitacionesPorFecha(fecha)
       const filtradas = api.filtrarPorRubro(listado, KEYWORDS)
@@ -120,8 +147,12 @@ async function ejecutarIngesta({ disparadoPor = 'cron', enviarEmail = false } = 
     }
   }
 
-  console.log(`ℹ️ ChileCompra ingesta (${disparadoPor}) — ${revisadas} revisadas, ${nuevas.length} nuevas, ${errores.length} errores`)
-  return { revisadas, nuevas: nuevas.length, oportunidades: nuevas, errores, email: resultadoEmail }
+  console.log(`ℹ️ ChileCompra ingesta (${disparadoPor}) — ${fechasABarrer.length} día(s), ${revisadas} revisadas, ${nuevas.length} nuevas, ${errores.length} errores`)
+  return {
+    revisadas, nuevas: nuevas.length, oportunidades: nuevas, errores, email: resultadoEmail,
+    dias_barridos: fechasABarrer.length,
+    rango: { desde: api.ddmmyyyy(fechasABarrer[fechasABarrer.length - 1]), hasta: api.ddmmyyyy(fechasABarrer[0]) },
+  }
 }
 
 function iniciarCron() {

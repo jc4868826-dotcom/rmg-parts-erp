@@ -47,10 +47,25 @@ const diasParaCierre = (fecha) => {
   return Math.ceil((new Date(fecha) - new Date()) / (1000 * 60 * 60 * 24))
 }
 
+// YYYY-MM-DD en hora local (no toISOString, que se corre a UTC y puede cambiar el día)
+const isoLocal = (d) => {
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+const RANGOS_ANALISIS = [
+  { k: 'hoy',        label: 'Hoy' },
+  { k: 'ayer',       label: 'Ayer' },
+  { k: '7dias',      label: 'Últimos 7 días' },
+  { k: 'custom',     label: 'Rango personalizado' },
+]
+
 export default function ChileCompraPage() {
   const qc = useQueryClient()
   const [filtros, setFiltros] = useState({ region: '', dias_vencimiento: '', q: '' })
   const [seleccionId, setSeleccionId] = useState(null)
+  const [rango, setRango] = useState('7dias')
+  const [rangoCustom, setRangoCustom] = useState({ desde: isoLocal(new Date()), hasta: isoLocal(new Date()) })
 
   const params = {
     region: filtros.region || undefined,
@@ -64,12 +79,23 @@ export default function ChileCompraPage() {
     staleTime: 60_000,
   })
 
+  const bodyAnalisis = () => {
+    if (rango === 'hoy') return { dias: 1 }
+    if (rango === '7dias') return { dias: 7 }
+    if (rango === 'ayer') {
+      const ayer = new Date(); ayer.setDate(ayer.getDate() - 1)
+      return { fecha_desde: isoLocal(ayer), fecha_hasta: isoLocal(ayer) }
+    }
+    return { fecha_desde: rangoCustom.desde, fecha_hasta: rangoCustom.hasta }
+  }
+
   const analisisMut = useMutation({
-    mutationFn: () => api.post('/chilecompra/ejecutar-analisis').then(r => r.data),
+    mutationFn: () => api.post('/chilecompra/ejecutar-analisis', bodyAnalisis()).then(r => r.data),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['chilecompra'] })
-      const n = data?.nuevas ?? data?.total ?? 0
-      toast.success(n > 0 ? `Análisis completo: ${n} oportunidad(es) nueva(s)` : 'Análisis completo: sin oportunidades nuevas')
+      const n = data?.nuevas ?? 0
+      const dias = data?.dias_barridos ? ` (${data.dias_barridos} día${data.dias_barridos > 1 ? 's' : ''} revisado${data.dias_barridos > 1 ? 's' : ''})` : ''
+      toast.success(n > 0 ? `Análisis completo: ${n} oportunidad(es) nueva(s)${dias}` : `Análisis completo: sin oportunidades nuevas${dias}`)
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al ejecutar el análisis'),
   })
@@ -94,12 +120,32 @@ export default function ChileCompraPage() {
             Mercado Público · Oportunidades detectadas, analizadas y en postulación
           </p>
         </div>
-        <button onClick={() => analisisMut.mutate()} disabled={analisisMut.isPending}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-60"
-          style={{ background: 'var(--rmg-blue)', color: '#fff' }}>
-          <RefreshCw size={15} className={analisisMut.isPending ? 'animate-spin' : ''} />
-          {analisisMut.isPending ? 'Analizando…' : 'Hacer análisis ahora'}
-        </button>
+        <div className="flex items-center gap-2">
+          <select value={rango} onChange={e => setRango(e.target.value)}
+            className="px-3 py-2.5 rounded-lg text-sm outline-none"
+            style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
+            {RANGOS_ANALISIS.map(r => <option key={r.k} value={r.k}>{r.label}</option>)}
+          </select>
+          {rango === 'custom' && (
+            <>
+              <input type="date" value={rangoCustom.desde} max={rangoCustom.hasta}
+                onChange={e => setRangoCustom(r => ({ ...r, desde: e.target.value }))}
+                className="px-2.5 py-2.5 rounded-lg text-sm outline-none"
+                style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }} />
+              <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>a</span>
+              <input type="date" value={rangoCustom.hasta} min={rangoCustom.desde} max={isoLocal(new Date())}
+                onChange={e => setRangoCustom(r => ({ ...r, hasta: e.target.value }))}
+                className="px-2.5 py-2.5 rounded-lg text-sm outline-none"
+                style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }} />
+            </>
+          )}
+          <button onClick={() => analisisMut.mutate()} disabled={analisisMut.isPending}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-60"
+            style={{ background: 'var(--rmg-blue)', color: '#fff' }}>
+            <RefreshCw size={15} className={analisisMut.isPending ? 'animate-spin' : ''} />
+            {analisisMut.isPending ? 'Analizando…' : 'Hacer análisis ahora'}
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
