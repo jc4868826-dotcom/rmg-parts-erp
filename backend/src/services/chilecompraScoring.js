@@ -147,6 +147,32 @@ function inferirCategoria(texto) {
  *     vez de quedar "Sin cobertura" solo porque el nombre comercial no
  *     contiene la palabra "aceite".
  */
+/**
+ * Solapamiento de palabras (>=4 letras) del texto del ítem contra
+ * descripcion+producto_generico+categoria+marca de cada candidato. Extraído
+ * como función propia porque el fallback por categoría (abajo) la reutiliza
+ * — antes ese fallback elegía ciegamente el SKU de mejor ranking_compra de la
+ * categoría, dando el MISMO resultado para cualquier ítem de esa categoría
+ * sin importar sus detalles (bug real detectado en producción: 9 ítems muy
+ * distintos —aceite de motor, grasa STABURAGS, líquido de freno DOT 3,
+ * aceite para transformador— resolvieron los 9 al mismo SKU "FORZA ULTRA D
+ * SAE 30" con 40% de confianza). Reutilizar el mismo cálculo acotado a la
+ * categoría permite diferenciarlos cuando hay algo de señal textual (marca,
+ * término técnico) aunque no alcance el umbral fuerte de la pasada 1.
+ */
+function mejorPorSolapamiento(palabras, lista) {
+  let mejor = null
+  let mejorScore = 0
+  if (!palabras.length) return { mejor, mejorScore }
+  for (const c of lista) {
+    const campo = `${c.descripcion || ''} ${c.producto_generico || ''} ${c.categoria || ''} ${c.marca || ''}`.toLowerCase()
+    const matches = palabras.filter(p => campo.includes(p)).length
+    const score = matches / palabras.length
+    if (score > mejorScore) { mejorScore = score; mejor = c }
+  }
+  return { mejor, mejorScore }
+}
+
 function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
   const texto = `${descripcionSolicitada || ''} ${especificacionTecnica || ''}`.trim()
   if (!texto) return null
@@ -164,16 +190,7 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
     WHERE codigo_sku IS NOT NULL
   `).all()
 
-  let mejor = null
-  let mejorScore = 0
-  if (palabras.length) {
-    for (const c of candidatos) {
-      const campo = `${c.descripcion || ''} ${c.producto_generico || ''} ${c.categoria || ''} ${c.marca || ''}`.toLowerCase()
-      const matches = palabras.filter(p => campo.includes(p)).length
-      const score = matches / palabras.length
-      if (score > mejorScore) { mejorScore = score; mejor = c }
-    }
-  }
+  const { mejor, mejorScore } = mejorPorSolapamiento(palabras, candidatos)
 
   // Umbral conservador — mejor no-match que un match falso que termine en una
   // cotización con el producto equivocado.
@@ -182,18 +199,44 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
     return { sku, confianza: Math.min(mejorScore, 0.95), sustituido, skuOriginalTambor, formatoGrandeSinAlternativa }
   }
 
-  // Fallback por categoria: el ítem no trajo texto que calzara literalmente,
-  // pero sí es reconocible como un rubro que RMG vende. Confianza baja y
-  // explícita — se marca para revisión humana antes de cotizar, no se oferta
-  // a ciegas.
+  // Fallback por categoria: el ítem no trajo texto que calzara literalmente
+  // contra TODO el catálogo, pero sí es reconocible como un rubro que RMG
+  // vende. Antes de elegir a ciegas el SKU de mejor ranking_compra de esa
+  // categoría (ver comentario en mejorPorSolapamiento), se reintenta el
+  // mismo cálculo de solapamiento acotado solo a los SKU de esa categoría —
+  // así "grasa STABURAGS" y "líquido de freno DOT 3 BOSCH" pueden encontrar
+  // cada uno su propio candidato dentro de "Grasa"/"Liquido de frenos" en
+  // vez de terminar ambos en el mismo producto genérico top-ranking.
   const categoriaInferida = inferirCategoria(texto)
   if (categoriaInferida) {
-    const deLaCategoria = candidatos
-      .filter(c => (c.categoria || '').toLowerCase() === categoriaInferida.toLowerCase())
-      .sort((a, b) => (a.ranking_compra ?? 999) - (b.ranking_compra ?? 999))
+    const deLaCategoria = candidatos.filter(c => (c.categoria || '').toLowerCase() === categoriaInferida.toLowerCase())
     if (deLaCategoria.length) {
-      const { sku, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa } = preferirFormatoMenor(deLaCategoria[0], candidatos)
-      return { sku, confianza: 0.4, porCategoria: true, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa }
+      const { mejor: mejorCat, mejorScore: scoreCat } = mejorPorSolapamiento(palabras, deLaCategoria)
+
+      if (mejorCat && scoreCat > 0) {
+        // Hay alguna señal textual (marca, término técnico) dentro de la
+        // categoría, aunque no alcance el umbral fuerte — confianza
+        // intermedia, sigue quedando marcada para revisión antes de cotizar.
+        const { sku, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa } = preferirFormatoMenor(mejorCat, candidatos)
+        return {
+          sku, confianza: Math.min(0.3 + scoreCat * 0.3, 0.6), porCategoria: true,
+          sustituido, skuOriginalTambor, formatoGrandeSinAlternativa,
+        }
+      }
+
+      // Cero solapamiento textual contra CUALQUIER SKU de la categoría — no
+      // hay forma de saber cuál producto específico es el correcto (puede
+      // que RMG simplemente no tenga ese producto exacto, ej. aceite de
+      // transformador o una marca que no vendemos). Se sigue sugiriendo el
+      // de mejor ranking de compra —no se declara "sin cobertura" a
+      // ciegas—, pero con confianza explícitamente baja y una marca clara
+      // de que es una sugerencia genérica, no un match real.
+      const porRanking = [...deLaCategoria].sort((a, b) => (a.ranking_compra ?? 999) - (b.ranking_compra ?? 999))[0]
+      const { sku, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa } = preferirFormatoMenor(porRanking, candidatos)
+      return {
+        sku, confianza: 0.25, porCategoria: true, sinSenalTextual: true,
+        sustituido, skuOriginalTambor, formatoGrandeSinAlternativa,
+      }
     }
   }
 
@@ -224,19 +267,23 @@ function cruzarItemsConCatalogo(oportunidadId) {
       upd.run(null, null, null, null, null, 0, null, null, item.id)
       continue
     }
-    const { sku, confianza, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa } = match
+    const { sku, confianza, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa, sinSenalTextual } = match
     const costoUnitario = sku.unidades_por_pack > 1
       ? Math.round(sku.costo_unidad_neto / sku.unidades_por_pack)
       : sku.costo_unidad_neto
     const precioSugerido = sku.precio_venta_neto
     const margenPct = costoUnitario > 0 ? (precioSugerido - costoUnitario) / precioSugerido : null
 
-    let observacion = null
-    if (sustituido) {
-      observacion = `Presentación de menor formato (${sku.presentacion}) usada como unidad de compra proxy en lugar del tambor/cilindro ${skuOriginalTambor} — evita inflar el costo con un formato grande innecesario. Verificar cantidad de unidades necesarias según el volumen solicitado.`
-    } else if (formatoGrandeSinAlternativa) {
-      observacion = `No existe en catálogo una presentación de menor formato para este producto — se ofrece el tambor/cilindro (${sku.presentacion}) por ser la única opción disponible. Revisar antes de cotizar si conviene fraccionar o buscar proveedor alternativo.`
+    const observaciones = []
+    if (sinSenalTextual) {
+      observaciones.push('Sugerencia genérica de categoría — el texto del ítem no coincidió con ningún producto específico del catálogo (marca/término técnico distinto al de RMG). Puede que RMG no tenga este producto exacto: verificar antes de cotizar.')
     }
+    if (sustituido) {
+      observaciones.push(`Presentación de menor formato (${sku.presentacion}) usada como unidad de compra proxy en lugar del tambor/cilindro ${skuOriginalTambor} — evita inflar el costo con un formato grande innecesario. Verificar cantidad de unidades necesarias según el volumen solicitado.`)
+    } else if (formatoGrandeSinAlternativa) {
+      observaciones.push(`No existe en catálogo una presentación de menor formato para este producto — se ofrece el tambor/cilindro (${sku.presentacion}) por ser la única opción disponible. Revisar antes de cotizar si conviene fraccionar o buscar proveedor alternativo.`)
+    }
+    const observacion = observaciones.length ? observaciones.join(' ') : null
 
     upd.run(sku.codigo_sku, confianza, costoUnitario, precioSugerido, margenPct, 1, observacion, skuOriginalTambor || null, item.id)
     cubiertos++

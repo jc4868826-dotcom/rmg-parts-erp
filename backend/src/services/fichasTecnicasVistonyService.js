@@ -10,40 +10,78 @@
  * adjuntar a la ficha de cualquier postulación ChileCompra según los
  * productos que se estén ofertando — ver adjuntarFichasAOportunidad().
  *
- * ⚠️ IMPORTANTE — selectores pendientes de verificación en vivo:
- * Este entorno de desarrollo no tiene salida de red hacia
- * vistonylubricantes.cl (allowlist de egress bloquea el dominio), así que
- * los selectores CSS de abajo (SELECTORES) son la mejor estimación basada en
- * patrones típicos de sitios de fichas técnicas (Elementor/WordPress, que es
- * lo que corre vistonylubricantes.cl), pero NO se pudieron probar contra el
- * HTML real. Antes de usar este scraper en producción:
- *   1. Correr `node scripts/debug-scrape-vistony.js "<url de un producto>"`
- *      (ver más abajo) contra una URL real de producto y revisar qué trae.
- *   2. Ajustar SELECTORES según lo que se encuentre.
- * El resto del pipeline (descarga, hash, guardado en catalogo_fichas_tecnicas,
- * adjuntar a una oportunidad) está probado con un servidor HTTP local y no
- * depende de que los selectores sean exactos — solo la etapa de "encontrar el
- * link a la ficha técnica en la página del producto" necesita ese ajuste.
+ * ── Verificado contra el sitio real (2026-09) ──────────────────────────────
+ * La v1 de este archivo se escribió sin poder alcanzar vistonylubricantes.cl
+ * desde el entorno de desarrollo (egress bloqueado) y falló en producción:
+ * 0 fichas encontradas. Se navegó el sitio real y se confirmó lo siguiente,
+ * que cambia el enfoque de raíz:
+ *
+ *  1. NO es una URL de dominio con "www" — es `https://vistonylubricantes.cl`
+ *     (sin www).
+ *  2. NO existe una búsqueda `?s=` útil para encontrar productos — esa ruta
+ *     devuelve contenido de blog/SEO (artículos), nunca la página de un
+ *     producto. Por eso la v1 (que construía la URL así) nunca encontraba
+ *     nada.
+ *  3. Las páginas de producto SÍ son URLs reales y estables del tipo
+ *     `/producto/<categoria>/<slug>/` (WordPress con permalinks, servidor,
+ *     NO una SPA) — ej.
+ *     `/producto/refrigerantes/ice-freeze-organico-50-50-green/`.
+ *  4. El sitio no tiene un índice/listado único de productos: hay que
+ *     recorrer las páginas de categoría (`/productos/<categoria>/`), que a
+ *     veces listan productos directo y a veces tienen sub-categorías o
+ *     sub-sub-categorías anidadas (ej. Lubricantes → Lubricantes
+ *     Industriales → Compresores de Aire). Cada tarjeta de producto es un
+ *     `<a href="/producto/.../">` que envuelve una `<img alt="NOMBRE DEL
+ *     PRODUCTO">` — el nombre está en el atributo `alt`, no en un texto
+ *     visible junto al link. Ver construirIndiceProductos().
+ *  5. En la página de un producto, el link a la ficha técnica en PDF es un
+ *     `<a href=".../wp-content/uploads/AAAA/MM/NOMBRE-ARCHIVO.pdf">` que
+ *     también envuelve solo una imagen (el ícono de PDF) — SIN texto "ficha
+ *     técnica" en el link ni en su href. El selector v1 que buscaba ese
+ *     texto literal nunca podía matchear. La página puede tener OTROS PDF
+ *     ajenos al producto (ej. banners promocionales en el header) — hay que
+ *     excluirlos explícitamente. Ver encontrarLinkFichaTecnica().
+ *  6. "Ficha de seguridad" (distinto de "Ficha Técnica") no es un PDF directo
+ *     — abre un formulario de captura de datos (nombre/email) antes de
+ *     entregarla. No se soporta acá (fuera del alcance acordado: solo ficha
+ *     técnica).
+ *
+ * El resto del pipeline (descarga, hash, guardado en catalogo_fichas_
+ * tecnicas, adjuntar a una oportunidad) ya estaba probado con un servidor
+ * HTTP local y no cambió.
  */
 const axios = require('axios')
 const cheerio = require('cheerio')
 const crypto = require('crypto')
 const { db, uuidv4 } = require('../../config/database')
 
-const BASE_URL = process.env.VISTONY_BASE_URL || 'https://www.vistonylubricantes.cl'
+const BASE_URL = process.env.VISTONY_BASE_URL || 'https://vistonylubricantes.cl'
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 RMG-AutoParts-Bot'
 
-// Selectores/heurísticas para encontrar la ficha técnica en la página de un
-// producto Vistony — ajustar tras verificar contra el sitio real (ver nota
-// arriba). Se intentan en orden hasta encontrar un link.
-const SELECTORES = {
-  // Links con texto o clase que sugiera "ficha técnica" / "datasheet" / "TDS"
-  linksFichaTexto: /ficha\s*t[ée]cnica|hoja\s*t[ée]cnica|datasheet|technical\s*data\s*sheet|\bTDS\b/i,
-  // Cualquier <a href="...pdf"> dentro de la página de producto, como fallback
-  linksPdfGenerico: /\.pdf(\?|$)/i,
-  // Contenedor típico de producto (Elementor/WooCommerce) donde buscar los links
-  contenedoresProducto: ['.product-summary', '.elementor-widget-container', '.woocommerce-product-details', 'main', 'body'],
-}
+// Categorías raíz confirmadas en el menú "Productos" del sitio (2026-09).
+// Si Vistony agrega/renombra una categoría, construirIndiceProductos igual
+// va a encontrar sus productos SIEMPRE que esté enlazada desde alguna de
+// estas raíces o desde una de sus sub-categorías (el crawler profundiza
+// recursivamente dentro del propio árbol /productos/... — ver abajo). Solo
+// hay que tocar esta lista si Vistony agrega una sección totalmente nueva
+// que no cuelgue de ninguna de estas.
+const CATEGORIAS_RAIZ = [
+  '/productos/lubricantes/',
+  '/productos/grasas-lubricantes/',
+  '/productos/liquidos-de-frenos/',
+  '/productos/refrigerantes/',
+  '/productos/car-care/',
+  '/productos/auxiliares-de-mantenimiento/',
+  '/productos/aditivos/',
+]
+
+// PDFs que aparecen en páginas de producto pero NO son la ficha técnica
+// (banners/promos del sitio, términos y condiciones, etc.) — se excluyen
+// explícitamente al buscar el link de la ficha.
+const PDF_BLACKLIST = /(terminos|t[ée]rminos|condiciones|promo|promoci[oó]n|politica|pol[ií]tica|bases-legales|panetones)/i
+
+const INDICE_TTL_MS = 6 * 60 * 60 * 1000 // 6 horas — evita recorrer el sitio en cada llamada
+let indiceCache = null // { productos: [{url, nombre}], builtAt }
 
 const http = axios.create({
   timeout: 20000,
@@ -55,37 +93,124 @@ function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex')
 }
 
+function normalizarTexto(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+/**
+ * Recorre el árbol de categorías de vistonylubricantes.cl (empezando en
+ * CATEGORIAS_RAIZ) y arma un índice {url, nombre} de todos los productos
+ * encontrados. Profundiza en sub-categorías automáticamente: desde la
+ * página de una categoría, cualquier link a /productos/... que sea "más
+ * profundo" que la página actual (ej. desde /productos/lubricantes/ hacia
+ * /productos/lubricantes/lubricantes-industriales/) se encola también —
+ * así cubre categorías anidadas (Lubricantes Industriales tiene a su vez
+ * ~15 sub-sub-categorías: Compresores de Aire, Reductores Industriales,
+ * etc.) sin tener que hardcodear cada una. Resultado cacheado en memoria
+ * por INDICE_TTL_MS para no recorrer el sitio completo en cada consulta.
+ */
+async function construirIndiceProductos({ forzar = false } = {}) {
+  if (!forzar && indiceCache && Date.now() - indiceCache.builtAt < INDICE_TTL_MS) {
+    return indiceCache.productos
+  }
+
+  const visitadas = new Set()
+  const productos = new Map() // url -> nombre
+  const porVisitar = CATEGORIAS_RAIZ.map(p => new URL(p, BASE_URL).toString())
+  const erroresCategoria = []
+
+  while (porVisitar.length) {
+    const url = porVisitar.shift()
+    if (visitadas.has(url)) continue
+    visitadas.add(url)
+    if (visitadas.size > 100) break // límite de seguridad ante un ciclo inesperado
+
+    let html
+    try {
+      const res = await http.get(url)
+      html = res.data
+    } catch (e) {
+      erroresCategoria.push({ url, error: e.message })
+      continue // una categoría caída no debe frenar el resto del crawl
+    }
+    const $ = cheerio.load(html)
+
+    $('a[href*="/producto/"]').each((_, el) => {
+      const href = $(el).attr('href')
+      if (!href) return
+      const abs = new URL(href, url).toString().split('#')[0]
+      const nombre = ($(el).find('img').attr('alt') || $(el).text() || '').trim()
+      if (nombre && !productos.has(abs)) productos.set(abs, nombre)
+    })
+
+    // Sub-categorías: solo se profundiza dentro del propio árbol de la
+    // categoría actual (abs.startsWith(url)) — evita que el menú de
+    // navegación (presente en cada página, con links a TODAS las
+    // categorías raíz) dispare un crawl del sitio completo desde cada nodo.
+    $('a[href*="/productos/"]').each((_, el) => {
+      const href = $(el).attr('href')
+      if (!href) return
+      const abs = new URL(href, url).toString().split('#')[0]
+      if (abs === url || visitadas.has(abs) || porVisitar.includes(abs)) return
+      if (abs.startsWith(url) && /\/productos\/.+\/$/.test(abs)) {
+        porVisitar.push(abs)
+      }
+    })
+  }
+
+  indiceCache = {
+    productos: Array.from(productos, ([url, nombre]) => ({ url, nombre })),
+    builtAt: Date.now(),
+    erroresCategoria,
+  }
+  return indiceCache.productos
+}
+
+/**
+ * Busca dentro del índice de productos Vistony el que mejor calza con un
+ * texto (típicamente descripcion+producto_generico de un SKU RMG). Misma
+ * heurística de solapamiento de palabras que buscarSkuCandidato en
+ * chilecompraScoring.js — umbral más laxo (0.25) porque acá ya se está dentro
+ * del universo real de productos Vistony, no del catálogo completo de RMG.
+ */
+function buscarProductoVistony(textoBusqueda, indice) {
+  const palabras = normalizarTexto(textoBusqueda)
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 3)
+  if (!palabras.length || !indice.length) return null
+
+  let mejor = null
+  let mejorScore = 0
+  for (const p of indice) {
+    const campo = normalizarTexto(p.nombre)
+    const matches = palabras.filter(w => campo.includes(w)).length
+    const score = matches / palabras.length
+    if (score > mejorScore) { mejorScore = score; mejor = p }
+  }
+  return mejor && mejorScore >= 0.25 ? { ...mejor, score: mejorScore } : null
+}
+
 /**
  * Busca en una página HTML de producto el link a su ficha técnica en PDF.
- * Devuelve la URL absoluta encontrada, o null.
+ * Devuelve la URL absoluta encontrada, o null. Ver nota (5) al inicio del
+ * archivo: el link de la ficha técnica envuelve solo un ícono (sin texto
+ * "ficha técnica"), así que se identifica por ser un <a href="....pdf">
+ * fuera del header/footer/nav (donde suelen vivir PDFs ajenos al producto,
+ * como promociones) y que no matchea PDF_BLACKLIST.
  */
 function encontrarLinkFichaTecnica(html, urlBase) {
   const $ = cheerio.load(html)
+  $('header, footer, nav').remove()
 
-  for (const selector of SELECTORES.contenedoresProducto) {
-    const contenedor = $(selector).first()
-    if (!contenedor.length) continue
-
-    let encontrado = null
-    contenedor.find('a[href]').each((_, el) => {
-      if (encontrado) return
-      const href = $(el).attr('href') || ''
-      const texto = $(el).text() || ''
-      if (SELECTORES.linksFichaTexto.test(texto) || SELECTORES.linksFichaTexto.test(href)) {
-        encontrado = href
-      }
-    })
-    if (encontrado) return new URL(encontrado, urlBase).toString()
-  }
-
-  // Fallback: cualquier link a .pdf en toda la página
-  let pdfGenerico = null
-  $('a[href]').each((_, el) => {
-    if (pdfGenerico) return
+  let encontrado = null
+  $('a[href$=".pdf"], a[href*=".pdf?"]').each((_, el) => {
+    if (encontrado) return
     const href = $(el).attr('href') || ''
-    if (SELECTORES.linksPdfGenerico.test(href)) pdfGenerico = href
+    if (!href || PDF_BLACKLIST.test(href)) return
+    encontrado = href
   })
-  return pdfGenerico ? new URL(pdfGenerico, urlBase).toString() : null
+  return encontrado ? new URL(encontrado, urlBase).toString() : null
 }
 
 /**
@@ -144,16 +269,31 @@ function guardarFichaEnLibreria({ productoSku, productoNombre, urlOrigen, buffer
 
 /**
  * Extrae la ficha técnica de UN producto de lista_precios y la guarda en la
- * librería. `urlProducto` puede venir explícita (si ya se conoce/mapeó) o
- * se puede intentar construir a partir del sitio de búsqueda de Vistony.
+ * librería. `urlProducto` puede venir explícita (si ya se conoce/mapeó) o,
+ * si no, se busca la página real del producto dentro del índice del sitio
+ * (construirIndiceProductos + buscarProductoVistony) — ya no se construye
+ * una URL de búsqueda a ciegas (ver nota (2) al inicio del archivo).
  */
 async function extraerYGuardarFichaProducto(skuLista, urlProductoOverride) {
   const sku = db.prepare('SELECT * FROM lista_precios WHERE codigo_sku = ? LIMIT 1').get(skuLista)
   if (!sku) throw new Error(`SKU ${skuLista} no encontrado en lista_precios`)
 
-  const urlProducto = urlProductoOverride || `${BASE_URL}/?s=${encodeURIComponent(sku.descripcion)}`
+  let urlProducto = urlProductoOverride
+  let matchInfo = null
+  if (!urlProducto) {
+    const indice = await construirIndiceProductos()
+    const textoBusqueda = `${sku.descripcion || ''} ${sku.producto_generico || ''}`
+    matchInfo = buscarProductoVistony(textoBusqueda, indice)
+    if (!matchInfo) {
+      return { sku: skuLista, encontrada: false, motivo: 'no se encontró un producto equivalente en vistonylubricantes.cl' }
+    }
+    urlProducto = matchInfo.url
+  }
+
   const ficha = await extraerFichaDesdeUrlProducto(urlProducto)
-  if (!ficha) return { sku: skuLista, encontrada: false }
+  if (!ficha) {
+    return { sku: skuLista, encontrada: false, motivo: 'se encontró la página del producto pero no un PDF de ficha técnica en ella', urlProducto }
+  }
 
   const resultado = guardarFichaEnLibreria({
     productoSku: sku.codigo_sku,
@@ -162,7 +302,7 @@ async function extraerYGuardarFichaProducto(skuLista, urlProductoOverride) {
     buffer: ficha.buffer,
     mimeType: ficha.mimeType,
   })
-  return { sku: skuLista, encontrada: true, ...resultado }
+  return { sku: skuLista, encontrada: true, urlProducto, matchScore: matchInfo?.score, ...resultado }
 }
 
 /**
@@ -245,6 +385,8 @@ async function adjuntarFichasAOportunidad(oportunidadId, usuario) {
 }
 
 module.exports = {
+  construirIndiceProductos,
+  buscarProductoVistony,
   encontrarLinkFichaTecnica,
   descargarPdf,
   extraerFichaDesdeUrlProducto,
