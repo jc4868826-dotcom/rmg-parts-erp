@@ -158,12 +158,25 @@ async function fetchComprasAgiles(/* { region, fechaDesde, fechaHasta, rubro } *
   )
 }
 
-/** Filtra un listado de licitaciones por palabras clave en Nombre/RubroN */
+/**
+ * Quita tildes/diacríticos y pasa a minúsculas. CRÍTICO: sin esto, la palabra clave
+ * "bateria" (como se escribió en CHILECOMPRA_KEYWORDS) NUNCA calza con "batería" ni
+ * "neumatico" con "neumático" ni "hidraulico" con "hidráulico" — que es como
+ * efectivamente aparecen escritos la gran mayoría de los nombres de licitaciones
+ * reales en Mercado Público. Ese descalce silencioso (comparación de string exacta
+ * sin normalizar) era la causa de que el sistema detectara muchísimas menos
+ * oportunidades de las que realmente hay publicadas en el portal para estos rubros.
+ */
+function normalizarTexto(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+/** Filtra un listado de licitaciones por palabras clave en Nombre/RubroN (sin distinguir tildes) */
 function filtrarPorRubro(listado, keywords = []) {
   if (!keywords.length) return listado
-  const kws = keywords.map(k => k.toLowerCase())
+  const kws = keywords.map(normalizarTexto)
   return listado.filter(l => {
-    const texto = `${l.Nombre || ''} ${l.RubroN1 || ''} ${l.RubroN2 || ''} ${l.RubroN3 || ''}`.toLowerCase()
+    const texto = normalizarTexto(`${l.Nombre || ''} ${l.RubroN1 || ''} ${l.RubroN2 || ''} ${l.RubroN3 || ''}`)
     return kws.some(k => texto.includes(k))
   })
 }

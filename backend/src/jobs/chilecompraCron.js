@@ -9,8 +9,15 @@ const { db, uuidv4 } = require('../../config/database')
 const api = require('../services/chilecompraApiClient')
 const { enviarDigestDiario } = require('../services/chilecompraEmailDigest')
 
+// Palabras sueltas, no frases — el filtro (chilecompraApiClient.filtrarPorRubro)
+// hace substring + normaliza tildes, así que una palabra suelta como "hidraulico"
+// calza tanto con "hidráulico" como con "HIDRAULICO" en cualquier posición del
+// nombre. Usar frases largas tipo "aceite motor" es frágil: una licitación
+// titulada "ACEITE PARA MOTORES DIESEL" no la contiene como substring exacto y
+// se pierde. CHILECOMPRA_KEYWORDS en Render sobrescribe esto — actualizar ahí
+// también si se agregan rubros nuevos.
 const KEYWORDS = (process.env.CHILECOMPRA_KEYWORDS ||
-  'lubricante,aceite motor,aceite hidraulico,bateria,neumatico,grasa industrial,refrigerante,adblue'
+  'lubricante,aceite,hidraulico,bateria,neumatico,llanta,grasa,refrigerante,anticongelante,adblue'
 ).split(',').map(s => s.trim()).filter(Boolean)
 
 const DIAS_HACIA_ATRAS = Number(process.env.CHILECOMPRA_DIAS_HACIA_ATRAS || 1) // 1 = solo hoy

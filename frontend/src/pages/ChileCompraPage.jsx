@@ -17,7 +17,7 @@ import {
   Landmark, Search, RefreshCw, X, AlertTriangle, CheckCircle2,
   XCircle, Clock, FileSearch, ClipboardCheck, Send, Trophy, Ban,
   MapPin, Calendar, Package, TrendingUp, ShieldCheck, ExternalLink,
-  History, ChevronDown, Sparkles, ListChecks, Truck
+  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -373,6 +373,11 @@ function DetalleModal({ id, onClose }) {
     cambiarEstadoMut.mutate({ estado: 'publicada' })
   }
 
+  const handleVolver = (estadoAnterior) => {
+    if (!window.confirm(`¿Volver esta oportunidad a "${ESTADO_MAP[estadoAnterior]?.label || estadoAnterior}"? Esto corrige un cambio de estado hecho por error.`)) return
+    cambiarEstadoMut.mutate({ estado: estadoAnterior })
+  }
+
   const handleResultado = (resultado) => {
     if (resultado === 'adjudicada') {
       const monto = window.prompt('Monto adjudicado (CLP):')
@@ -575,10 +580,11 @@ function DetalleModal({ id, onClose }) {
           {op.estado === 'analizando' && (
             <>
               <ActionBtn onClick={() => analizarMut.mutate()} busy={analizarMut.isPending}
-                icon={Sparkles} label={analizarMut.isPending ? 'Leyendo anexos…' : 'Leer anexos y calcular score'} color="var(--rmg-blue)" bg="rgba(56,182,255,0.1)" />
+                icon={Sparkles} label={analizarMut.isPending ? 'Leyendo…' : 'Leer ficha pública y calcular score'} color="var(--rmg-blue)" bg="rgba(56,182,255,0.1)" />
               <ActionBtn onClick={() => cambiarEstadoMut.mutate({ estado: 'preparando_postulacion' })} busy={cambiarEstadoMut.isPending}
                 icon={ClipboardCheck} label="Preparar postulación" color="#a78bfa" bg="rgba(167,139,250,0.12)" />
               <ActionBtn onClick={handleDescartar} busy={cambiarEstadoMut.isPending} icon={Ban} label="Descartar" color="var(--rmg-red)" bg="rgba(224,90,78,0.08)" />
+              <ActionBtn onClick={() => handleVolver('detectada')} busy={cambiarEstadoMut.isPending} icon={Undo2} label="Volver a detectada" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
             </>
           )}
           {op.estado === 'preparando_postulacion' && (
@@ -586,6 +592,7 @@ function DetalleModal({ id, onClose }) {
               <ActionBtn onClick={handlePublicar} busy={cambiarEstadoMut.isPending}
                 icon={Send} label="Ya la publiqué en el portal" color="var(--rmg-teal)" bg="rgba(45,201,138,0.12)" />
               <ActionBtn onClick={handleDescartar} busy={cambiarEstadoMut.isPending} icon={Ban} label="Descartar" color="var(--rmg-red)" bg="rgba(224,90,78,0.08)" />
+              <ActionBtn onClick={() => handleVolver('analizando')} busy={cambiarEstadoMut.isPending} icon={Undo2} label="Volver a analizando" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
             </>
           )}
           {op.estado === 'publicada' && (
@@ -594,10 +601,14 @@ function DetalleModal({ id, onClose }) {
                 icon={Trophy} label="Marcar adjudicada" color="var(--rmg-teal)" bg="rgba(45,201,138,0.12)" />
               <ActionBtn onClick={() => handleResultado('no_adjudicada')} busy={cambiarEstadoMut.isPending}
                 icon={XCircle} label="Marcar no adjudicada" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
+              <ActionBtn onClick={() => handleVolver('preparando_postulacion')} busy={cambiarEstadoMut.isPending} icon={Undo2} label="Corregir: aún no la publiqué" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
             </>
           )}
-          {['descartada', 'adjudicada', 'no_adjudicada'].includes(op.estado) && (
-            <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Estado final · sin más acciones</span>
+          {op.estado === 'descartada' && (
+            <ActionBtn onClick={() => handleVolver('detectada')} busy={cambiarEstadoMut.isPending} icon={Undo2} label="Reactivar (no debí descartarla)" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
+          )}
+          {['adjudicada', 'no_adjudicada'].includes(op.estado) && (
+            <ActionBtn onClick={() => handleVolver('publicada')} busy={cambiarEstadoMut.isPending} icon={Undo2} label="Corregir resultado" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
           )}
         </div>
       </div>

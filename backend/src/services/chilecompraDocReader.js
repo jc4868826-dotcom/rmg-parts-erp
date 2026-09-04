@@ -50,13 +50,53 @@ Devuelve EXCLUSIVAMENTE un JSON válido (sin texto antes ni después) con esta f
 }`
 
 /**
+ * Llama a la API de Anthropic y devuelve el bloque de texto ya parseado como JSON.
+ * Si la llamada falla, el error incluye el detalle real que devuelve Anthropic
+ * (data.error.message) en vez del genérico "Request failed with status code 400"
+ * de axios — sin eso es imposible saber si falló por modelo inválido, key
+ * inválida, contenido rechazado, etc. sin mirar los logs del servidor.
+ */
+async function llamarAnthropicYParsear(content, origen) {
+  if (!ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY no configurado — requerido para leer anexos con IA')
+  }
+
+  let data
+  try {
+    const resp = await axios.post(
+      ANTHROPIC_URL,
+      { model: ANTHROPIC_MODEL, max_tokens: 4096, messages: [{ role: 'user', content }] },
+      {
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        timeout: 60_000,
+      }
+    )
+    data = resp.data
+  } catch (e) {
+    const detalleApi = e.response?.data?.error?.message || e.response?.data?.error?.type
+    throw new Error(`${origen}: falló la llamada a Anthropic (HTTP ${e.response?.status || '?'})${detalleApi ? ` — ${detalleApi}` : `: ${e.message}`}`)
+  }
+
+  const textBlock = (data.content || []).find(b => b.type === 'text')
+  if (!textBlock) throw new Error(`${origen}: la respuesta del modelo no trajo texto`)
+
+  try {
+    const clean = textBlock.text.trim().replace(/^```json\s*/i, '').replace(/```$/, '')
+    return JSON.parse(clean)
+  } catch (e) {
+    throw new Error(`${origen}: no se pudo parsear la respuesta como JSON — revisar manualmente. Detalle: ${e.message}`)
+  }
+}
+
+/**
  * @param {Array<{base64: string, mediaType: string, nombre: string}>} documentos
  * @returns {Promise<object>} extracción estructurada (ver EXTRACTION_PROMPT)
  */
 async function leerAnexos(documentos) {
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY no configurado — requerido para leer anexos con IA')
-  }
   if (!documentos?.length) {
     throw new Error('leerAnexos: no se recibieron documentos')
   }
@@ -69,36 +109,7 @@ async function leerAnexos(documentos) {
     })),
   ]
 
-  const { data } = await axios.post(
-    ANTHROPIC_URL,
-    {
-      model: ANTHROPIC_MODEL,
-      max_tokens: 4096,
-      messages: [{ role: 'user', content }],
-    },
-    {
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      timeout: 60_000,
-    }
-  )
-
-  const textBlock = (data.content || []).find(b => b.type === 'text')
-  if (!textBlock) throw new Error('leerAnexos: la respuesta del modelo no trajo texto')
-
-  let parsed
-  try {
-    // El modelo puede envolver el JSON en ```json — se limpia por si acaso.
-    const clean = textBlock.text.trim().replace(/^```json\s*/i, '').replace(/```$/, '')
-    parsed = JSON.parse(clean)
-  } catch (e) {
-    throw new Error(`leerAnexos: no se pudo parsear la respuesta como JSON — revisar manualmente. Detalle: ${e.message}`)
-  }
-
-  return parsed
+  return llamarAnthropicYParsear(content, 'leerAnexos')
 }
 
 /**
@@ -111,9 +122,6 @@ async function leerAnexos(documentos) {
  * @param {string} textoFicha
  */
 async function leerFichaPublica(textoFicha) {
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY no configurado — requerido para leer anexos con IA')
-  }
   if (!textoFicha?.trim()) {
     throw new Error('leerFichaPublica: no se recibió texto de la ficha')
   }
@@ -122,32 +130,7 @@ async function leerFichaPublica(textoFicha) {
     { type: 'text', text: `${EXTRACTION_PROMPT}\n\nEste es el texto de la ficha pública de la licitación (extraído del portal Mercado Público):\n\n${textoFicha.slice(0, 60_000)}` },
   ]
 
-  const { data } = await axios.post(
-    ANTHROPIC_URL,
-    {
-      model: ANTHROPIC_MODEL,
-      max_tokens: 4096,
-      messages: [{ role: 'user', content }],
-    },
-    {
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      timeout: 60_000,
-    }
-  )
-
-  const textBlock = (data.content || []).find(b => b.type === 'text')
-  if (!textBlock) throw new Error('leerFichaPublica: la respuesta del modelo no trajo texto')
-
-  try {
-    const clean = textBlock.text.trim().replace(/^```json\s*/i, '').replace(/```$/, '')
-    return JSON.parse(clean)
-  } catch (e) {
-    throw new Error(`leerFichaPublica: no se pudo parsear la respuesta como JSON — revisar manualmente. Detalle: ${e.message}`)
-  }
+  return llamarAnthropicYParsear(content, 'leerFichaPublica')
 }
 
 module.exports = { leerAnexos, leerFichaPublica }

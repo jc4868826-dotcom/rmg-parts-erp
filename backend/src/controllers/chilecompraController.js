@@ -17,18 +17,25 @@ const { cruzarItemsConCatalogo, calcularScoreRentabilidad, calcularScoreSegurida
 const { leerAnexos, leerFichaPublica } = require('../services/chilecompraDocReader')
 const chilecompraApi = require('../services/chilecompraApiClient')
 
+// Además de las transiciones "hacia adelante" del flujo, se permite volver un
+// paso atrás para corregir un click equivocado (p.ej. entrar a "analizando" por
+// error, o descartar algo que en realidad sí sirve) — sin eso, un error de clic
+// dejaba la oportunidad atascada sin forma de corregirla desde la UI. "publicada"
+// sigue siendo SIEMPRE una confirmación manual del usuario (nunca la dispara el
+// sistema solo) — permitir volver de "publicada" a "preparando_postulacion" es
+// igual de manual, solo corrige un click, no reemplaza esa regla.
 const TRANSICIONES = {
   detectada:               ['analizando', 'descartada'],
-  analizando:              ['preparando_postulacion', 'descartada'],
-  descartada:              [],
-  preparando_postulacion:  ['publicada', 'descartada'],
-  publicada:               ['adjudicada', 'no_adjudicada'],
-  adjudicada:              [],
-  no_adjudicada:           [],
+  analizando:              ['detectada', 'preparando_postulacion', 'descartada'],
+  descartada:              ['detectada'],
+  preparando_postulacion:  ['analizando', 'publicada', 'descartada'],
+  publicada:               ['preparando_postulacion', 'adjudicada', 'no_adjudicada'],
+  adjudicada:              ['publicada'],
+  no_adjudicada:           ['publicada'],
 }
 
 const TIPO_EVENTO = {
-  detectada:              'ingesta',
+  detectada:              'vuelta_a_detectada',
   analizando:             'inicio_analisis',
   descartada:             'descarte',
   preparando_postulacion: 'inicio_postulacion',
