@@ -19,9 +19,54 @@ const { db } = require('../../config/database')
 const MARGEN_OBJETIVO_MINIMO = 0.15 // 15% — por debajo de esto, rentabilidad cae fuerte
 
 /**
+ * Mapa de sinónimos genéricos (español "de la calle") → categoria real en
+ * lista_precios. CRÍTICO: los ítems que licitaciones/IA extraen usan términos
+ * genéricos ("aceite de motor", "neumáticos", "batería para camioneta"), pero
+ * la columna `descripcion` de lista_precios trae el nombre COMERCIAL del
+ * producto (p.ej. "CAJ04 ATTOM S320 SAE 5W-30 ACEA C3/API SN DE 5 L") — un
+ * nombre de marca Vistony que NUNCA contiene la palabra "aceite" ni "motor".
+ * Antes de este fix, buscarSkuCandidato solo comparaba contra
+ * descripcion+categoria+marca, así que "Aceite de motor" nunca calzaba con
+ * nada y toda licitación de aceites/lubricantes quedaba en "Sin cobertura"
+ * 0% pese a que RMG vende justamente eso — este era el bug real detrás de
+ * "la ficha técnica no devuelve productos que hacen match".
+ */
+const SINONIMOS_CATEGORIA = [
+  { categoria: 'Lubricante', terminos: ['aceite', 'lubricante', 'motor', 'hidraulico', 'engranaje', 'sintetico', 'transmision'] },
+  { categoria: 'Grasa', terminos: ['grasa', 'lubricante solido', 'rodamiento'] },
+  { categoria: 'Neumatico', terminos: ['neumatico', 'llanta', 'goma', 'rueda'] },
+  { categoria: 'Bateria', terminos: ['bateria', 'acumulador', 'pila'] },
+  { categoria: 'Refrigerante/Aditivo Diesel', terminos: ['refrigerante', 'anticongelante', 'radiador', 'coolant', 'adblue', 'urea'] },
+  { categoria: 'Liquido de frenos', terminos: ['liquido de freno', 'freno'] },
+]
+
+function normalizarPalabra(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+function inferirCategoria(texto) {
+  const t = normalizarPalabra(texto)
+  for (const { categoria, terminos } of SINONIMOS_CATEGORIA) {
+    if (terminos.some(term => t.includes(normalizarPalabra(term)))) return categoria
+  }
+  return null
+}
+
+/**
  * Intenta emparejar la descripción de un ítem solicitado contra lista_precios.
  * Heurística de texto simple (v1) — no reemplaza el criterio humano, cada match
  * queda expuesto en el detalle de la oportunidad para revisión antes de cotizar.
+ *
+ * Dos pasadas:
+ *  1. Texto libre contra descripcion+producto_generico+categoria+marca (calce
+ *     fuerte — usado cuando el ítem trae detalle técnico específico, ej. "SAE
+ *     15W40 CK-4").
+ *  2. Si la pasada 1 no encuentra nada con confianza suficiente, se infiere la
+ *     categoria del ítem por sinónimos (ver SINONIMOS_CATEGORIA) y se elige el
+ *     SKU de mejor ranking de compra dentro de esa categoria — así "aceite de
+ *     motor" sí encuentra un candidato real de la línea Lubricante de RMG en
+ *     vez de quedar "Sin cobertura" solo porque el nombre comercial no
+ *     contiene la palabra "aceite".
  */
 function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
   const texto = `${descripcionSolicitada || ''} ${especificacionTecnica || ''}`.trim()
@@ -33,28 +78,45 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
     .split(/\s+/)
     .filter(w => w.length >= 4) // descarta conectores cortos
 
-  if (!palabras.length) return null
-
   const candidatos = db.prepare(`
-    SELECT codigo_sku, descripcion, categoria, marca, precio_venta_neto, costo_unidad_neto,
-           unidades_por_pack, presentacion
+    SELECT codigo_sku, descripcion, categoria, producto_generico, marca, precio_venta_neto,
+           costo_unidad_neto, unidades_por_pack, presentacion, ranking_compra
     FROM lista_precios
     WHERE codigo_sku IS NOT NULL
   `).all()
 
   let mejor = null
   let mejorScore = 0
-  for (const c of candidatos) {
-    const campo = `${c.descripcion || ''} ${c.categoria || ''} ${c.marca || ''}`.toLowerCase()
-    const matches = palabras.filter(p => campo.includes(p)).length
-    const score = matches / palabras.length
-    if (score > mejorScore) { mejorScore = score; mejor = c }
+  if (palabras.length) {
+    for (const c of candidatos) {
+      const campo = `${c.descripcion || ''} ${c.producto_generico || ''} ${c.categoria || ''} ${c.marca || ''}`.toLowerCase()
+      const matches = palabras.filter(p => campo.includes(p)).length
+      const score = matches / palabras.length
+      if (score > mejorScore) { mejorScore = score; mejor = c }
+    }
   }
 
   // Umbral conservador — mejor no-match que un match falso que termine en una
   // cotización con el producto equivocado.
-  if (!mejor || mejorScore < 0.34) return null
-  return { sku: mejor, confianza: Math.min(mejorScore, 0.95) }
+  if (mejor && mejorScore >= 0.34) {
+    return { sku: mejor, confianza: Math.min(mejorScore, 0.95) }
+  }
+
+  // Fallback por categoria: el ítem no trajo texto que calzara literalmente,
+  // pero sí es reconocible como un rubro que RMG vende. Confianza baja y
+  // explícita — se marca para revisión humana antes de cotizar, no se oferta
+  // a ciegas.
+  const categoriaInferida = inferirCategoria(texto)
+  if (categoriaInferida) {
+    const deLaCategoria = candidatos
+      .filter(c => (c.categoria || '').toLowerCase() === categoriaInferida.toLowerCase())
+      .sort((a, b) => (a.ranking_compra ?? 999) - (b.ranking_compra ?? 999))
+    if (deLaCategoria.length) {
+      return { sku: deLaCategoria[0], confianza: 0.4, porCategoria: true }
+    }
+  }
+
+  return null
 }
 
 /**

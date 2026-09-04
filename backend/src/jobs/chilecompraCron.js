@@ -26,7 +26,16 @@ const KEYWORDS = (process.env.CHILECOMPRA_KEYWORDS ||
   'bateria,acumulador,neumatico,llanta,adblue'
 ).split(',').map(s => s.trim()).filter(Boolean)
 
-const DIAS_HACIA_ATRAS = Number(process.env.CHILECOMPRA_DIAS_HACIA_ATRAS || 1) // 1 = solo hoy
+// Default 3 (no 1): margen de seguridad contra un cron que falla o se salta
+// un día (deploy, caída de Render, timeout de la API de ChileCompra) — sin
+// esto, un solo día perdido significa una licitación perdida para siempre,
+// porque el barrido es por "actividad en ese día puntual", no por vigencia
+// (ver nota en RANGOS_ANALISIS del frontend). 3 días de traslape diario es
+// barato (pocas llamadas extra) y evita depender de que el cron nunca falle.
+// El nivelado de fondo (licitaciones más viejas que ya estaban abiertas antes
+// de que este sistema empezara a correr) se hace aparte con el botón
+// "Últimos 30 días" del dashboard — eso no debe correr todos los días.
+const DIAS_HACIA_ATRAS = Number(process.env.CHILECOMPRA_DIAS_HACIA_ATRAS || 3)
 
 /**
  * "Hoy" calculado en la zona horaria de Santiago, NO con new Date() crudo.

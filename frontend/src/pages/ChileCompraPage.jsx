@@ -53,10 +53,22 @@ const isoLocal = (d) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+// Por qué 30 días es el default y no 7: la API de ChileCompra solo permite
+// consultar por "actividad en un día puntual" (fecha=), no por licitaciones
+// vigentes — así que si una licitación se publicó hace más de N días y sigue
+// abierta, un barrido de N días JAMÁS la encuentra (no es un problema de
+// palabras clave, es que ni siquiera se llega a evaluar esa licitación).
+// Verificado en producción el 04/09/2026: un barrido de 30 días encontró 2
+// oportunidades reales que un barrido de 7 días no veía. 30 días cubre el
+// plazo típico de apertura de una licitación pública (10-30 días corridos)
+// con margen. El cron diario (1 día) sigue siendo suficiente para mantenerse
+// al día una vez que la base ya está nivelada — este selector es para
+// nivelarla y para auditorías manuales cuando algo no calza con el portal.
 const RANGOS_ANALISIS = [
   { k: 'hoy',        label: 'Hoy' },
   { k: 'ayer',       label: 'Ayer' },
   { k: '7dias',      label: 'Últimos 7 días' },
+  { k: '30dias',     label: 'Últimos 30 días (recomendado)' },
   { k: 'custom',     label: 'Rango personalizado' },
 ]
 
@@ -64,7 +76,7 @@ export default function ChileCompraPage() {
   const qc = useQueryClient()
   const [filtros, setFiltros] = useState({ region: '', dias_vencimiento: '', q: '' })
   const [seleccionId, setSeleccionId] = useState(null)
-  const [rango, setRango] = useState('7dias')
+  const [rango, setRango] = useState('30dias')
   const [rangoCustom, setRangoCustom] = useState({ desde: isoLocal(new Date()), hasta: isoLocal(new Date()) })
 
   const params = {
@@ -82,6 +94,7 @@ export default function ChileCompraPage() {
   const bodyAnalisis = () => {
     if (rango === 'hoy') return { dias: 1 }
     if (rango === '7dias') return { dias: 7 }
+    if (rango === '30dias') return { dias: 30 }
     if (rango === 'ayer') {
       const ayer = new Date(); ayer.setDate(ayer.getDate() - 1)
       return { fecha_desde: isoLocal(ayer), fecha_hasta: isoLocal(ayer) }
