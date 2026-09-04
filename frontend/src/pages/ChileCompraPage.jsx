@@ -358,7 +358,7 @@ function DetalleModal({ id, onClose }) {
   const analizarMut = useMutation({
     mutationFn: () => api.post(`/chilecompra/${id}/analizar`).then(r => r.data),
     onSuccess: () => { invalidar(); toast.success('Anexos leídos y oportunidad re-analizada') },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al analizar. ¿Subiste los anexos PDF?'),
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al analizar la ficha pública. Puedes subir anexos manualmente e intentar de nuevo.'),
   })
 
   const handleDescartar = () => {
@@ -536,7 +536,12 @@ function DetalleModal({ id, onClose }) {
           )}
 
           {/* Anexos */}
-          <DocumentosPanel entidad="oportunidad_chilecompra" entidadId={op.id} titulo="Anexos / Bases" />
+          <div>
+            <p className="text-xs mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
+              El análisis ya lee la ficha pública de Mercado Público automáticamente — no es obligatorio subir nada acá. Solo hazlo si tienes un anexo adicional (plano, ficha técnica) que no esté en la ficha pública.
+            </p>
+            <DocumentosPanel entidad="oportunidad_chilecompra" entidadId={op.id} titulo="Anexos adicionales (opcional)" />
+          </div>
 
           {/* Historial */}
           {op.historial?.length > 0 && (

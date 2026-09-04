@@ -93,6 +93,58 @@ async function fetchLicitacionDetalle(codigo) {
 }
 
 /**
+ * URL pública de la ficha de una licitación en el portal de Mercado Público.
+ * El parámetro correcto es "idlicitacion" (con el CódigoExterno tal cual) — el
+ * portal redirige internamente a una URL con "qs=<token cifrado>". Usar "qs"
+ * directamente con el código externo (como se hacía antes) NO funciona: qs
+ * espera ese token cifrado, no el código, y la página queda en un loop de carga
+ * que en el navegador se ve como si pidiera iniciar sesión. La ficha es 100%
+ * pública — no requiere ClaveÚnica ni sesión de ningún tipo.
+ */
+function urlFichaPublica(codigoExterno) {
+  return `https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?idlicitacion=${encodeURIComponent(codigoExterno)}`
+}
+
+function stripHtml(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6]|table)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&aacute;/gi, 'á').replace(/&eacute;/gi, 'é').replace(/&iacute;/gi, 'í')
+    .replace(/&oacute;/gi, 'ó').replace(/&uacute;/gi, 'ú').replace(/&ntilde;/gi, 'ñ')
+    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Texto plano de la ficha pública de una licitación (bases, requisitos, criterios
+ * de evaluación, garantías — todo lo que el organismo publicó). No requiere ticket
+ * ni sesión: es la misma página que cualquiera ve en el portal sin loguearse. Se usa
+ * como fuente para el análisis con IA cuando el usuario no ha subido anexos PDF
+ * manualmente — evita pedirle que suba algo que ya está público en Mercado Público.
+ */
+async function fetchFichaPublicaTexto(codigoExterno) {
+  return conReintento(async () => {
+    const { data: html } = await axios.get(
+      'https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx',
+      { params: { idlicitacion: codigoExterno }, timeout: 20_000, maxRedirects: 5 }
+    )
+    const texto = stripHtml(html)
+    if (!texto || texto.length < 200) {
+      throw new Error('La ficha pública no devolvió contenido legible')
+    }
+    return texto
+  })
+}
+
+/**
  * TODO(confirmar-endpoint): Compra Ágil — beta, sin contrato público confirmado.
  * Placeholder honesto: lanza para que el fallo sea explícito en vez de devolver
  * datos silenciosamente vacíos o mal mapeados. Reemplazar la URL/params cuando
@@ -123,4 +175,6 @@ module.exports = {
   filtrarPorRubro,
   ddmmyyyy,
   sleep,
+  urlFichaPublica,
+  fetchFichaPublicaTexto,
 }

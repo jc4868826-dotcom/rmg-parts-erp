@@ -101,4 +101,53 @@ async function leerAnexos(documentos) {
   return parsed
 }
 
-module.exports = { leerAnexos }
+/**
+ * Igual que leerAnexos, pero a partir del TEXTO PLANO de la ficha pública de
+ * Mercado Público (ver chilecompraApiClient.fetchFichaPublicaTexto) en vez de un
+ * PDF subido a mano. La ficha pública ya trae bases administrativas, técnicas,
+ * criterios de evaluación y garantías — no hace falta que el usuario descargue y
+ * suba nada para tener un primer análisis; subir anexos PDF adicionales (planos,
+ * fichas técnicas específicas) sigue siendo útil pero deja de ser obligatorio.
+ * @param {string} textoFicha
+ */
+async function leerFichaPublica(textoFicha) {
+  if (!ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY no configurado — requerido para leer anexos con IA')
+  }
+  if (!textoFicha?.trim()) {
+    throw new Error('leerFichaPublica: no se recibió texto de la ficha')
+  }
+
+  const content = [
+    { type: 'text', text: `${EXTRACTION_PROMPT}\n\nEste es el texto de la ficha pública de la licitación (extraído del portal Mercado Público):\n\n${textoFicha.slice(0, 60_000)}` },
+  ]
+
+  const { data } = await axios.post(
+    ANTHROPIC_URL,
+    {
+      model: ANTHROPIC_MODEL,
+      max_tokens: 4096,
+      messages: [{ role: 'user', content }],
+    },
+    {
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      timeout: 60_000,
+    }
+  )
+
+  const textBlock = (data.content || []).find(b => b.type === 'text')
+  if (!textBlock) throw new Error('leerFichaPublica: la respuesta del modelo no trajo texto')
+
+  try {
+    const clean = textBlock.text.trim().replace(/^```json\s*/i, '').replace(/```$/, '')
+    return JSON.parse(clean)
+  } catch (e) {
+    throw new Error(`leerFichaPublica: no se pudo parsear la respuesta como JSON — revisar manualmente. Detalle: ${e.message}`)
+  }
+}
+
+module.exports = { leerAnexos, leerFichaPublica }

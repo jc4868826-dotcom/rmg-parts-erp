@@ -2409,6 +2409,54 @@ function runMigrations() {
     db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('chilecompra_v1')
     console.log('✅ Migración chilecompra_v1 — tablas del asistente de oportunidades ChileCompra creadas')
   }
+
+  // Migration chilecompra_v2_fix_url_items — la ingesta original guardaba
+  // url_portal con "qs=<codigo externo>", pero ese parámetro del portal espera un
+  // token cifrado, no el código — la ficha quedaba en loop de carga (se veía como
+  // si pidiera iniciar sesión). El parámetro correcto es "idlicitacion". También
+  // rellena los ítems (descripción/cantidad) desde detalle_raw_json para las
+  // oportunidades que se ingirieron antes de que la ingesta guardara los ítems
+  // directamente desde Items.Listado de la API.
+  const mChileCompraV2 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('chilecompra_v2_fix_url_items')
+  if (!mChileCompraV2) {
+    try {
+      db.prepare(`
+        UPDATE oportunidades_chilecompra
+        SET url_portal = 'https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?idlicitacion=' || codigo_externo
+        WHERE fuente = 'licitacion' AND codigo_externo IS NOT NULL
+      `).run()
+
+      const sinItems = db.prepare(`
+        SELECT o.id, o.detalle_raw_json FROM oportunidades_chilecompra o
+        WHERE o.fuente = 'licitacion' AND o.detalle_raw_json IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM oportunidad_chilecompra_items i WHERE i.oportunidad_id = o.id)
+      `).all()
+
+      const insItemBackfill = db.prepare(`
+        INSERT INTO oportunidad_chilecompra_items
+          (id, oportunidad_id, descripcion_solicitada, cantidad, unidad, especificacion_tecnica)
+        VALUES (?,?,?,?,?,?)
+      `)
+      for (const row of sinItems) {
+        try {
+          const detalle = JSON.parse(row.detalle_raw_json)
+          const itemsApi = detalle.Items?.Listado
+          if (Array.isArray(itemsApi)) {
+            for (const it of itemsApi) {
+              const descripcion = it.Descripcion || it.NombreProducto || null
+              if (!descripcion) continue
+              insItemBackfill.run(uuidv4(), row.id, descripcion, it.Cantidad ?? null, it.UnidadMedida || null, it.NombreProducto || null)
+            }
+          }
+        } catch (_) { /* detalle_raw_json inválido en esa fila — se ignora */ }
+      }
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('chilecompra_v2_fix_url_items')
+      console.log('✅ Migración chilecompra_v2_fix_url_items — url_portal corregida e ítems rellenados desde la API')
+    } catch (e) {
+      console.error('❌ Migración chilecompra_v2_fix_url_items falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

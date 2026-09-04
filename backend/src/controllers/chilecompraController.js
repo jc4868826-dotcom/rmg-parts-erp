@@ -14,7 +14,8 @@
  */
 const { db, uuidv4 } = require('../../config/database')
 const { cruzarItemsConCatalogo, calcularScoreRentabilidad, calcularScoreSeguridad, calcularScoreCompuesto } = require('../services/chilecompraScoring')
-const { leerAnexos } = require('../services/chilecompraDocReader')
+const { leerAnexos, leerFichaPublica } = require('../services/chilecompraDocReader')
+const chilecompraApi = require('../services/chilecompraApiClient')
 
 const TRANSICIONES = {
   detectada:               ['analizando', 'descartada'],
@@ -149,17 +150,19 @@ const cambiarEstado = async (req, res) => {
       estado_anterior: op.estado, estado_nuevo: nuevoEstado,
     })
 
-    // Al entrar a "analizando" se dispara automáticamente la lectura de anexos +
-    // scoring — si falla (p.ej. no hay anexos subidos todavía), no revierte el
-    // estado: queda "analizando" con el error visible para que el usuario suba
-    // los PDF y reintente vía POST /:id/analizar.
+    // Al entrar a "analizando" se dispara automáticamente el análisis: primero
+    // intenta con anexos subidos a mano, y si no hay ninguno, lee la ficha pública
+    // de Mercado Público directamente (no requiere que el usuario suba nada — ver
+    // analizarOportunidadInterno). Si igual falla (p.ej. la ficha pública no cargó,
+    // o es Compra Ágil sin ficha equivalente), no revierte el estado: queda
+    // "analizando" con el error visible para reintentar vía POST /:id/analizar.
     if (nuevoEstado === 'analizando') {
       try {
         await analizarOportunidadInterno(id, req.user)
       } catch (e) {
         return res.json({
           ...withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)),
-          advertencia: `Pasó a "analizando" pero el análisis automático falló: ${e.message}. Sube los anexos (POST /api/documentos/oportunidad_chilecompra/${id}) y reintenta con POST /api/chilecompra/${id}/analizar.`,
+          advertencia: `Pasó a "analizando" pero el análisis automático falló: ${e.message}. Puedes subir anexos manualmente (POST /api/documentos/oportunidad_chilecompra/${id}) o reintentar con POST /api/chilecompra/${id}/analizar.`,
         })
       }
     }
@@ -171,34 +174,54 @@ const cambiarEstado = async (req, res) => {
 }
 
 // ── Fase 2 — lectura de anexos + cruce con catálogo + scoring ────────────────
+// Fuente de la lectura, en orden de preferencia:
+//  1. Anexos PDF subidos a mano (si el usuario subió algo, se usa eso — puede
+//     traer detalle que la ficha pública no tiene, como planos o fichas técnicas).
+//  2. Ficha pública de Mercado Público (fetchFichaPublicaTexto) — no requiere que
+//     el usuario suba nada, porque las bases YA están públicas en el portal. Este
+//     es el camino por defecto para licitaciones.
+// Si ninguna de las dos está disponible, recién ahí se informa el error.
 async function analizarOportunidadInterno(id, user) {
+  const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)
+  if (!op) throw new Error('Oportunidad no encontrada')
+
   const anexos = db.prepare(
     "SELECT * FROM documentos_adjuntos WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ?"
   ).all(id)
 
-  if (!anexos.length) {
-    throw new Error('No hay anexos subidos todavía para esta oportunidad')
+  let extraccion
+  let fuenteAnalisis
+  if (anexos.length) {
+    const documentos = anexos.map(a => ({
+      base64: a.contenido_base64,
+      mediaType: a.mime_type,
+      nombre: a.nombre_archivo,
+    }))
+    extraccion = await leerAnexos(documentos)
+    fuenteAnalisis = 'anexos_subidos'
+  } else if (op.fuente === 'licitacion' && op.codigo_externo) {
+    const textoFicha = await chilecompraApi.fetchFichaPublicaTexto(op.codigo_externo)
+    extraccion = await leerFichaPublica(textoFicha)
+    fuenteAnalisis = 'ficha_publica'
+  } else {
+    throw new Error('No hay anexos subidos ni ficha pública disponible para analizar esta oportunidad')
   }
 
-  const documentos = anexos.map(a => ({
-    base64: a.contenido_base64,
-    mediaType: a.mime_type,
-    nombre: a.nombre_archivo,
-  }))
-
-  const extraccion = await leerAnexos(documentos)
-
   db.transaction(() => {
-    // Reemplaza los ítems (re-analizar debe partir limpio, no acumular duplicados)
-    db.prepare('DELETE FROM oportunidad_chilecompra_items WHERE oportunidad_id = ?').run(id)
-    const insItem = db.prepare(`
-      INSERT INTO oportunidad_chilecompra_items
-        (id, oportunidad_id, descripcion_solicitada, cantidad, unidad, especificacion_tecnica, precio_unitario_referencial)
-      VALUES (?,?,?,?,?,?,?)
-    `)
-    for (const it of extraccion.items || []) {
-      insItem.run(uuidv4(), id, it.descripcion_solicitada, it.cantidad, it.unidad,
-        it.especificacion_tecnica, it.precio_unitario_referencial)
+    // Solo reemplaza los ítems si la IA trajo alguno — si no trajo nada, se
+    // conservan los que ya venían de la ingesta directa de la API (Items.Listado),
+    // en vez de dejar la oportunidad sin ítems visibles.
+    if (extraccion.items?.length) {
+      db.prepare('DELETE FROM oportunidad_chilecompra_items WHERE oportunidad_id = ?').run(id)
+      const insItem = db.prepare(`
+        INSERT INTO oportunidad_chilecompra_items
+          (id, oportunidad_id, descripcion_solicitada, cantidad, unidad, especificacion_tecnica, precio_unitario_referencial)
+        VALUES (?,?,?,?,?,?,?)
+      `)
+      for (const it of extraccion.items) {
+        insItem.run(uuidv4(), id, it.descripcion_solicitada, it.cantidad, it.unidad,
+          it.especificacion_tecnica, it.precio_unitario_referencial)
+      }
     }
 
     db.prepare(`
@@ -221,16 +244,16 @@ async function analizarOportunidadInterno(id, user) {
   })()
 
   const cruce = cruzarItemsConCatalogo(id)
-  const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)
+  const opActualizada = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)
   const items = db.prepare('SELECT * FROM oportunidad_chilecompra_items WHERE oportunidad_id = ?').all(id)
 
   const scoreRentabilidad = calcularScoreRentabilidad({
-    coberturaPct: cruce.coberturaPct, presupuestoEstimado: op.presupuesto_estimado, items,
+    coberturaPct: cruce.coberturaPct, presupuestoEstimado: opActualizada.presupuesto_estimado, items,
   })
   const scoreSeguridad = calcularScoreSeguridad({
-    organismoRut: op.organismo_rut,
-    tieneExigenciaGarantia: !!op.tiene_exigencia_garantia,
-    tieneDemandas: op.tiene_demandas == null ? null : !!op.tiene_demandas,
+    organismoRut: opActualizada.organismo_rut,
+    tieneExigenciaGarantia: !!opActualizada.tiene_exigencia_garantia,
+    tieneDemandas: opActualizada.tiene_demandas == null ? null : !!opActualizada.tiene_demandas,
   })
   const scoreTotal = calcularScoreCompuesto(scoreRentabilidad, scoreSeguridad)
 
@@ -242,7 +265,7 @@ async function analizarOportunidadInterno(id, user) {
 
   logEvento(id, 'analisis_completado', {
     usuario_id: user?.id, usuario_nombre: user?.email,
-    detalle: `Cobertura ${Math.round(cruce.coberturaPct * 100)}% · score rentabilidad ${scoreRentabilidad} · score seguridad ${scoreSeguridad}`,
+    detalle: `Fuente: ${fuenteAnalisis === 'ficha_publica' ? 'ficha pública Mercado Público' : 'anexos subidos'} · Cobertura ${Math.round(cruce.coberturaPct * 100)}% · score rentabilidad ${scoreRentabilidad} · score seguridad ${scoreSeguridad}`,
   })
 }
 

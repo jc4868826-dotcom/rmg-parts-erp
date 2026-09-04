@@ -40,6 +40,12 @@ function siguAbierta(detalle) {
 /**
  * Los campos reales de organismo/región/comuna vienen anidados bajo "Comprador" en la
  * respuesta de la API — no en la raíz del objeto (verificado contra la API real).
+ *
+ * La API también trae "Items.Listado" con la descripción, cantidad y unidad de cada
+ * producto solicitado — eso se guarda de inmediato en oportunidad_chilecompra_items,
+ * SIN esperar a que alguien suba un PDF y la IA lo lea. Así la tarjeta y el modal de
+ * detalle muestran información real (qué piden, cuánto) desde el momento en que se
+ * detecta, no recién después de un análisis manual.
  */
 function insertarDetectada({ fuente, codigoExterno, detalle }) {
   const comprador = detalle.Comprador || {}
@@ -58,12 +64,25 @@ function insertarDetectada({ fuente, codigoExterno, detalle }) {
     detalle.Fechas?.FechaPublicacion || detalle.FechaPublicacion || null,
     detalle.Fechas?.FechaCierre || detalle.FechaCierre || null,
     detalle.MontoEstimado || null,
-    fuente === 'licitacion'
-      ? `https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${codigoExterno}`
-      : null,
+    fuente === 'licitacion' ? api.urlFichaPublica(codigoExterno) : null,
     JSON.stringify(detalle),
     'cron'
   )
+
+  const itemsApi = detalle.Items?.Listado
+  if (Array.isArray(itemsApi) && itemsApi.length) {
+    const insItem = db.prepare(`
+      INSERT INTO oportunidad_chilecompra_items
+        (id, oportunidad_id, descripcion_solicitada, cantidad, unidad, especificacion_tecnica)
+      VALUES (?,?,?,?,?,?)
+    `)
+    for (const it of itemsApi) {
+      const descripcion = it.Descripcion || it.NombreProducto || null
+      if (!descripcion) continue
+      insItem.run(uuidv4(), id, descripcion, it.Cantidad ?? null, it.UnidadMedida || null, it.NombreProducto || null)
+    }
+  }
+
   return id
 }
 
