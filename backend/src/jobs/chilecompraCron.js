@@ -14,13 +14,37 @@ const { enviarDigestDiario } = require('../services/chilecompraEmailDigest')
 // calza tanto con "hidráulico" como con "HIDRAULICO" en cualquier posición del
 // nombre. Usar frases largas tipo "aceite motor" es frágil: una licitación
 // titulada "ACEITE PARA MOTORES DIESEL" no la contiene como substring exacto y
-// se pierde. CHILECOMPRA_KEYWORDS en Render sobrescribe esto — actualizar ahí
-// también si se agregan rubros nuevos.
+// se pierde. Lista ampliada según las 4 líneas reales de RMG (ver
+// RMG_SKU_Segmentos_Estrategia y RMG_Catalogo_Tecnico_Vistony en el proyecto):
+// lubricantes/aceites, baterías, neumáticos, grasas — más refrigerantes, líquido
+// de frenos y AdBlue que también vende RMG. "aceite" sin más contexto también
+// calza con licitaciones de aceite comestible (JUNAEB, casinos) — eso se filtra
+// aparte en filtrarPorRubro, no acá. CHILECOMPRA_KEYWORDS en Render sobrescribe
+// esto — actualizar ahí también si se agregan rubros nuevos.
 const KEYWORDS = (process.env.CHILECOMPRA_KEYWORDS ||
-  'lubricante,aceite,hidraulico,bateria,neumatico,llanta,grasa,refrigerante,anticongelante,adblue'
+  'lubricante,aceite,hidraulico,grasa,refrigerante,anticongelante,liquido de frenos,' +
+  'bateria,acumulador,neumatico,llanta,adblue'
 ).split(',').map(s => s.trim()).filter(Boolean)
 
 const DIAS_HACIA_ATRAS = Number(process.env.CHILECOMPRA_DIAS_HACIA_ATRAS || 1) // 1 = solo hoy
+
+/**
+ * "Hoy" calculado en la zona horaria de Santiago, NO con new Date() crudo.
+ * Render corre el servidor en UTC; Chile va 3-4 horas detrás. Entre
+ * aproximadamente las 20:00 y las 23:59 hora Chile, el servidor en UTC ya está
+ * en el día siguiente — así que un simple `new Date()` calcula "hoy" como
+ * mañana en Chile. La API de ChileCompra usa SU propia fecha real y rechaza
+ * pedir un día futuro con el error "La fecha es mayor a la actual" (HTTP 400,
+ * código 10300) — eso hacía fallar en silencio el barrido de "Hoy" (y el cron
+ * de las 9am, aunque a esa hora es menos probable) en esa ventana horaria.
+ */
+function hoyEnSantiago() {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date())
+  const obj = Object.fromEntries(partes.map(p => [p.type, p.value]))
+  return new Date(`${obj.year}-${obj.month}-${obj.day}T12:00:00`)
+}
 
 function yaExiste(fuente, codigoExterno) {
   return !!db.prepare(
@@ -112,7 +136,7 @@ function construirFechas({ diasHaciaAtras, fechaDesde, fechaHasta } = {}) {
   const dias = Number(diasHaciaAtras ?? DIAS_HACIA_ATRAS) || 1
   const fechas = []
   for (let i = 0; i < dias; i++) {
-    const f = new Date()
+    const f = hoyEnSantiago()
     f.setDate(f.getDate() - i)
     fechas.push(f)
   }
