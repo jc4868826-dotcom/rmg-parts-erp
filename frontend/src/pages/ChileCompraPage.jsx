@@ -17,7 +17,7 @@ import {
   Landmark, Search, RefreshCw, X, AlertTriangle, CheckCircle2,
   XCircle, Clock, FileSearch, ClipboardCheck, Send, Trophy, Ban,
   MapPin, Calendar, Package, TrendingUp, ShieldCheck, ExternalLink,
-  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2
+  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -374,6 +374,19 @@ function DetalleModal({ id, onClose }) {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al analizar la ficha pública. Puedes subir anexos manualmente e intentar de nuevo.'),
   })
 
+  const extraerFichasMut = useMutation({
+    mutationFn: () => api.post(`/chilecompra/${id}/extraer-fichas-tecnicas`).then(r => r.data),
+    onSuccess: (data) => {
+      invalidar()
+      if (data?.sinFicha?.length) {
+        toast(`${data.adjuntadas} ficha(s) adjuntada(s). Sin ficha disponible para: ${data.sinFicha.join(', ')}`, { icon: '⚠️' })
+      } else {
+        toast.success(`${data.adjuntadas} ficha(s) técnica(s) adjuntada(s) a la postulación`)
+      }
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al extraer las fichas técnicas'),
+  })
+
   const handleDescartar = () => {
     const motivo = window.prompt('Motivo del descarte (obligatorio):')
     if (motivo === null) return
@@ -552,6 +565,25 @@ function DetalleModal({ id, onClose }) {
               <ListChecks size={13} /> Ver checklist de documentos para postular
             </button>
           )}
+
+          {/* Fichas técnicas */}
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--rmg-muted)' }}>
+              <FileStack size={12} /> Fichas técnicas
+            </div>
+            <p className="text-xs mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
+              El análisis ya intenta adjuntar automáticamente la ficha técnica de cada producto emparejado. Usa este botón para reintentar o refrescarlas — por ejemplo si cambiaste manualmente el SKU ofertado en algún ítem.
+            </p>
+            <button
+              onClick={() => extraerFichasMut.mutate()}
+              disabled={extraerFichasMut.isPending || !op.items?.length}
+              className="text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg disabled:opacity-50"
+              style={{ color: 'var(--rmg-blue)', background: 'rgba(15,35,60,0.03)' }}
+            >
+              <FileStack size={13} className={extraerFichasMut.isPending ? 'animate-pulse' : ''} />
+              {extraerFichasMut.isPending ? 'Extrayendo fichas técnicas…' : 'Extraer fichas técnicas'}
+            </button>
+          </div>
 
           {/* Anexos */}
           <div>

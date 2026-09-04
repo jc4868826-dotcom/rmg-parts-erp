@@ -16,6 +16,8 @@ const { db, uuidv4 } = require('../../config/database')
 const { cruzarItemsConCatalogo, calcularScoreRentabilidad, calcularScoreSeguridad, calcularScoreCompuesto } = require('../services/chilecompraScoring')
 const { leerAnexos, leerFichaPublica } = require('../services/chilecompraDocReader')
 const chilecompraApi = require('../services/chilecompraApiClient')
+const { generarExcelCruce } = require('../services/chilecompraExcelExport')
+const { adjuntarFichasAOportunidad } = require('../services/fichasTecnicasVistonyService')
 
 // Además de las transiciones "hacia adelante" del flujo, se permite volver un
 // paso atrás para corregir un click equivocado (p.ej. entrar a "analizando" por
@@ -274,12 +276,76 @@ async function analizarOportunidadInterno(id, user) {
     usuario_id: user?.id, usuario_nombre: user?.email,
     detalle: `Fuente: ${fuenteAnalisis === 'ficha_publica' ? 'ficha pública Mercado Público' : 'anexos subidos'} · Cobertura ${Math.round(cruce.coberturaPct * 100)}% · score rentabilidad ${scoreRentabilidad} · score seguridad ${scoreSeguridad}`,
   })
+
+  // Genera y adjunta el Excel de cruce (formato estándar acordado con el
+  // usuario) a la ficha de la postulación. Se reemplaza el generado en un
+  // análisis anterior (si lo hay) para no acumular versiones viejas cada vez
+  // que se reanaliza la misma oportunidad.
+  try {
+    const excelBuffer = await generarExcelCruce(id)
+    const nombreExcel = 'Cruce_Bases_vs_Catalogo_RMG.xlsx'
+    const existente = db.prepare(`
+      SELECT id FROM documentos_adjuntos
+      WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ? AND nombre_archivo = ? AND categoria = 'cruce_auto'
+    `).get(id, nombreExcel)
+    if (existente) {
+      db.prepare(`UPDATE documentos_adjuntos SET contenido_base64 = ?, created_at = datetime('now') WHERE id = ?`)
+        .run(excelBuffer.toString('base64'), existente.id)
+    } else {
+      db.prepare(`
+        INSERT INTO documentos_adjuntos
+          (id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, categoria)
+        VALUES (?,?,?,?,?,?,?,?,?)
+      `).run(uuidv4(), 'oportunidad_chilecompra', id, 'excel', nombreExcel,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        excelBuffer.toString('base64'), user?.id || null, 'cruce_auto')
+    }
+    logEvento(id, 'excel_cruce_generado', { usuario_id: user?.id, usuario_nombre: user?.email,
+      detalle: 'Excel de cruce generado y adjuntado automáticamente a la ficha de la postulación.' })
+  } catch (e) {
+    // No hace fallar el análisis completo si la generación del Excel falla —
+    // los ítems y scores ya quedaron guardados, que es lo esencial.
+    logEvento(id, 'excel_cruce_error', { usuario_id: user?.id, usuario_nombre: user?.email, detalle: e.message })
+  }
+
+  // Adjunta las fichas técnicas de los productos con match (mejor esfuerzo:
+  // si Vistony no responde o un producto no tiene ficha en la librería, no
+  // interrumpe el análisis — el usuario puede reintentar con el botón
+  // "Extraer fichas técnicas" en la ficha de la oportunidad).
+  try {
+    const resultadoFichas = await adjuntarFichasAOportunidad(id, user)
+    logEvento(id, 'fichas_tecnicas_adjuntadas', { usuario_id: user?.id, usuario_nombre: user?.email,
+      detalle: `${resultadoFichas.adjuntadas}/${resultadoFichas.total} fichas técnicas adjuntadas automáticamente.` })
+  } catch (e) {
+    logEvento(id, 'fichas_tecnicas_error', { usuario_id: user?.id, usuario_nombre: user?.email, detalle: e.message })
+  }
 }
 
 const analizarOportunidad = async (req, res) => {
   try {
     await analizarOportunidadInterno(req.params.id, req.user)
     res.json(withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(req.params.id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// ── Botón "Extraer fichas técnicas" ───────────────────────────────────────────
+// Se puede llamar en cualquier momento (no solo durante el análisis automático)
+// para reintentar o refrescar las fichas de los productos actualmente
+// emparejados en la oportunidad — por ejemplo si el usuario cambió manualmente
+// el SKU ofertado en algún ítem después del análisis inicial.
+const extraerFichasTecnicas = async (req, res) => {
+  try {
+    const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(req.params.id)
+    if (!op) return res.status(404).json({ error: 'Oportunidad no encontrada' })
+
+    const resultado = await adjuntarFichasAOportunidad(req.params.id, req.user)
+    logEvento(req.params.id, 'fichas_tecnicas_adjuntadas', {
+      usuario_id: req.user?.id, usuario_nombre: req.user?.email,
+      detalle: `${resultado.adjuntadas}/${resultado.total} fichas técnicas adjuntadas (botón manual).`,
+    })
+    res.json(resultado)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -322,4 +388,5 @@ module.exports = {
   analizarOportunidad,
   analizarOportunidadInterno,
   getChecklistPostulacion,
+  extraerFichasTecnicas,
 }

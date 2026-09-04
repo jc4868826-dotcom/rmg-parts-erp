@@ -2457,6 +2457,88 @@ function runMigrations() {
       console.error('❌ Migración chilecompra_v2_fix_url_items falló:', e.message)
     }
   }
+
+  // Migration chilecompra_documentos_v1 — dos correcciones necesarias para que el
+  // asistente ChileCompra pueda adjuntar el Excel de cruce y las fichas técnicas
+  // a la ficha de la postulación:
+  //
+  //  1) documentos_adjuntos.entidad tenía un CHECK que NO incluía
+  //     'oportunidad_chilecompra' (bug preexistente: el controller y el frontend
+  //     ya asumían que funcionaba, pero cualquier INSERT con esa entidad violaba
+  //     el CHECK). SQLite no permite ALTER de un CHECK existente, así que se
+  //     reconstruye la tabla con el CHECK ampliado, preservando todos los datos.
+  //     De paso se agrega el tipo 'zip' por si a futuro se adjunta más de un
+  //     archivo comprimido, y se deja 'categoria' ya presente desde
+  //     venta_validacion_pago_v1.
+  //
+  //  2) catalogo_fichas_tecnicas — librería reutilizable ("utilitarios") de
+  //     fichas técnicas de productos, extraídas del sitio de Vistony y
+  //     guardadas en base64 (misma arquitectura sin disco persistente que el
+  //     resto del sistema), indexadas por nombre/SKU de producto para poder
+  //     consultarlas siempre y adjuntarlas a cualquier postulación según los
+  //     productos ofertados.
+  const mChileCompraDocs = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('chilecompra_documentos_v1')
+  if (!mChileCompraDocs) {
+    try {
+      // oportunidad_chilecompra_items.observacion — texto libre para explicar el
+      // match (p.ej. "presentación exacta no existe, se usó caja de 4x1 GAL
+      // como proxy de la tineta solicitada"), el mismo campo "Observación" del
+      // formato Excel de cruce ya validado con el usuario.
+      const itemCols = db.prepare('PRAGMA table_info(oportunidad_chilecompra_items)').all().map(c => c.name)
+      if (!itemCols.includes('observacion')) db.exec('ALTER TABLE oportunidad_chilecompra_items ADD COLUMN observacion TEXT')
+      if (!itemCols.includes('sku_match_original_tambor')) db.exec('ALTER TABLE oportunidad_chilecompra_items ADD COLUMN sku_match_original_tambor TEXT')
+
+      const docCols = db.prepare('PRAGMA table_info(documentos_adjuntos)').all().map(c => c.name)
+      const tieneCategoria = docCols.includes('categoria')
+
+      db.exec(`
+        CREATE TABLE documentos_adjuntos_new (
+          id              TEXT PRIMARY KEY,
+          entidad         TEXT NOT NULL CHECK(entidad IN ('cotizacion','pedido','venta','orden_compra','oportunidad_chilecompra')),
+          entidad_id      TEXT NOT NULL,
+          tipo            TEXT NOT NULL CHECK(tipo IN ('pdf','excel','imagen','zip')),
+          nombre_archivo  TEXT,
+          mime_type       TEXT,
+          contenido_base64 TEXT NOT NULL,
+          subido_por      TEXT REFERENCES usuarios(id),
+          created_at      TEXT DEFAULT (datetime('now'))${tieneCategoria ? ',\n          categoria       TEXT' : ''}
+        );
+      `)
+      db.exec(`
+        INSERT INTO documentos_adjuntos_new (id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, created_at${tieneCategoria ? ', categoria' : ''})
+        SELECT id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, created_at${tieneCategoria ? ', categoria' : ''}
+        FROM documentos_adjuntos;
+      `)
+      db.exec(`
+        DROP TABLE documentos_adjuntos;
+        ALTER TABLE documentos_adjuntos_new RENAME TO documentos_adjuntos;
+        CREATE INDEX IF NOT EXISTS idx_documentos_entidad ON documentos_adjuntos(entidad, entidad_id);
+      `)
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS catalogo_fichas_tecnicas (
+          id                TEXT PRIMARY KEY,
+          producto_sku      TEXT,
+          producto_nombre   TEXT NOT NULL,
+          fuente            TEXT DEFAULT 'vistony',
+          url_origen        TEXT,
+          nombre_archivo    TEXT,
+          mime_type         TEXT,
+          contenido_base64  TEXT NOT NULL,
+          hash_contenido    TEXT,
+          created_at        TEXT DEFAULT (datetime('now')),
+          updated_at        TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_fichas_sku ON catalogo_fichas_tecnicas(producto_sku);
+        CREATE INDEX IF NOT EXISTS idx_fichas_nombre ON catalogo_fichas_tecnicas(producto_nombre);
+      `)
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('chilecompra_documentos_v1')
+      console.log('✅ Migración chilecompra_documentos_v1 — documentos_adjuntos admite oportunidad_chilecompra + catalogo_fichas_tecnicas creada')
+    } catch (e) {
+      console.error('❌ Migración chilecompra_documentos_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

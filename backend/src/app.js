@@ -108,6 +108,7 @@ app.use('/api/backup',              require('./routes/backup'));      // Backup 
 app.use('/api/asesor',              require('./routes/asesor'));      // Asesor de Productos Vistony
 app.use('/api/usuarios',            require('./routes/usuarios'));    // Usuarios y perfiles (gerente/administrador)
 app.use('/api/chilecompra',         require('./routes/chilecompra')); // Asistente de oportunidades ChileCompra
+app.use('/api/utilitarios',         require('./routes/utilitarios')); // Librería de fichas técnicas (scrape Vistony)
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {

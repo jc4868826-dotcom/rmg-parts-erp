@@ -19,6 +19,85 @@ const { db } = require('../../config/database')
 const MARGEN_OBJETIVO_MINIMO = 0.15 // 15% — por debajo de esto, rentabilidad cae fuerte
 
 /**
+ * Patrón de análisis acordado con el usuario (licitación La Florida 2026,
+ * ítem 18): cuando el mejor candidato de catálogo para un ítem es un
+ * Tambor/Cilindro (formato grande, 55 GAL o más), NUNCA se ofrece por
+ * defecto como "unidad de compra proxy" multiplicada por la cantidad
+ * solicitada — eso infla artificialmente el costo/precio si lo que la
+ * licitación realmente pide es un balde o una caja chica. Antes de aceptar
+ * un tambor como match, se busca si existe una presentación de MENOR
+ * formato del mismo producto genérico (misma categoria+producto_generico)
+ * que cubra razonablemente el volumen pedido — se prefiere esa.
+ *
+ * "NUNCA un tambor/cilindro grande" — regla explícita del usuario,
+ * documentada también en RMG_Licitacion_LaFlorida_Cruce_2026.md.
+ */
+const TIPOS_ENVASE_GRANDE = ['tambor/cilindro', 'tambor', 'contenedor ibc']
+
+function parseVolumenPresentacion(presentacion) {
+  if (!presentacion) return null
+  const s = presentacion.toUpperCase().replace(',', '.')
+  // Galones: "5 GAL", "1 GL", "55 GAL", "1/4 GAL" (fracción)
+  const fracGal = s.match(/(\d+)\s*\/\s*(\d+)\s*GA?L\b/)
+  if (fracGal) {
+    const val = parseInt(fracGal[1], 10) / parseInt(fracGal[2], 10)
+    return Math.round(val * 3.785 * 100) / 100
+  }
+  const gal = s.match(/(\d+(?:\.\d+)?)\s*GA?L\b/)
+  if (gal) return Math.round(parseFloat(gal[1]) * 3.785 * 100) / 100
+  // Litros: "5 L", "4 LT", "200 L"
+  const lit = s.match(/(\d+(?:\.\d+)?)\s*LTS?\b/) || s.match(/(\d+(?:\.\d+)?)\s*L\b/)
+  if (lit) return parseFloat(lit[1])
+  // Mililitros
+  const ml = s.match(/(\d+(?:\.\d+)?)\s*ML\b/)
+  if (ml) return Math.round((parseFloat(ml[1]) / 1000) * 1000) / 1000
+  return null
+}
+
+function esFormatoGrande(tipoEnvase, presentacion) {
+  const t = (tipoEnvase || '').toLowerCase()
+  if (TIPOS_ENVASE_GRANDE.some(g => t.includes(g))) return true
+  const vol = parseVolumenPresentacion(presentacion)
+  return vol != null && vol >= 50 // 55 GAL ≈ 208 L, umbral conservador en 50 L
+}
+
+/**
+ * Si el candidato elegido es un formato grande (tambor/cilindro), busca
+ * dentro de la misma categoria+producto_generico una presentación menor
+ * (balde, caja, bidón) que también esté en lista_precios. Si existe, la
+ * prefiere — documentando el motivo para que quede visible en el detalle
+ * del ítem. Si NO existe ninguna alternativa menor, se mantiene el tambor
+ * (mejor tener cobertura con el formato grande que declarar "sin
+ * cobertura"), pero queda marcado con `formatoGrandeSinAlternativa: true`
+ * para que el usuario lo revise antes de cotizar.
+ */
+function preferirFormatoMenor(candidatoElegido, todosLosCandidatos) {
+  if (!candidatoElegido || !esFormatoGrande(candidatoElegido.tipo_envase, candidatoElegido.presentacion)) {
+    return { sku: candidatoElegido, sustituido: false }
+  }
+
+  const alternativas = todosLosCandidatos
+    .filter(c =>
+      c.codigo_sku !== candidatoElegido.codigo_sku &&
+      (c.producto_generico || '').toLowerCase() === (candidatoElegido.producto_generico || '').toLowerCase() &&
+      (c.categoria || '').toLowerCase() === (candidatoElegido.categoria || '').toLowerCase() &&
+      !esFormatoGrande(c.tipo_envase, c.presentacion)
+    )
+    .map(c => ({ c, vol: parseVolumenPresentacion(c.presentacion) }))
+    .filter(x => x.vol != null)
+    .sort((a, b) => a.vol - b.vol) // el de menor formato adecuado primero
+
+  if (alternativas.length === 0) {
+    return { sku: candidatoElegido, sustituido: false, formatoGrandeSinAlternativa: true }
+  }
+
+  // Prefiere el de mayor volumen entre los "chicos" (para minimizar cuántas
+  // unidades hay que multiplicar), pero nunca un tambor.
+  const elegido = alternativas[alternativas.length - 1].c
+  return { sku: elegido, sustituido: true, skuOriginalTambor: candidatoElegido.codigo_sku }
+}
+
+/**
  * Mapa de sinónimos genéricos (español "de la calle") → categoria real en
  * lista_precios. CRÍTICO: los ítems que licitaciones/IA extraen usan términos
  * genéricos ("aceite de motor", "neumáticos", "batería para camioneta"), pero
@@ -99,7 +178,8 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
   // Umbral conservador — mejor no-match que un match falso que termine en una
   // cotización con el producto equivocado.
   if (mejor && mejorScore >= 0.34) {
-    return { sku: mejor, confianza: Math.min(mejorScore, 0.95) }
+    const { sku, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa } = preferirFormatoMenor(mejor, candidatos)
+    return { sku, confianza: Math.min(mejorScore, 0.95), sustituido, skuOriginalTambor, formatoGrandeSinAlternativa }
   }
 
   // Fallback por categoria: el ítem no trajo texto que calzara literalmente,
@@ -112,7 +192,8 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
       .filter(c => (c.categoria || '').toLowerCase() === categoriaInferida.toLowerCase())
       .sort((a, b) => (a.ranking_compra ?? 999) - (b.ranking_compra ?? 999))
     if (deLaCategoria.length) {
-      return { sku: deLaCategoria[0], confianza: 0.4, porCategoria: true }
+      const { sku, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa } = preferirFormatoMenor(deLaCategoria[0], candidatos)
+      return { sku, confianza: 0.4, porCategoria: true, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa }
     }
   }
 
@@ -131,7 +212,8 @@ function cruzarItemsConCatalogo(oportunidadId) {
   const upd = db.prepare(`
     UPDATE oportunidad_chilecompra_items
     SET sku_match = ?, match_confianza = ?, costo_unitario_rmg = ?,
-        precio_venta_sugerido = ?, margen_pct_estimado = ?, cubierto = ?
+        precio_venta_sugerido = ?, margen_pct_estimado = ?, cubierto = ?,
+        observacion = ?, sku_match_original_tambor = ?
     WHERE id = ?
   `)
 
@@ -139,17 +221,24 @@ function cruzarItemsConCatalogo(oportunidadId) {
   for (const item of items) {
     const match = buscarSkuCandidato(item.descripcion_solicitada, item.especificacion_tecnica)
     if (!match) {
-      upd.run(null, null, null, null, null, 0, item.id)
+      upd.run(null, null, null, null, null, 0, null, null, item.id)
       continue
     }
-    const { sku, confianza } = match
+    const { sku, confianza, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa } = match
     const costoUnitario = sku.unidades_por_pack > 1
       ? Math.round(sku.costo_unidad_neto / sku.unidades_por_pack)
       : sku.costo_unidad_neto
     const precioSugerido = sku.precio_venta_neto
     const margenPct = costoUnitario > 0 ? (precioSugerido - costoUnitario) / precioSugerido : null
 
-    upd.run(sku.codigo_sku, confianza, costoUnitario, precioSugerido, margenPct, 1, item.id)
+    let observacion = null
+    if (sustituido) {
+      observacion = `Presentación de menor formato (${sku.presentacion}) usada como unidad de compra proxy en lugar del tambor/cilindro ${skuOriginalTambor} — evita inflar el costo con un formato grande innecesario. Verificar cantidad de unidades necesarias según el volumen solicitado.`
+    } else if (formatoGrandeSinAlternativa) {
+      observacion = `No existe en catálogo una presentación de menor formato para este producto — se ofrece el tambor/cilindro (${sku.presentacion}) por ser la única opción disponible. Revisar antes de cotizar si conviene fraccionar o buscar proveedor alternativo.`
+    }
+
+    upd.run(sku.codigo_sku, confianza, costoUnitario, precioSugerido, margenPct, 1, observacion, skuOriginalTambor || null, item.id)
     cubiertos++
   }
 
@@ -217,4 +306,7 @@ module.exports = {
   calcularScoreRentabilidad,
   calcularScoreSeguridad,
   calcularScoreCompuesto,
+  parseVolumenPresentacion,
+  esFormatoGrande,
+  preferirFormatoMenor,
 }
