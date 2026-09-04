@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
+import { useAuth } from '@context/AuthContext'
 import { formatCLP } from '@utils/format'
 import { Warehouse, ArrowDown, ArrowUp, RefreshCw, Plus, X, AlertTriangle, Package, Search, Download, ChevronRight, Wallet, TrendingUp, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -29,6 +30,8 @@ const ALERTAS_LABEL = {
 export default function BodegasPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const puedeLimpiar = ['gerente', 'administrador'].includes(user?.rol)
   const [tab, setTab] = useState('stock')
   const [tipoFiltro, setTipoFiltro] = useState('')
   const [showAjuste, setShowAjuste] = useState(false)
@@ -38,6 +41,8 @@ export default function BodegasPage() {
   const [alertaFiltro, setAlertaFiltro] = useState('')
   const [verAgotados, setVerAgotados] = useState(false) // por defecto: bodega = lo que tengo, no el catálogo completo
   const [productoSeleccionado, setProductoSeleccionado] = useState(null)
+  const [showLimpieza, setShowLimpieza] = useState(false)
+  const [confirmLimpieza, setConfirmLimpieza] = useState('')
 
   const { data: movimientos = [], isLoading: loadingMovs } = useQuery({
     queryKey: ['movimientos-stock', tipoFiltro],
@@ -65,6 +70,22 @@ export default function BodegasPage() {
       setShowAjuste(false)
     },
     onError: () => toast.error('Error al ajustar stock'),
+  })
+
+  // "Código de limpieza" — pone en 0 el stock de TODA la bodega de una vez
+  // (antes de una toma de inventario física). Deja un movimiento 'ajuste'
+  // por cada SKU afectado en el historial, así que sigue siendo auditable/
+  // revertible SKU por SKU desde ahí igual que cualquier otro ajuste manual.
+  const limpiarMut = useMutation({
+    mutationFn: () => api.post('/bodega/limpieza', { motivo: 'Limpieza de bodega — toma de inventario' }).then(r => r.data),
+    onSuccess: (data) => {
+      qc.invalidateQueries(['movimientos-stock'])
+      qc.invalidateQueries(['inventario'])
+      toast.success(`Bodega limpiada — ${data.skus_afectados} SKU puestos en 0`)
+      setShowLimpieza(false)
+      setConfirmLimpieza('')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al limpiar la bodega'),
   })
 
   const eliminarMovMut = useMutation({
@@ -178,10 +199,56 @@ export default function BodegasPage() {
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Inventario actual · Movimientos de stock · Ajustes</p>
         </div>
-        <button onClick={() => setShowAjuste(v => !v)} className="btn-primary flex items-center gap-2">
-          {showAjuste ? <><X size={15}/> Cerrar</> : <><Plus size={15}/> Ajuste manual</>}
-        </button>
+        <div className="flex items-center gap-2">
+          {puedeLimpiar && (
+            <button onClick={() => setShowLimpieza(true)} title="Poner en 0 el stock de todos los SKU — usar antes de una toma de inventario física"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={{ background: 'rgba(224,90,78,0.1)', color: 'var(--rmg-red)', border: '1px solid rgba(224,90,78,0.25)' }}>
+              <Trash2 size={15}/> Limpieza de bodega
+            </button>
+          )}
+          <button onClick={() => setShowAjuste(v => !v)} className="btn-primary flex items-center gap-2">
+            {showAjuste ? <><X size={15}/> Cerrar</> : <><Plus size={15}/> Ajuste manual</>}
+          </button>
+        </div>
       </div>
+
+      {/* Modal: código de limpieza — confirmación explícita por ser masivo e irreversible */}
+      {showLimpieza && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-bold flex items-center gap-2" style={{ color: 'var(--rmg-red)' }}>
+                <AlertTriangle size={17}/> Limpieza de bodega
+              </h2>
+              <button onClick={() => { setShowLimpieza(false); setConfirmLimpieza('') }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <p className="text-sm mb-2" style={{ color: 'var(--rmg-off)' }}>
+              Esto va a poner en <strong>0 el stock de los {enBodega.length} SKU</strong> que hoy tienen stock en bodega
+              (valor a costo actual: <strong>{formatCLP(valorTotalCosto)}</strong>). Queda un ajuste registrado por cada
+              SKU en el historial de movimientos, así que se puede revisar o revertir uno por uno después — pero es una
+              acción masiva sobre datos reales. Úsala solo antes de una toma de inventario física completa.
+            </p>
+            <label className="block text-xs font-semibold mt-4 mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>
+              Escribe CONFIRMAR para continuar
+            </label>
+            <input type="text" className="rmg-input text-sm w-full" value={confirmLimpieza}
+              onChange={e => setConfirmLimpieza(e.target.value)} placeholder="CONFIRMAR" autoFocus />
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => { setShowLimpieza(false); setConfirmLimpieza('') }} className="btn-secondary text-sm flex-1">
+                Cancelar
+              </button>
+              <button
+                onClick={() => limpiarMut.mutate()}
+                disabled={confirmLimpieza.trim().toUpperCase() !== 'CONFIRMAR' || limpiarMut.isPending}
+                className="text-sm flex-1 rounded-lg font-semibold py-2 transition-all disabled:opacity-40"
+                style={{ background: 'var(--rmg-red)', color: '#fff' }}>
+                {limpiarMut.isPending ? 'Limpiando…' : 'Confirmar limpieza'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Resumen compacto — un vistazo, sin tapar la lista de abajo */}
       <div className="rmg-card px-5 py-3 flex flex-wrap items-center gap-x-7 gap-y-3">

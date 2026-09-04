@@ -117,6 +117,54 @@ const eliminarMovimiento = (req, res) => {
   }
 }
 
+// "Código de limpieza" — pone en 0 el stock_actual de TODOS los SKU de la
+// bodega de una sola vez. Pensado para usar antes de una toma de inventario
+// física completa (se limpia todo, y después se va cargando el conteo real
+// SKU por SKU con /bodega/ajuste). Acción masiva e irreversible sobre datos
+// reales — por eso queda gateada a gerente/administrador en la ruta y deja
+// UN movimiento 'ajuste' por cada SKU que tenía stock distinto de 0, con su
+// stock_anterior guardado, para poder auditar o revertir uno por uno desde
+// el historial si hace falta (igual que cualquier otro ajuste manual).
+const limpiarStock = (req, res) => {
+  try {
+    const motivo = (req.body?.motivo || '').trim() || 'Limpieza de bodega — toma de inventario'
+
+    const skus = db.prepare(`
+      SELECT codigo_sku, MAX(descripcion) AS descripcion, MAX(COALESCE(stock_actual,0)) AS stock_actual
+      FROM lista_precios
+      WHERE codigo_sku IS NOT NULL AND codigo_sku != ''
+      GROUP BY codigo_sku
+      HAVING MAX(COALESCE(stock_actual,0)) != 0
+    `).all()
+
+    const resumen = db.transaction(() => {
+      const afectados = []
+      for (const s of skus) {
+        db.prepare('UPDATE lista_precios SET stock_actual = 0 WHERE codigo_sku = ?').run(s.codigo_sku)
+
+        const movId = uuidv4()
+        db.prepare(`INSERT INTO movimientos_stock
+          (id, producto_id, codigo, descripcion, tipo, cantidad, stock_anterior, stock_nuevo, motivo)
+          VALUES (?,?,?,?,?,?,?,?,?)`
+        ).run(movId, s.codigo_sku, s.codigo_sku, s.descripcion, 'ajuste',
+          -s.stock_actual, s.stock_actual, 0, motivo)
+
+        afectados.push({ codigo: s.codigo_sku, descripcion: s.descripcion, stock_anterior: s.stock_actual })
+      }
+      return afectados
+    })()
+
+    res.json({
+      ok: true,
+      skus_afectados: resumen.length,
+      stock_total_previo: resumen.reduce((s, r) => s + r.stock_anterior, 0),
+      detalle: resumen,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const getStockConMovimientos = (req, res) => {
   try {
     const codigo = req.params.codigo
@@ -143,4 +191,4 @@ const getStockConMovimientos = (req, res) => {
   }
 }
 
-module.exports = { getMovimientos, ajustarStock, recibirOC, getStockConMovimientos, eliminarMovimiento }
+module.exports = { getMovimientos, ajustarStock, recibirOC, getStockConMovimientos, eliminarMovimiento, limpiarStock }
