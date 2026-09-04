@@ -30,6 +30,40 @@ function ddmmyyyy(date) {
   return `${p(d.getDate())}${p(d.getMonth() + 1)}${d.getFullYear()}`
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * La API pública de ChileCompra aplica rate-limit por ticket (no documentado con
+ * exactitud, pero se confirmó empíricamente: barrer 7 días dispara cientos de
+ * solicitudes seguidas y la API empieza a responder 429 Too Many Requests a partir
+ * de las primeras — eso es lo que causaba que "hacer análisis" pareciera traer
+ * solo una oportunidad a la vez, no un bug del rango de fechas). Esta función
+ * envuelve cualquier llamada a la API con reintento y backoff exponencial cuando
+ * la respuesta es 429 (o 500/502/503, transitorios en la API pública).
+ */
+async function conReintento(fn, { maxIntentos = 5, delayBaseMs = 1500 } = {}) {
+  let intento = 0
+  while (true) {
+    try {
+      return await fn()
+    } catch (e) {
+      const status = e.response?.status
+      const reintentable = status === 429 || status === 500 || status === 502 || status === 503
+      intento++
+      if (reintentable && intento < maxIntentos) {
+        const retryAfterHeader = Number(e.response?.headers?.['retry-after'])
+        const espera = (retryAfterHeader ? retryAfterHeader * 1000 : null) || delayBaseMs * Math.pow(2, intento - 1)
+        console.warn(`⏳ ChileCompra API respondió ${status} — reintento ${intento}/${maxIntentos - 1} en ${espera}ms`)
+        await sleep(espera)
+        continue
+      }
+      throw e
+    }
+  }
+}
+
 /**
  * Licitaciones publicadas en una fecha dada (la API solo permite consultar por día,
  * no por rango — para barrer varios días hay que llamar una vez por fecha).
@@ -37,21 +71,25 @@ function ddmmyyyy(date) {
  */
 async function fetchLicitacionesPorFecha(fecha) {
   assertTicket()
-  const { data } = await axios.get(`${BASE_URL}/licitaciones.json`, {
-    params: { ticket: TICKET, fecha: ddmmyyyy(fecha) },
-    timeout: 20_000,
+  return conReintento(async () => {
+    const { data } = await axios.get(`${BASE_URL}/licitaciones.json`, {
+      params: { ticket: TICKET, fecha: ddmmyyyy(fecha) },
+      timeout: 20_000,
+    })
+    return Array.isArray(data?.Listado) ? data.Listado : []
   })
-  return Array.isArray(data?.Listado) ? data.Listado : []
 }
 
 /** Detalle completo de una licitación (ítems, organismo, fechas de cierre, etc.) */
 async function fetchLicitacionDetalle(codigo) {
   assertTicket()
-  const { data } = await axios.get(`${BASE_URL}/licitaciones.json`, {
-    params: { ticket: TICKET, codigo },
-    timeout: 20_000,
+  return conReintento(async () => {
+    const { data } = await axios.get(`${BASE_URL}/licitaciones.json`, {
+      params: { ticket: TICKET, codigo },
+      timeout: 20_000,
+    })
+    return Array.isArray(data?.Listado) ? data.Listado[0] : null
   })
-  return Array.isArray(data?.Listado) ? data.Listado[0] : null
 }
 
 /**
@@ -84,4 +122,5 @@ module.exports = {
   fetchComprasAgiles,
   filtrarPorRubro,
   ddmmyyyy,
+  sleep,
 }

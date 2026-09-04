@@ -104,9 +104,23 @@ async function ejecutarIngesta({ disparadoPor = 'cron', enviarEmail = false, dia
   const fechasABarrer = construirFechas({ diasHaciaAtras, fechaDesde, fechaHasta })
 
   // ── Licitaciones (API estable) — se barren TODAS las fechas del rango en esta
-  // misma corrida, de una sola vez (no una por click) ──
+  // misma corrida, de una sola vez (no una por click). La API pública de ChileCompra
+  // aplica rate-limit por ticket: sin una pausa entre solicitudes, un barrido de
+  // varios días dispara cientos de llamadas seguidas y la API empieza a responder
+  // 429 a partir de las primeras — eso hacía que solo entrara "una oportunidad a la
+  // vez" pese a que el rango ya se barría completo. La pausa de 350ms entre cada
+  // llamada (día y detalle) evita gatillar el límite en primer lugar; conReintento
+  // en el cliente además reintenta con backoff si de todos modos llega un 429.
+  const PAUSA_ENTRE_LLAMADAS_MS = 350
+  let esPrimeraLlamada = true
+  const pausar = async () => {
+    if (!esPrimeraLlamada) await api.sleep(PAUSA_ENTRE_LLAMADAS_MS)
+    esPrimeraLlamada = false
+  }
+
   for (const fecha of fechasABarrer) {
     try {
+      await pausar()
       const listado = await api.fetchLicitacionesPorFecha(fecha)
       const filtradas = api.filtrarPorRubro(listado, KEYWORDS)
       revisadas += listado.length
@@ -114,6 +128,7 @@ async function ejecutarIngesta({ disparadoPor = 'cron', enviarEmail = false, dia
       for (const l of filtradas) {
         if (yaExiste('licitacion', l.CodigoExterno)) continue
         try {
+          await pausar()
           const detalle = await api.fetchLicitacionDetalle(l.CodigoExterno)
           if (!detalle) continue
           if (!siguAbierta(detalle)) continue // descarta cerradas/adjudicadas/vencidas
