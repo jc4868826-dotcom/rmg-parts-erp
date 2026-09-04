@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
-import { formatCLP } from '@utils/format'
+import { formatCLP, netoDesdeTotal } from '@utils/format'
 import { Plus, X, Truck, Phone, Mail, CreditCard, ChevronRight, Pencil, Wallet } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -300,7 +300,7 @@ export default function ProveedoresPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.02)' }}>
-                        {['N° OC','Fecha','Monto total','Estado','N° Factura'].map(h => (
+                        {['N° OC','Fecha','Neto','Total c/IVA','Estado','N° Factura'].map(h => (
                           <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                         ))}
                       </tr>
@@ -318,6 +318,7 @@ export default function ProveedoresPage() {
                               </button>
                             </td>
                             <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{oc.fecha_emision}</td>
+                            <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(oc.neto)}</td>
                             <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(oc.total)}</td>
                             <td className="px-4 py-2.5">
                               <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
@@ -351,7 +352,7 @@ export default function ProveedoresPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.02)' }}>
-                          {['N° Factura','N° OC','Emisión','Vencimiento','Monto','Estado'].map(h => (
+                          {['N° Factura','N° OC','Emisión','Vencimiento','Neto','Monto c/IVA','Estado'].map(h => (
                             <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                           ))}
                         </tr>
@@ -373,6 +374,7 @@ export default function ProveedoresPage() {
                               </td>
                               <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{f.fecha_emision || '—'}</td>
                               <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{f.fecha_vencimiento || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(netoDesdeTotal(f.monto))}</td>
                               <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(f.monto)}</td>
                               <td className="px-4 py-2.5">
                                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{est.label}</span>
@@ -384,8 +386,13 @@ export default function ProveedoresPage() {
                     </table>
                     <div className="px-5 py-3 border-t text-sm flex justify-between" style={{ borderColor: 'rgba(15, 35, 60,0.05)' }}>
                       <span style={{ color: 'var(--rmg-muted)' }}>Saldo pendiente</span>
-                      <span className="font-bold" style={{ color: 'var(--rmg-gold)' }}>
-                        {formatCLP(cxp.filter(f => f.estado !== 'pagada').reduce((s, f) => s + f.monto, 0))}
+                      <span>
+                        <span className="font-bold" style={{ color: 'var(--rmg-gold)' }}>
+                          {formatCLP(cxp.filter(f => f.estado !== 'pagada').reduce((s, f) => s + f.monto, 0))}
+                        </span>
+                        <span className="text-xs ml-1.5" style={{ color: 'var(--rmg-muted)' }}>
+                          (neto {formatCLP(netoDesdeTotal(cxp.filter(f => f.estado !== 'pagada').reduce((s, f) => s + f.monto, 0)))})
+                        </span>
                       </span>
                     </div>
                   </>

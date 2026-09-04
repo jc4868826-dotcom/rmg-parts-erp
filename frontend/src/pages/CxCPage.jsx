@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
-import { formatCLP, formatFecha } from '@utils/format'
+import { formatCLP, formatFecha, totalConIVA, netoDesdeTotal } from '@utils/format'
 import { DollarSign, AlertTriangle, Check, Clock, X, Paperclip, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -116,7 +116,7 @@ export default function CxCPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-                {['Doc.', 'Cliente', 'Tipo', 'Monto', 'Fecha', 'Vencimiento', 'Comprobante', ''].map(h => (
+                {['Doc.', 'Cliente', 'Tipo', 'Neto', 'Total c/IVA', 'Fecha', 'Vencimiento', 'Comprobante', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -125,7 +125,7 @@ export default function CxCPage() {
               {isLoadingVentas
                 ? Array.from({ length: 2 }).map((_, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                       ))}
                     </tr>
@@ -147,7 +147,8 @@ export default function CxCPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(v.total)}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.total)}</td>
+                        <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(v.total))}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(v.fecha)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: v.dias_vencida > 0 ? 'var(--rmg-red)' : 'var(--rmg-muted)' }}>
                           {v.fecha_vencimiento ? `${formatFecha(v.fecha_vencimiento)}${v.dias_vencida > 0 ? ` (+${v.dias_vencida}d)` : ''}` : '—'}
@@ -213,6 +214,9 @@ export default function CxCPage() {
             <div className="font-black text-2xl precio-clp" style={{ fontFamily: 'Inter Tight, sans-serif', color: k.color }}>
               {k.value !== undefined ? formatCLP(k.value) : '—'}
             </div>
+            {k.value !== undefined && (
+              <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>neto {formatCLP(netoDesdeTotal(k.value))}</div>
+            )}
             <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{k.sub}</div>
           </div>
         ))}
@@ -266,7 +270,7 @@ export default function CxCPage() {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-              {['N° Factura','Cliente','Segmento','Monto','Emisión','Vencimiento','Días','Estado',''].map(h => (
+              {['N° Factura','Cliente','Segmento','Neto','Monto c/IVA','Emisión','Vencimiento','Días','Estado',''].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
             </tr>
@@ -275,7 +279,7 @@ export default function CxCPage() {
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                    {Array.from({ length: 9 }).map((_, j) => (
+                    {Array.from({ length: 10 }).map((_, j) => (
                       <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }}/></td>
                     ))}
                   </tr>
@@ -303,6 +307,7 @@ export default function CxCPage() {
                           {SEG_NAME[f.segmento] || f.segmento}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(netoDesdeTotal(f.monto))}</td>
                       <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(f.monto)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(f.fecha_emision)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(f.fecha_vencimiento)}</td>

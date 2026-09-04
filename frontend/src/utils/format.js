@@ -32,6 +32,21 @@ export const calcularIVA = (neto) => Math.round((Number(neto) || 0) * 0.19)
 export const totalConIVA = (neto) => (Number(neto) || 0) + calcularIVA(neto)
 
 /**
+ * Inversas de las anteriores — para vistas donde lo que se guarda es el
+ * monto CON IVA (ej. facturas_cxc.monto, facturas_cxp.monto: el monto real
+ * de la factura, que en Chile siempre incluye IVA) y hay que mostrar
+ * también el neto/IVA implícitos, sin tener un campo `neto` separado en la
+ * base de datos.
+ * @example netoDesdeTotal(119000) → 100000
+ */
+export const netoDesdeTotal = (total) => Math.round((Number(total) || 0) / 1.19)
+
+/**
+ * @example ivaDesdeTotal(119000) → 19000
+ */
+export const ivaDesdeTotal = (total) => (Number(total) || 0) - netoDesdeTotal(total)
+
+/**
  * Formatea porcentaje
  * @example formatPct(26.1) → "26,1%"
  */

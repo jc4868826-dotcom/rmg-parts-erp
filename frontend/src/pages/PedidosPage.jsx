@@ -139,6 +139,7 @@ export default function PedidosPage() {
   })
 
   const totalPedidos = pedidos.reduce((s, p) => s + p.total, 0)
+  const netoPedidos = pedidos.reduce((s, p) => s + (p.neto || 0), 0)
 
   const availableCots = clienteModal
     ? todasCots.filter(c =>
@@ -159,6 +160,7 @@ export default function PedidosPage() {
         <div className="flex items-center gap-3">
           <div className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)', border: '1px solid rgba(56,182,255,0.2)' }}>
             {formatCLP(totalPedidos)} en curso
+            <span className="font-normal text-xs ml-1" style={{ color: 'var(--rmg-muted)' }}>(neto {formatCLP(netoPedidos)})</span>
           </div>
           <button onClick={() => setShowCotModal(true)} className="btn-primary flex items-center gap-2">
             <Plus size={15}/> Desde cotización
@@ -183,7 +185,7 @@ export default function PedidosPage() {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-              {['', 'N° Pedido', 'Cliente', 'Estado', 'Total', 'Condición pago', 'Entrega', 'Acciones'].map(h => (
+              {['', 'N° Pedido', 'Cliente', 'Estado', 'Neto', 'Total c/IVA', 'Condición pago', 'Entrega', 'Acciones'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
             </tr>
@@ -192,7 +194,7 @@ export default function PedidosPage() {
             {isLoading
               ? Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 9 }).map((_, j) => (
                       <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>
                     ))}
                   </tr>
@@ -223,6 +225,7 @@ export default function PedidosPage() {
                           ))}
                         </select>
                       </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(p.neto)}</td>
                       <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(p.total)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{p.condicion_pago}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: p.fecha_entrega_programada ? 'var(--rmg-off)' : 'var(--rmg-muted)' }}>
@@ -408,7 +411,7 @@ export default function PedidosPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-bold">Registrar pago</h2>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{pagoModal.numero_documento || pagoModal.numero} · {formatCLP(pagoModal.total)}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{pagoModal.numero_documento || pagoModal.numero} · Neto {formatCLP(pagoModal.neto)} · c/IVA {formatCLP(pagoModal.total)}</p>
               </div>
               <button onClick={() => { setPagoModal(null); setPago(PAGO_INIT) }} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
             </div>

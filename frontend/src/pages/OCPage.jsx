@@ -407,7 +407,7 @@ export default function OCPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.015)' }}>
-                {['N° OC','Proveedor','Fecha creación','Fecha requerida','Estado','Total','Ítems',''].map(h => (
+                {['N° OC','Proveedor','Fecha creación','Fecha requerida','Estado','Neto','Total c/IVA','Ítems',''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -415,7 +415,7 @@ export default function OCPage() {
             <tbody>
               {isLoading ? Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
-                  {Array.from({ length: 8 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>)}
+                  {Array.from({ length: 9 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 rounded animate-pulse" style={{ background: 'rgba(15, 35, 60,0.06)' }} /></td>)}
                 </tr>
               )) : ocsFiltradas.map((oc, i) => (
                 <tr key={oc.id} onClick={() => abrirDetalle(oc)} className="cursor-pointer hover:bg-white/[0.03] transition-colors"
@@ -425,6 +425,7 @@ export default function OCPage() {
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(oc.fecha_emision || oc.created_at)}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: oc.fecha_requerida ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{oc.fecha_requerida ? formatFecha(oc.fecha_requerida) : '—'}</td>
                   <td className="px-4 py-3"><EstadoBadge estado={oc.estado} /></td>
+                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(oc.neto)}</td>
                   <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(oc.total)}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{(oc.items || []).length} líneas</td>
                   <td className="px-4 py-3">
