@@ -186,6 +186,11 @@ async function generarExcelCruce(oportunidadId) {
       3: item.descripcion_solicitada,
       4: item.cantidad,
       5: sku ? sku.producto_generico : 'SIN COBERTURA',
+      // Nota: cuando cruzarItemsConCatalogo() sustituye un formato grande por
+      // uno menor (chilecompraScoring.js), la propia columna `cantidad` YA
+      // queda reescalada en BD para cubrir el mismo volumen total pedido —
+      // este Excel no aplica ningún ajuste aparte, solo resalta visualmente
+      // (abajo, celda de la columna 4) cuando ese ajuste ocurrió.
       6: sku ? sku.codigo_sku : '—',
       7: sku ? sku.descripcion : 'No existe producto en catálogo RMG para este ítem',
       8: sku ? sku.presentacion : '—',
@@ -198,6 +203,12 @@ async function generarExcelCruce(oportunidadId) {
       c.value = v
       applyBorderFill(c, fill)
       if (Number(col) === 9 && v == null) c.font = STYLE.gap
+      // Columna 4 (Cant. Ref.) en rojo/negrita cuando la cantidad fue
+      // reescalada automáticamente por diferencia de volumen (ver
+      // cruzarItemsConCatalogo → cantidad_ajustada) — bug real reportado:
+      // una cantidad ajustada que se ve igual a cualquier otra pasaba
+      // inadvertida. Con esto queda visualmente obvio cuál línea cambió.
+      else if (Number(col) === 4 && item.cantidad_ajustada) c.font = STYLE.gap
       else c.font = STYLE.normal
       if (Number(col) === 10 && typeof v === 'number') c.numFmt = '0%'
       if ([1, 4, 9, 10].includes(Number(col))) c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
@@ -341,8 +352,9 @@ async function generarExcelCruce(oportunidadId) {
     '4) Total Compra/Venta c/IVA (línea) = c/IVA Unitario × Cantidad Referencial (fórmula) — el P×Q por línea que se totaliza contra el presupuesto.',
     '5) La fila de TOTALES y el bloque de comparación con presupuesto sólo consideran las líneas con cobertura RMG (fondo rojo = sin cobertura, excluidas).',
     '6) Confianza Match es el puntaje (0-100%) que el emparejador automático asignó al SKU propuesto — no reemplaza revisión de ficha técnica formal antes de ofertar.',
-    '7) PATRÓN DE ANÁLISIS aplicado automáticamente: cuando la presentación exacta pedida (tineta/balde) no existe en la línea de producto requerida, el sistema prefiere la presentación de MENOR formato disponible en catálogo (balde, caja, bidón) como unidad de compra proxy — NUNCA un tambor/cilindro grande multiplicado directamente por la cantidad pedida, porque eso infla el volumen total comprado muy por sobre lo necesario. Ver columna Observación para el detalle de cada sustitución.',
-    '8) Este Excel se generó automáticamente al analizar la oportunidad — queda adjunto a la ficha de la postulación junto con las fichas técnicas de los productos ofertados.',
+    '7) PATRÓN DE ANÁLISIS aplicado automáticamente: cuando la presentación exacta pedida (tineta/balde) no existe en la línea de producto requerida, el sistema prefiere la presentación de MENOR formato disponible en catálogo (balde, caja, bidón) como unidad de compra proxy — NUNCA un tambor/cilindro grande. Cuando el volumen unitario de esa presentación es menor al pedido, la columna "Cant. Ref." (col. 4, resaltada en rojo cuando aplica) se recalcula automáticamente para que el volumen TOTAL comprado siga cubriendo lo solicitado (ej.: si se piden 200L y la presentación proxy es de 20L, la cantidad pasa de 1 a 10). Ver columna Observación para el detalle de cada ajuste — revisar siempre antes de cotizar.',
+    '8) Cuando el tipo de envase pedido en las bases (balde, tambor, tineta, bidón, caja, IBC) es distinto al tipo de envase de la presentación RMG ofrecida, queda marcado con "⚠️ TIPO DE ENVASE DISTINTO" en la Observación — un volumen similar en litros no garantiza que el formato (a granel vs. unidades empaquetadas) sea el que el organismo exige.',
+    '9) Este Excel se generó automáticamente al analizar la oportunidad — queda adjunto a la ficha de la postulación junto con las fichas técnicas de los productos ofertados.',
   ]
   for (const nota of notas) {
     ws.mergeCells(r, 1, r, NCOLS)

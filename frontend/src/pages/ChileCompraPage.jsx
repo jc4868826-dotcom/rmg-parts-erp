@@ -545,12 +545,26 @@ function DetalleModal({ id, onClose }) {
                     {op.items.map(it => (
                       <tr key={it.id} style={{ borderTop: '1px solid rgba(15,35,60,0.04)' }}>
                         <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>{it.descripcion_solicitada}</td>
-                        <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>{it.cantidad} {it.unidad || ''}</td>
+                        <td className="px-3 py-2" style={{ color: it.cantidad_ajustada ? 'var(--rmg-red)' : 'var(--rmg-muted)', fontWeight: it.cantidad_ajustada ? 700 : 400 }}>
+                          {it.cantidad} {it.unidad || ''}
+                          {it.cantidad_ajustada ? <span title={`Cantidad ajustada automáticamente desde ${it.cantidad_solicitada_original} para cubrir el volumen real solicitado — ver Observación en el Excel de cruce.`}> ⚠️</span> : null}
+                        </td>
                         <td className="px-3 py-2 font-mono" style={{ color: it.cubierto ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>{it.sku_match || 'Sin cobertura'}</td>
                         <td className="px-3 py-2 font-semibold" style={{ color: 'var(--rmg-off)' }}>{it.margen_pct_estimado != null ? formatPct(it.margen_pct_estimado) : '—'}</td>
                         <td className="px-3 py-2">{it.cubierto ? <CheckCircle2 size={13} style={{ color: 'var(--rmg-teal)' }} /> : <XCircle size={13} style={{ color: 'var(--rmg-red)' }} />}</td>
                       </tr>
                     ))}
+                    {op.items.some(it => it.observacion) && (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                          {op.items.filter(it => it.observacion).map(it => (
+                            <div key={`obs-${it.id}`} className="mb-1">
+                              <span className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{it.sku_match || it.descripcion_solicitada?.slice(0, 30)}:</span> {it.observacion}
+                            </div>
+                          ))}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

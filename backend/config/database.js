@@ -2664,6 +2664,48 @@ function runMigrations() {
       console.error('❌ Migración documentos_adjuntos_word_v1 falló:', e.message)
     }
   }
+
+  // Migration chilecompra_items_ajuste_v1 — columnas para dejar registro
+  // auditable de un ajuste de cantidad por cambio de presentación.
+  //
+  // Bug real reportado por el usuario (Cruce_Bases_vs_Catalogo_RMG_6.xlsx,
+  // licitación La Florida): cuando preferirFormatoMenor() sustituye un
+  // tambor grande (ej. 200L) por una presentación menor de catálogo (ej.
+  // balde de 20L), el Excel seguía multiplicando el precio unitario del
+  // balde de 20L por la MISMA cantidad referencial que traía el ítem
+  // original — es decir, "Cant. Ref." nunca se recalculaba para reflejar
+  // que ahora hacen falta 10 baldes de 20L (no 1) para cubrir los 200L
+  // pedidos. Resultado: se ofertaban 20L donde se pedían 200L — "gravísimo"
+  // según el usuario, porque es un incumplimiento de volumen que además
+  // pasaba inadvertido (el Excel se ve completo, con precios y totales).
+  //
+  // cruzarItemsConCatalogo() ahora, cuando detecta que el volumen unitario
+  // ofrecido es menor al solicitado, escala `cantidad` para que la columna
+  // "Cant. Ref." del Excel (que ya multiplica precio × cantidad, sin tocar
+  // esa fórmula) refleje las unidades reales necesarias. Estas dos columnas
+  // dejan trazabilidad de ese ajuste para que quede visible en auditoría
+  // (nunca se pisa el dato original sin dejar rastro — mismo principio que
+  // "nunca inventar un número" de chilecompraDocReader.js):
+  //   - cantidad_solicitada_original: la `cantidad` tal como la extrajo la
+  //     IA del documento de la licitación, antes de cualquier ajuste.
+  //   - cantidad_ajustada: 1 si `cantidad` fue recalculada por un cambio de
+  //     presentación/volumen, 0 si no hubo ajuste.
+  const mItemsAjuste = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('chilecompra_items_ajuste_v1')
+  if (!mItemsAjuste) {
+    try {
+      const itemCols2 = db.prepare('PRAGMA table_info(oportunidad_chilecompra_items)').all().map(c => c.name)
+      if (!itemCols2.includes('cantidad_solicitada_original')) {
+        db.exec('ALTER TABLE oportunidad_chilecompra_items ADD COLUMN cantidad_solicitada_original REAL')
+      }
+      if (!itemCols2.includes('cantidad_ajustada')) {
+        db.exec('ALTER TABLE oportunidad_chilecompra_items ADD COLUMN cantidad_ajustada INTEGER DEFAULT 0')
+      }
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('chilecompra_items_ajuste_v1')
+      console.log('✅ Migración chilecompra_items_ajuste_v1 — columnas de ajuste de cantidad añadidas')
+    } catch (e) {
+      console.error('❌ Migración chilecompra_items_ajuste_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

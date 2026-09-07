@@ -389,6 +389,26 @@ async function adjuntarFichasAOportunidad(oportunidadId, usuario) {
 
   for (const { sku_match } of items) {
     try {
+      // Guarda por marca — auditoría confirmó que buscarSkuCandidato() (en
+      // chilecompraScoring.js) NO filtra por marca='Vistony' al elegir el
+      // SKU: puede matchear legítimamente productos AUSTER u otra marca del
+      // catálogo (de hecho AUSTER tiene mejor ranking_compra promedio que
+      // Vistony). El problema real es que ESTE archivo solo sabe buscar
+      // fichas en vistonylubricantes.cl — para un SKU de otra marca,
+      // extraerYGuardarFichaProducto() siempre iba a fallar en silencio
+      // ("no se encontró un producto equivalente"), sin dejar claro que la
+      // causa es la marca y no un fallo del scraper. Se detecta antes de
+      // intentar la búsqueda para dar un motivo preciso y no gastar una
+      // llamada HTTP innecesaria al sitio de Vistony.
+      const skuInfo = db.prepare('SELECT marca FROM lista_precios WHERE codigo_sku = ? LIMIT 1').get(sku_match)
+      if (skuInfo && skuInfo.marca && skuInfo.marca.trim().toLowerCase() !== 'vistony') {
+        resultado.sinFicha.push({
+          sku: sku_match,
+          motivo: `SKU de marca "${skuInfo.marca}" — la extracción automática de fichas técnicas solo cubre productos Vistony (vistonylubricantes.cl). Adjuntar esta ficha manualmente.`,
+        })
+        continue
+      }
+
       let ficha = db.prepare('SELECT * FROM catalogo_fichas_tecnicas WHERE producto_sku = ?').get(sku_match)
       let extra = null
       if (!ficha) {
