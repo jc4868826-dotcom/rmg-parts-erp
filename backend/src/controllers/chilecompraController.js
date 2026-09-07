@@ -183,25 +183,51 @@ const cambiarEstado = async (req, res) => {
 }
 
 // ── Fase 2 — lectura de anexos + cruce con catálogo + scoring ────────────────
+//
+// CONCEPTO — "leer anexos" acá significa leer los "Anexos Ingresados" REALES
+// de la licitación: los documentos que el organismo publicó en Mercado
+// Público (Bases de Licitación, Anexos técnicos/administrativos, Ordinario
+// Proceder, etc. — visibles en el botón "Ver adjuntos" de la ficha del
+// portal). Ahí es donde vive el requerimiento técnico real de los productos
+// solicitados. Esto es DISTINTO de "fichas técnicas de productos" (las de
+// Vistony, ver fichasTecnicasVistonyService.js) — esas son la especificación
+// del producto que RMG ofrece, no lo que el organismo pidió. Se nombran
+// distinto a propósito para no confundirlas: acá se "leen anexos" (lo que
+// pide el organismo), después se "extraen fichas técnicas" (lo que RMG
+// ofrece, para adjuntar a la postulación).
+//
 // Fuente de la lectura, en orden de preferencia:
-//  1. Anexos PDF subidos a mano (si el usuario subió algo, se usa eso — puede
-//     traer detalle que la ficha pública no tiene, como planos o fichas técnicas).
-//  2. Ficha pública de Mercado Público (fetchFichaPublicaTexto) — no requiere que
-//     el usuario suba nada, porque las bases YA están públicas en el portal. Este
-//     es el camino por defecto para licitaciones.
+//  1. Anexos PDF/Word/imagen subidos a mano por el usuario — descargados por
+//     él mismo desde "Ver adjuntos" en el portal. Es el ÚNICO camino que hoy
+//     llega al detalle técnico real, porque Mercado Público no expone esos
+//     archivos para descarga automática (requieren captcha) ni una API
+//     pública en tiempo real — ver el aviso "Análisis genérico" que se deja
+//     en la oportunidad cuando no hay anexos subidos.
+//  2. Ficha pública de Mercado Público (fetchFichaPublicaTexto) — fallback
+//     automático cuando no hay anexos subidos. Solo trae la ficha general
+//     (organismo, fechas, ítem genérico) — NUNCA el detalle técnico real,
+//     que vive en los anexos de la opción 1.
 // Si ninguna de las dos está disponible, recién ahí se informa el error.
+// Después de leer (por cualquiera de las dos vías), sigue el mismo flujo:
+// cruzarItemsConCatalogo() empareja cada ítem con el catálogo RMG, y
+// generarExcelCruce() arma el Excel de cruce — ver más abajo en esta misma
+// función.
 async function analizarOportunidadInterno(id, user) {
   const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)
   if (!op) throw new Error('Oportunidad no encontrada')
 
-  // Solo PDFs/imágenes subidos por el usuario — nunca el Excel de cruce ni otros
-  // archivos que el propio sistema genera y adjunta a esta misma oportunidad
-  // (categoria 'cruce_auto'), porque Anthropic no acepta Excel/CSV en un bloque
-  // de documento y esos archivos son SALIDA del análisis, no un anexo a leer.
+  // PDFs, imágenes y Word subidos por el usuario — estos son los "Anexos
+  // Ingresados" reales de la licitación (Bases de Licitación, Anexos
+  // técnicos/administrativos, etc. — ver "Ver adjuntos" en la ficha de
+  // Mercado Público), que es donde vive el requerimiento técnico real. Nunca
+  // el Excel de cruce ni otros archivos que el propio sistema genera y
+  // adjunta a esta misma oportunidad (categoria 'cruce_auto'), porque
+  // Anthropic no acepta Excel/CSV en un bloque de documento y esos archivos
+  // son SALIDA del análisis, no un anexo a leer.
   const anexos = db.prepare(
     `SELECT * FROM documentos_adjuntos
      WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ?
-       AND tipo IN ('pdf', 'imagen')
+       AND tipo IN ('pdf', 'imagen', 'word')
        AND (categoria IS NULL OR categoria != 'cruce_auto')`
   ).all(id)
 
@@ -289,7 +315,7 @@ async function analizarOportunidadInterno(id, user) {
   // sin leerse, lo que hacía parecer que el match usó el requerimiento
   // técnico completo cuando en realidad solo tuvo la línea genérica.
   const avisoFuenteGenerica = fuenteAnalisis === 'ficha_publica'
-    ? ' ⚠️ Fuente solo genérica — la ficha pública no trae el detalle técnico real (viscosidad, norma, marca, etc.), que suele venir en un PDF de Bases/Anexo Técnico aparte. Descárgalo del portal y súbelo en "Adjuntar PDF, Excel o imagen" para un análisis con el requerimiento real, luego reintenta el análisis.'
+    ? ' ⚠️ Fuente solo genérica — la ficha pública no trae el detalle técnico real (viscosidad, norma, marca, etc.), que vive en los Anexos Ingresados reales de la licitación (botón "Ver adjuntos" en la ficha de Mercado Público — Bases de Licitación, Anexos técnicos, etc.). Descárgalos y súbelos en "Anexos de la licitación" para un análisis con el requerimiento real, luego reintenta el análisis.'
     : ''
   logEvento(id, 'analisis_completado', {
     usuario_id: user?.id, usuario_nombre: user?.email,

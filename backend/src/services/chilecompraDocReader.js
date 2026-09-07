@@ -16,6 +16,7 @@
  * nombres de modelo cambian con el tiempo).
  */
 const axios = require('axios')
+const mammoth = require('mammoth')
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5'
@@ -93,11 +94,33 @@ async function llamarAnthropicYParsear(content, origen) {
 }
 
 // Anthropic solo acepta PDF en bloques "document" y estos formatos en bloques
-// "image" — Excel, CSV, Word, etc. no se pueden mandar tal cual (por eso el
-// filtro también existe en chilecompraController antes de llegar hasta acá;
-// esto es la segunda barrera, para que un llamador futuro nunca reintroduzca
-// el mismo error "Input should be 'application/pdf'").
+// "image" — Excel, CSV, etc. no se pueden mandar tal cual (por eso el filtro
+// también existe en chilecompraController antes de llegar hasta acá; esto es
+// la segunda barrera, para que un llamador futuro nunca reintroduzca el mismo
+// error "Input should be 'application/pdf'").
+//
+// Word (.docx/.doc) es un caso aparte: no calza en ningún bloque que Anthropic
+// acepte, pero SÍ es un formato real y frecuente de los "Anexos Ingresados"
+// que un organismo publica en una licitación (ej. "ANEXO 1,2 y 3
+// EDITABLES.docx" en la licitación 2378-105-LE26, La Florida — uno de los
+// documentos que trae el detalle real de lo solicitado). En vez de
+// descartarlo como antes, se extrae su texto con `mammoth` (librería pura
+// JS, sin dependencias nativas) y se agrega como texto plano al mismo prompt
+// — así el modelo lee su contenido igual que si fuera un PDF, solo que por
+// otro camino.
 const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const TIPOS_WORD = ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+
+async function extraerTextoWord(doc) {
+  try {
+    const buffer = Buffer.from(doc.base64, 'base64')
+    const { value } = await mammoth.extractRawText({ buffer })
+    return value?.trim() || null
+  } catch (e) {
+    console.warn(`⚠️ No se pudo extraer texto de "${doc.nombre || 'documento Word'}": ${e.message}`)
+    return null
+  }
+}
 
 /**
  * @param {Array<{base64: string, mediaType: string, nombre: string}>} documentos
@@ -108,17 +131,36 @@ async function leerAnexos(documentos) {
     throw new Error('leerAnexos: no se recibieron documentos')
   }
 
-  const legibles = documentos.filter(doc => doc.mediaType === 'application/pdf' || TIPOS_IMAGEN.includes(doc.mediaType))
-  const descartados = documentos.filter(doc => !legibles.includes(doc))
+  const legiblesDirecto = documentos.filter(doc => doc.mediaType === 'application/pdf' || TIPOS_IMAGEN.includes(doc.mediaType))
+  const wordDocs = documentos.filter(doc => TIPOS_WORD.includes(doc.mediaType))
 
-  if (!legibles.length) {
-    const detalle = descartados.map(d => `${d.nombre || 'sin nombre'} (${d.mediaType || 'sin tipo'})`).join(', ')
-    throw new Error(`leerAnexos: ninguno de los ${documentos.length} documento(s) es un PDF o imagen legible por IA — Excel/Word/CSV no son compatibles con la lectura automática. Archivo(s) descartado(s): ${detalle}`)
+  // Los Word se procesan aparte (extracción de texto, puede fallar
+  // individualmente sin tumbar el análisis completo si el archivo viene
+  // corrupto o con un formato que mammoth no soporta).
+  const textosWord = []
+  for (const doc of wordDocs) {
+    const texto = await extraerTextoWord(doc)
+    if (texto) textosWord.push({ nombre: doc.nombre || 'documento Word', texto })
+  }
+  const wordConTextoOk = new Set(textosWord.map(t => t.nombre))
+  const wordFallidos = wordDocs.filter(d => !wordConTextoOk.has(d.nombre || 'documento Word'))
+
+  const descartados = documentos.filter(doc => !legiblesDirecto.includes(doc) && !wordDocs.includes(doc))
+
+  if (!legiblesDirecto.length && !textosWord.length) {
+    const todosDescartados = [...descartados, ...wordFallidos]
+    const detalle = todosDescartados.map(d => `${d.nombre || 'sin nombre'} (${d.mediaType || 'sin tipo'})`).join(', ')
+    throw new Error(`leerAnexos: ninguno de los ${documentos.length} documento(s) es legible por IA — Excel/CSV no son compatibles con la lectura automática, y ningún Word pudo procesarse. Archivo(s) descartado(s): ${detalle}`)
   }
 
+  const promptConWord = textosWord.length
+    ? `${EXTRACTION_PROMPT}\n\nAdemás, este es el texto extraído de ${textosWord.length} documento(s) Word adjunto(s):\n\n` +
+      textosWord.map(t => `--- ${t.nombre} ---\n${t.texto.slice(0, 30_000)}`).join('\n\n')
+    : EXTRACTION_PROMPT
+
   const content = [
-    { type: 'text', text: EXTRACTION_PROMPT },
-    ...legibles.map(doc => (
+    { type: 'text', text: promptConWord },
+    ...legiblesDirecto.map(doc => (
       TIPOS_IMAGEN.includes(doc.mediaType)
         ? { type: 'image', source: { type: 'base64', media_type: doc.mediaType, data: doc.base64 } }
         : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 } }

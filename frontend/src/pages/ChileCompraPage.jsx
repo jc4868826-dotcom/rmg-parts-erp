@@ -475,7 +475,7 @@ function DetalleModal({ id, onClose }) {
             <div className="flex items-start gap-2 p-3 rounded-lg text-sm" style={{ background: 'rgba(230,168,49,0.1)', color: 'var(--rmg-gold)' }}>
               <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
               <span>
-                <strong>Análisis genérico:</strong> se usó solo la ficha pública de Mercado Público, que no trae el detalle técnico real (viscosidad, norma, marca, cantidad). Descarga las Bases Administrativas / Anexo Técnico desde el portal y súbelas abajo en "Adjuntar PDF, Excel o imagen", luego reintenta el análisis para un match confiable.
+                <strong>Análisis genérico:</strong> se usó solo la ficha pública de Mercado Público, que no trae el detalle técnico real (viscosidad, norma, marca, cantidad). Descarga los documentos reales desde "Ver adjuntos" en la ficha de la licitación y súbelos abajo en "Anexos de la licitación", luego reintenta el análisis para un match confiable.
               </span>
             </div>
           )}
@@ -580,13 +580,31 @@ function DetalleModal({ id, onClose }) {
             </button>
           )}
 
-          {/* Fichas técnicas */}
+          {/* Anexos de la licitación — los documentos REALES que el organismo
+              publicó (Bases de Licitación, Anexos técnicos/administrativos,
+              etc. — los mismos que "Ver adjuntos" muestra en la ficha de
+              Mercado Público). Van primero y con copy explícito porque son la
+              fuente del requerimiento técnico real: sin subir esto, el
+              análisis solo tiene la ficha pública genérica (ver el aviso
+              "Análisis genérico" más arriba si aplica). No confundir con
+              "Fichas técnicas de productos RMG" más abajo — eso es lo que
+              nosotros ofrecemos, no lo que el organismo pidió. */}
+          <div>
+            <p className="text-xs mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
+              Sube acá los documentos reales que el organismo publicó (Bases de Licitación, Anexos técnicos/administrativos, especificaciones) — los mismos que ves en "Ver adjuntos" dentro de la ficha de la licitación en Mercado Público. Ahí está el requerimiento técnico real; la ficha pública sola solo trae un resumen genérico. Después de subirlos, vuelve a analizar para que el sistema los lea y haga el cruce con el catálogo.
+            </p>
+            <DocumentosPanel entidad="oportunidad_chilecompra" entidadId={op.id} titulo="Anexos de la licitación" />
+          </div>
+
+          {/* Fichas técnicas de productos RMG — lo que RMG ofrece (hojas de
+              datos Vistony), para adjuntar al paquete de postulación. No leen
+              el requerimiento del organismo — eso son los Anexos de arriba. */}
           <div>
             <div className="text-xs font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--rmg-muted)' }}>
-              <FileStack size={12} /> Fichas técnicas
+              <FileStack size={12} /> Fichas técnicas de productos RMG
             </div>
             <p className="text-xs mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
-              El análisis ya intenta adjuntar automáticamente la ficha técnica de cada producto emparejado. Usa este botón para reintentar o refrescarlas — por ejemplo si cambiaste manualmente el SKU ofertado en algún ítem.
+              Esto es distinto de los Anexos de arriba: son las hojas de datos de los productos que RMG ofrece (Vistony), para adjuntar al paquete de postulación. El análisis ya intenta adjuntar automáticamente la de cada producto emparejado. Usa este botón para reintentar o refrescarlas — por ejemplo si cambiaste manualmente el SKU ofertado en algún ítem.
             </p>
             <button
               onClick={() => extraerFichasMut.mutate()}
@@ -595,16 +613,8 @@ function DetalleModal({ id, onClose }) {
               style={{ color: 'var(--rmg-blue)', background: 'rgba(15,35,60,0.03)' }}
             >
               <FileStack size={13} className={extraerFichasMut.isPending ? 'animate-pulse' : ''} />
-              {extraerFichasMut.isPending ? 'Extrayendo fichas técnicas…' : 'Extraer fichas técnicas'}
+              {extraerFichasMut.isPending ? 'Extrayendo fichas técnicas…' : 'Extraer fichas técnicas de productos RMG'}
             </button>
-          </div>
-
-          {/* Anexos */}
-          <div>
-            <p className="text-xs mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
-              El análisis ya lee la ficha pública de Mercado Público automáticamente — no es obligatorio subir nada acá. Solo hazlo si tienes un anexo adicional (plano, ficha técnica) que no esté en la ficha pública.
-            </p>
-            <DocumentosPanel entidad="oportunidad_chilecompra" entidadId={op.id} titulo="Anexos adicionales (opcional)" />
           </div>
 
           {/* Historial */}

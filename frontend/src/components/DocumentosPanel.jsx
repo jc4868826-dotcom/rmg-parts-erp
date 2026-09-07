@@ -60,9 +60,12 @@ export default function DocumentosPanel({ entidad, entidadId, titulo = 'Document
         <button type="button" onClick={() => fileRef.current?.click()} disabled={subirMut.isPending}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"
           style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blue)', border: '1px solid rgba(56,182,255,0.2)' }}>
-          <Upload size={13}/> {subirMut.isPending ? 'Subiendo…' : 'Adjuntar PDF, Excel o imagen'}
+          <Upload size={13}/> {subirMut.isPending ? 'Subiendo…' : 'Adjuntar PDF, Word, Excel o imagen'}
         </button>
-        <input ref={fileRef} type="file" hidden accept=".pdf,.xls,.xlsx,.csv,image/*" onChange={handleFile} />
+        {/* .docx/.doc agregado — los Anexos Ingresados reales de una licitación
+            en Mercado Público a veces vienen como Word editable (ej. "ANEXO
+            1,2 y 3 EDITABLES.docx"), no solo PDF. */}
+        <input ref={fileRef} type="file" hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*" onChange={handleFile} />
       </div>
 
       {isLoading && <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Cargando…</div>}

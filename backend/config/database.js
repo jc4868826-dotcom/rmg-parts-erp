@@ -2615,6 +2615,55 @@ function runMigrations() {
       console.error('❌ Migración chilecompra_analisis_fuente_v1 falló:', e.message)
     }
   }
+
+  // Migration documentos_adjuntos_word_v1 — admite tipo 'word' (.docx/.doc).
+  //
+  // Auditoría (2378-105-LE26, La Florida): los "Anexos Ingresados" reales de
+  // una licitación (los que el organismo publica bajo "Ver adjuntos" en la
+  // ficha de Mercado Público) no son solo PDF — en este caso, uno de los 4
+  // documentos es "ANEXO 1,2 y 3 EDITABLES.docx", un Word. Hasta ahora
+  // middleware/documentos.js rechazaba de plano cualquier .docx ("Formato no
+  // permitido"), así que ese anexo ni siquiera se podía subir — quedaba
+  // fuera del análisis aunque el usuario lo descargara del portal. Esta
+  // migración prepara la BD para aceptarlo (ver también middleware/
+  // documentos.js y chilecompraDocReader.js, que ahora extraen su texto con
+  // `mammoth` en vez de descartarlo).
+  const mDocxSupport = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('documentos_adjuntos_word_v1')
+  if (!mDocxSupport) {
+    try {
+      const docCols = db.prepare('PRAGMA table_info(documentos_adjuntos)').all().map(c => c.name)
+      const tieneCategoria = docCols.includes('categoria')
+
+      db.exec(`
+        CREATE TABLE documentos_adjuntos_new (
+          id              TEXT PRIMARY KEY,
+          entidad         TEXT NOT NULL CHECK(entidad IN ('cotizacion','pedido','venta','orden_compra','oportunidad_chilecompra')),
+          entidad_id      TEXT NOT NULL,
+          tipo            TEXT NOT NULL CHECK(tipo IN ('pdf','excel','imagen','zip','word')),
+          nombre_archivo  TEXT,
+          mime_type       TEXT,
+          contenido_base64 TEXT NOT NULL,
+          subido_por      TEXT REFERENCES usuarios(id),
+          created_at      TEXT DEFAULT (datetime('now'))${tieneCategoria ? ',\n          categoria       TEXT' : ''}
+        );
+      `)
+      db.exec(`
+        INSERT INTO documentos_adjuntos_new (id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, created_at${tieneCategoria ? ', categoria' : ''})
+        SELECT id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, created_at${tieneCategoria ? ', categoria' : ''}
+        FROM documentos_adjuntos;
+      `)
+      db.exec(`
+        DROP TABLE documentos_adjuntos;
+        ALTER TABLE documentos_adjuntos_new RENAME TO documentos_adjuntos;
+        CREATE INDEX IF NOT EXISTS idx_documentos_entidad ON documentos_adjuntos(entidad, entidad_id);
+      `)
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('documentos_adjuntos_word_v1')
+      console.log('✅ Migración documentos_adjuntos_word_v1 — documentos_adjuntos admite tipo \'word\'')
+    } catch (e) {
+      console.error('❌ Migración documentos_adjuntos_word_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
