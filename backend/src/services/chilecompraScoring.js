@@ -132,6 +132,36 @@ function inferirCategoria(texto) {
 }
 
 /**
+ * Categoría "real" de un candidato de lista_precios, sin confiar ciegamente
+ * en la columna `categoria` de la BD.
+ *
+ * Bug real detectado en auditoría (licitación La Florida, "SUMINISTRO DE
+ * ACEITES Y LUBRICANTES PARA VEHICULOS"): el SKU 1300043 ("FRA LIQUIDO DE
+ * FRENOS DOT-4 PARA MOTO DE 8 OZ") vino del import con categoria='Lubricante'
+ * — un error de tageo, no un problema de matching. Con eso:
+ *   1) en la pasada 1 (mejorPorSolapamiento sobre TODO el catálogo), la
+ *      palabra "categoria" se concatena al campo comparado, así que la
+ *      palabra "lubricante" del tag equivocado inflaba el score de solape
+ *      contra un ítem que pedía "aceite de motor", aunque la descripción
+ *      real del producto no tuviera nada que ver;
+ *   2) en la pasada 2 (fallback por categoría), ese mismo tag hacía que el
+ *      producto entrara al pool de "Lubricante" y terminara elegido por
+ *      ranking_compra aunque su propio texto ("LIQUIDO DE FRENOS") apunta
+ *      claramente a otro rubro.
+ * Este helper re-infiere la categoría a partir del propio texto comercial
+ * del producto (descripcion + producto_generico) usando el mismo diccionario
+ * de sinónimos; si esa inferencia da un resultado, se usa en vez de la
+ * columna `categoria` (potencialmente mal tageada) para decidir con qué
+ * categoría se compara/filtra este candidato. Esto corrige el bug de forma
+ * defensiva incluso si en el futuro vuelve a entrar un SKU mal tageado desde
+ * un nuevo import — no depende de que los datos ya estén perfectos.
+ */
+function categoriaEfectiva(candidato) {
+  const inferidaDeSuTexto = inferirCategoria(`${candidato.descripcion || ''} ${candidato.producto_generico || ''}`)
+  return inferidaDeSuTexto || candidato.categoria || null
+}
+
+/**
  * Intenta emparejar la descripción de un ítem solicitado contra lista_precios.
  * Heurística de texto simple (v1) — no reemplaza el criterio humano, cada match
  * queda expuesto en el detalle de la oportunidad para revisión antes de cotizar.
@@ -165,7 +195,12 @@ function mejorPorSolapamiento(palabras, lista) {
   let mejorScore = 0
   if (!palabras.length) return { mejor, mejorScore }
   for (const c of lista) {
-    const campo = `${c.descripcion || ''} ${c.producto_generico || ''} ${c.categoria || ''} ${c.marca || ''}`.toLowerCase()
+    // Se usa categoriaEfectiva() en vez de c.categoria directo — si la
+    // columna viene mal tageada (ver comentario del helper), no queremos que
+    // esa palabra de categoría equivocada infle el solape contra un ítem que
+    // pide otra cosa (bug real: "lubricante" en el tag de un líquido de
+    // frenos mal categorizado calzaba con "aceite de motor").
+    const campo = `${c.descripcion || ''} ${c.producto_generico || ''} ${categoriaEfectiva(c) || ''} ${c.marca || ''}`.toLowerCase()
     const matches = palabras.filter(p => campo.includes(p)).length
     const score = matches / palabras.length
     if (score > mejorScore) { mejorScore = score; mejor = c }
@@ -209,7 +244,11 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
   // vez de terminar ambos en el mismo producto genérico top-ranking.
   const categoriaInferida = inferirCategoria(texto)
   if (categoriaInferida) {
-    const deLaCategoria = candidatos.filter(c => (c.categoria || '').toLowerCase() === categoriaInferida.toLowerCase())
+    // categoriaEfectiva() en vez de c.categoria — evita que un SKU mal
+    // tageado en lista_precios (ej. líquido de frenos marcado como
+    // 'Lubricante') entre al pool de candidatos de una categoría a la que en
+    // realidad no pertenece según su propia descripción comercial.
+    const deLaCategoria = candidatos.filter(c => (categoriaEfectiva(c) || '').toLowerCase() === categoriaInferida.toLowerCase())
     if (deLaCategoria.length) {
       const { mejor: mejorCat, mejorScore: scoreCat } = mejorPorSolapamiento(palabras, deLaCategoria)
 
@@ -356,4 +395,6 @@ module.exports = {
   parseVolumenPresentacion,
   esFormatoGrande,
   preferirFormatoMenor,
+  categoriaEfectiva,
+  inferirCategoria,
 }

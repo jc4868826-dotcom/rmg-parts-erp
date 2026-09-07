@@ -2539,6 +2539,43 @@ function runMigrations() {
       console.error('❌ Migración chilecompra_documentos_v1 falló:', e.message)
     }
   }
+
+  // Migration lista_precios_categoria_fix_v1 — corrige 4 SKU mal categorizados
+  // en lista_precios (arrastrados del import original), detectados en la
+  // auditoría de la licitación "SUMINISTRO DE ACEITES Y LUBRICANTES PARA
+  // VEHICULOS" (I. Municipalidad de La Florida, 2378-105-LE26): el ítem
+  // "Aceite de motor" hizo match con el SKU 1300043 — que es LÍQUIDO DE
+  // FRENOS, no aceite — porque esa fila quedó tageada como categoria=
+  // 'Lubricante' en vez de 'Liquido de frenos'. chilecompraScoring.js
+  // confía en la columna `categoria` para filtrar candidatos, así que un
+  // tag equivocado hace que el motor de matching ofrezca literalmente el
+  // producto incorrecto (ver también el guard agregado en
+  // chilecompraScoring.categoriaEfectiva, que ahora no confía ciegamente
+  // en esta columna hacia adelante — esta migración corrige los datos ya
+  // existentes que la auditoría encontró).
+  const mListaPreciosCategoriaFix = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('lista_precios_categoria_fix_v1')
+  if (!mListaPreciosCategoriaFix) {
+    try {
+      const fixes = [
+        // Líquido de frenos DOT-4, mal tageado como Lubricante
+        { sku: '1300042', categoria: 'Liquido de frenos' },
+        { sku: '1300043', categoria: 'Liquido de frenos' },
+        // Agua para batería, mal tageada como Lubricante
+        { sku: '1200141', categoria: 'Bateria' },
+        { sku: '1200142', categoria: 'Bateria' },
+      ]
+      const upd = db.prepare('UPDATE lista_precios SET categoria = ? WHERE codigo_sku = ?')
+      let corregidas = 0
+      for (const f of fixes) {
+        const r = upd.run(f.categoria, f.sku)
+        corregidas += r.changes
+      }
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('lista_precios_categoria_fix_v1')
+      console.log(`✅ Migración lista_precios_categoria_fix_v1 — ${corregidas} fila(s) de lista_precios recategorizadas`)
+    } catch (e) {
+      console.error('❌ Migración lista_precios_categoria_fix_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
