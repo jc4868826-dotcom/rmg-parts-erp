@@ -317,9 +317,17 @@ async function analizarOportunidadInterno(id, user) {
   const avisoFuenteGenerica = fuenteAnalisis === 'ficha_publica'
     ? ' ⚠️ Fuente solo genérica — la ficha pública no trae el detalle técnico real (viscosidad, norma, marca, etc.), que vive en los Anexos Ingresados reales de la licitación (botón "Ver adjuntos" en la ficha de Mercado Público — Bases de Licitación, Anexos técnicos, etc.). Descárgalos y súbelos en "Anexos de la licitación" para un análisis con el requerimiento real, luego reintenta el análisis.'
     : ''
+  // Auto-reporte del modelo (ver EXTRACTION_PROMPT / fix "leyó solo 3
+  // requerimientos") — si el propio modelo no está seguro de haber cubierto
+  // todos los ítems de los documentos, se deja bien visible en el historial
+  // en vez de que la oportunidad quede viéndose "completa" con menos ítems
+  // de los reales.
+  const avisoExtraccionIncompleta = extraccion.extraccion_posiblemente_incompleta
+    ? ` ⚠️ EXTRACCIÓN POSIBLEMENTE INCOMPLETA — el modelo indicó no estar seguro de haber capturado todos los ítems de los documentos (${items?.length ?? extraccion.items?.length ?? 0} extraído(s)). Revisa manualmente los anexos y usa "Limpiar historial y reintentar" o corrige/agrega ítems a mano si faltó alguno.`
+    : ''
   logEvento(id, 'analisis_completado', {
     usuario_id: user?.id, usuario_nombre: user?.email,
-    detalle: `Fuente: ${fuenteAnalisis === 'ficha_publica' ? 'ficha pública Mercado Público' : 'anexos subidos'} · Cobertura ${Math.round(cruce.coberturaPct * 100)}% · score rentabilidad ${scoreRentabilidad} · score seguridad ${scoreSeguridad}${avisoFuenteGenerica}`,
+    detalle: `Fuente: ${fuenteAnalisis === 'ficha_publica' ? 'ficha pública Mercado Público' : 'anexos subidos'} · Cobertura ${Math.round(cruce.coberturaPct * 100)}% · score rentabilidad ${scoreRentabilidad} · score seguridad ${scoreSeguridad}${avisoFuenteGenerica}${avisoExtraccionIncompleta}`,
   })
 
   // Genera y adjunta el Excel de cruce (formato estándar acordado con el
@@ -412,6 +420,128 @@ const extraerFichasTecnicas = async (req, res) => {
   }
 }
 
+// ── "Limpiar historial y reintentar" ──────────────────────────────────────────
+// Pedido real del usuario: cuando la lectura de anexos falla repetidamente o
+// deja el análisis en un estado confuso ("esto es una joda"), no había forma
+// de volver a un estado limpio salvo mirar la BD a mano — el historial se
+// llenaba de eventos de errores viejos, mezclados con el intento nuevo, y los
+// ítems/Excel de un análisis fallido o a medias seguían visibles como si
+// fueran válidos. Este botón borra SOLO lo derivado del análisis (ítems,
+// historial de eventos, resumen IA, scores, Excel de cruce auto-generado) —
+// los anexos que el usuario subió a mano NUNCA se tocan, así no hay que
+// volver a subir los 4 documentos para reintentar.
+const limpiarHistorial = async (req, res) => {
+  try {
+    const { id } = req.params
+    const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)
+    if (!op) return res.status(404).json({ error: 'Oportunidad no encontrada' })
+
+    db.transaction(() => {
+      db.prepare('DELETE FROM oportunidad_chilecompra_items WHERE oportunidad_id = ?').run(id)
+      db.prepare('DELETE FROM oportunidad_chilecompra_historial WHERE oportunidad_id = ?').run(id)
+      // Excel y fichas técnicas generados automáticamente en el análisis
+      // anterior — quedarían mostrando el resultado de un cruce que ya no
+      // existe, lo que es más confuso que no tener nada.
+      db.prepare(`
+        DELETE FROM documentos_adjuntos
+        WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ? AND categoria = 'cruce_auto'
+      `).run(id)
+      db.prepare(`
+        UPDATE oportunidades_chilecompra SET
+          resumen_ia = NULL, analisis_fuente = NULL,
+          cobertura_catalogo_pct = NULL, score_rentabilidad = NULL,
+          score_seguridad = NULL, score_total = NULL, updated_at = ?
+        WHERE id = ?
+      `).run(new Date().toISOString(), id)
+    })()
+
+    logEvento(id, 'historial_limpiado', {
+      usuario_id: req.user?.id, usuario_nombre: req.user?.email,
+      detalle: 'Ítems, historial y Excel de cruce anteriores eliminados a pedido del usuario para reintentar desde cero. Los anexos subidos se conservan — no hace falta volver a subirlos.',
+    })
+
+    res.json(withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// ── Corregir un ítem manualmente y recalcular ─────────────────────────────────
+// Pedido real: "si el match de excel salió mal, debemos agregar
+// observaciones para que lo vuelva a calcular". Guarda la corrección del
+// usuario en el ítem (ver migración chilecompra_correccion_usuario_v1) y
+// vuelve a correr el cruce completo (barato — no llama a la IA, solo la
+// heurística contra el catálogo) + regenera el Excel adjunto, para que el
+// usuario vea el resultado corregido sin tener que re-analizar toda la
+// oportunidad desde los anexos.
+//
+// Convención de UI (un solo campo de texto, sin necesidad de un selector de
+// SKU): si la nota empieza con "SKU:<codigo>", se interpreta como que el
+// usuario ya sabe cuál es el producto correcto — ese ítem deja de
+// re-matchearse automáticamente (ver cruzarItemsConCatalogo). Cualquier otro
+// texto se usa como pista adicional para la búsqueda automática.
+const actualizarObservacionItem = async (req, res) => {
+  try {
+    const { id, itemId } = req.params
+    const { correccion_usuario } = req.body
+
+    const item = db.prepare(
+      'SELECT * FROM oportunidad_chilecompra_items WHERE id = ? AND oportunidad_id = ?'
+    ).get(itemId, id)
+    if (!item) return res.status(404).json({ error: 'Ítem no encontrado' })
+
+    const notaLimpia = (correccion_usuario || '').trim()
+    const matchSkuForzado = notaLimpia.match(/^SKU:\s*(\S+)/i)
+    const skuForzado = matchSkuForzado ? matchSkuForzado[1] : null
+
+    if (skuForzado) {
+      const existeSku = db.prepare('SELECT codigo_sku FROM lista_precios WHERE codigo_sku = ? LIMIT 1').get(skuForzado)
+      if (!existeSku) return res.status(400).json({ error: `El SKU "${skuForzado}" no existe en lista_precios — revisa el código.` })
+    }
+
+    db.prepare(`
+      UPDATE oportunidad_chilecompra_items
+      SET correccion_usuario = ?, sku_forzado_por_usuario = ?
+      WHERE id = ?
+    `).run(notaLimpia || null, skuForzado, itemId)
+
+    const cruce = cruzarItemsConCatalogo(id)
+
+    // Regenera el Excel de cruce para que refleje la corrección de inmediato
+    // — mismo patrón que analizarOportunidadInterno, mejor esfuerzo (no
+    // bloquea la respuesta si falla).
+    try {
+      const excelBuffer = await generarExcelCruce(id)
+      const nombreExcel = 'Cruce_Bases_vs_Catalogo_RMG.xlsx'
+      const existente = db.prepare(`
+        SELECT id FROM documentos_adjuntos
+        WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ? AND nombre_archivo = ? AND categoria = 'cruce_auto'
+      `).get(id, nombreExcel)
+      if (existente) {
+        db.prepare(`UPDATE documentos_adjuntos SET contenido_base64 = ?, created_at = datetime('now') WHERE id = ?`)
+          .run(excelBuffer.toString('base64'), existente.id)
+      } else {
+        db.prepare(`
+          INSERT INTO documentos_adjuntos
+            (id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, categoria)
+          VALUES (?,?,?,?,?,?,?,?,?)
+        `).run(uuidv4(), 'oportunidad_chilecompra', id, 'excel', nombreExcel,
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          excelBuffer.toString('base64'), req.user?.id || null, 'cruce_auto')
+      }
+    } catch (_) { /* no bloquea — el cruce ya quedó guardado en BD */ }
+
+    logEvento(id, 'item_corregido_manualmente', {
+      usuario_id: req.user?.id, usuario_nombre: req.user?.email,
+      detalle: `Ítem "${item.descripcion_solicitada}" — ${skuForzado ? `SKU fijado a ${skuForzado}` : notaLimpia ? `nota agregada: "${notaLimpia}"` : 'corrección eliminada'}. Cruce recalculado (cobertura ${Math.round(cruce.coberturaPct * 100)}%).`,
+    })
+
+    res.json(withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 // ── Fase 3 — checklist de documentos para postular ───────────────────────────
 const getChecklistPostulacion = (req, res) => {
   try {
@@ -450,4 +580,6 @@ module.exports = {
   analizarOportunidadInterno,
   getChecklistPostulacion,
   extraerFichasTecnicas,
+  limpiarHistorial,
+  actualizarObservacionItem,
 }

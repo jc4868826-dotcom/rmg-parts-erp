@@ -2706,6 +2706,42 @@ function runMigrations() {
       console.error('❌ Migración chilecompra_items_ajuste_v1 falló:', e.message)
     }
   }
+
+  // Migration chilecompra_correccion_usuario_v1 — columnas para que el
+  // usuario pueda corregir un match que salió mal directamente desde la UI
+  // y que el próximo cruce lo respete.
+  //
+  // Pedido real del usuario ("si el match de excel salió mal, debemos
+  // agregar observaciones para que lo vuelva a calcular"): antes no había
+  // forma de corregir un ítem sin volver a subir documentos o tocar la BD a
+  // mano — cruzarItemsConCatalogo() siempre re-matcheaba TODOS los ítems
+  // desde cero, así que cualquier corrección manual se perdía en el próximo
+  // análisis. Dos columnas, dos formas de corregir (ver chilecompraController
+  // .actualizarObservacionItem y chilecompraScoring.cruzarItemsConCatalogo):
+  //   - correccion_usuario: nota libre del usuario (ej. "es un anticongelante
+  //     concentrado, no diluido") que se concatena al texto del ítem ANTES
+  //     de volver a buscar en el catálogo — guía el re-match sin fijar un
+  //     SKU específico.
+  //   - sku_forzado_por_usuario: SKU exacto que el usuario ya sabe que es el
+  //     correcto (convención de UI: escribir "SKU:<codigo>" en la misma nota)
+  //     — cuando está presente, cruzarItemsConCatalogo NO vuelve a
+  //     re-matchear ese ítem, respeta el SKU indicado tal cual.
+  const mCorreccionUsuario = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('chilecompra_correccion_usuario_v1')
+  if (!mCorreccionUsuario) {
+    try {
+      const itemCols3 = db.prepare('PRAGMA table_info(oportunidad_chilecompra_items)').all().map(c => c.name)
+      if (!itemCols3.includes('correccion_usuario')) {
+        db.exec('ALTER TABLE oportunidad_chilecompra_items ADD COLUMN correccion_usuario TEXT')
+      }
+      if (!itemCols3.includes('sku_forzado_por_usuario')) {
+        db.exec('ALTER TABLE oportunidad_chilecompra_items ADD COLUMN sku_forzado_por_usuario TEXT')
+      }
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('chilecompra_correccion_usuario_v1')
+      console.log('✅ Migración chilecompra_correccion_usuario_v1 — columnas de corrección manual añadidas')
+    } catch (e) {
+      console.error('❌ Migración chilecompra_correccion_usuario_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

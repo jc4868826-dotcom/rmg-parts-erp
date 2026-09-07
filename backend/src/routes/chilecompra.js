@@ -14,6 +14,14 @@
  *                                             técnica de cada producto emparejado (usa la
  *                                             librería catalogo_fichas_tecnicas; si falta
  *                                             alguna, la extrae de Vistony al vuelo)
+ * POST   /api/chilecompra/:id/limpiar-historial   botón "Limpiar historial y reintentar":
+ *                                             borra ítems, historial de eventos, resumen IA,
+ *                                             scores y el Excel de cruce auto-generado — los
+ *                                             anexos subidos por el usuario NO se tocan.
+ * PUT    /api/chilecompra/:id/items/:itemId/observacion   corregir un ítem cuyo match salió
+ *                                             mal: guarda una nota libre (o "SKU:<codigo>"
+ *                                             para fijar el producto correcto a mano) y
+ *                                             recalcula el cruce completo + el Excel.
  *
  * Los anexos (PDF/Excel) se suben con el módulo genérico ya existente:
  *   POST /api/documentos/oportunidad_chilecompra/:id
@@ -34,5 +42,7 @@ router.patch('/:id/estado',      authenticate, c.cambiarEstado)
 router.post('/:id/analizar',     authenticate, c.analizarOportunidad)
 router.get('/:id/checklist',     authenticate, c.getChecklistPostulacion)
 router.post('/:id/extraer-fichas-tecnicas', authenticate, c.extraerFichasTecnicas)
+router.post('/:id/limpiar-historial', authenticate, c.limpiarHistorial)
+router.put('/:id/items/:itemId/observacion', authenticate, c.actualizarObservacionItem)
 
 module.exports = router

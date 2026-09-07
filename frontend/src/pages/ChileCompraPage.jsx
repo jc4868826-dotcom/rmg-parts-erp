@@ -8,7 +8,7 @@
  * "publicada" es SIEMPRE una confirmación manual — el sistema nunca envía
  * una oferta por sí solo, solo prepara y el humano confirma que ya la subió.
  */
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha, formatRelativo, formatPct } from '@utils/format'
@@ -17,7 +17,7 @@ import {
   Landmark, Search, RefreshCw, X, AlertTriangle, CheckCircle2,
   XCircle, Clock, FileSearch, ClipboardCheck, Send, Trophy, Ban,
   MapPin, Calendar, Package, TrendingUp, ShieldCheck, ExternalLink,
-  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack
+  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack, Eraser
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -341,6 +341,10 @@ function ResultadosCerrados({ oportunidades, onSelect }) {
 function DetalleModal({ id, onClose }) {
   const qc = useQueryClient()
   const [verChecklist, setVerChecklist] = useState(false)
+  // Texto en edición por ítem para la corrección manual ("match salió mal") —
+  // keyed por item.id, solo mientras el usuario edita antes de guardar.
+  const [notaEdit, setNotaEdit] = useState({})
+  const [itemAbierto, setItemAbierto] = useState(null)
 
   const { data: op, isLoading } = useQuery({
     queryKey: ['chilecompra-detalle', id],
@@ -385,6 +389,33 @@ function DetalleModal({ id, onClose }) {
       }
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al extraer las fichas técnicas'),
+  })
+
+  // "Limpiar historial y reintentar" — pedido real del usuario: cuando la
+  // lectura de anexos falla repetido, el historial se llena de eventos
+  // viejos y confusos ("evitando mareos"). Borra ítems/historial/scores/
+  // Excel derivados; los anexos subidos NO se tocan (ver backend).
+  const limpiarHistorialMut = useMutation({
+    mutationFn: () => api.post(`/chilecompra/${id}/limpiar-historial`).then(r => r.data),
+    onSuccess: () => { invalidar(); toast.success('Historial limpio — los anexos subidos se conservan. Vuelve a analizar cuando quieras.') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al limpiar el historial'),
+  })
+
+  const handleLimpiarHistorial = () => {
+    if (!window.confirm('Esto borra los ítems, el historial de eventos, el resumen IA, los scores y el Excel de cruce generados en el análisis anterior — para dejar la oportunidad lista para reanalizar desde cero. Los documentos que subiste (Anexos de la licitación) NO se borran. ¿Continuar?')) return
+    limpiarHistorialMut.mutate()
+  }
+
+  // Corregir un ítem cuyo match salió mal — pedido real: "si el match de
+  // excel salió mal, debemos agregar observaciones para que lo vuelva a
+  // calcular". Un solo campo de texto: "SKU:<codigo>" fija el producto
+  // correcto a mano, cualquier otro texto es una pista para el re-match
+  // automático. Recalcula el cruce completo al guardar (ver backend).
+  const corregirItemMut = useMutation({
+    mutationFn: ({ itemId, correccion_usuario }) =>
+      api.put(`/chilecompra/${id}/items/${itemId}/observacion`, { correccion_usuario }).then(r => r.data),
+    onSuccess: () => { invalidar(); toast.success('Corrección guardada — cruce recalculado') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al guardar la corrección'),
   })
 
   const handleDescartar = () => {
@@ -536,27 +567,85 @@ function DetalleModal({ id, onClose }) {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ background: 'rgba(15,35,60,0.03)' }}>
-                      {['Descripción', 'Cant.', 'SKU RMG', 'Margen', ''].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                      {['Descripción', 'Cant.', 'SKU RMG', 'Margen', '', ''].map((h, i) => (
+                        <th key={`${h}-${i}`} className="text-left px-3 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {op.items.map(it => (
-                      <tr key={it.id} style={{ borderTop: '1px solid rgba(15,35,60,0.04)' }}>
-                        <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>{it.descripcion_solicitada}</td>
-                        <td className="px-3 py-2" style={{ color: it.cantidad_ajustada ? 'var(--rmg-red)' : 'var(--rmg-muted)', fontWeight: it.cantidad_ajustada ? 700 : 400 }}>
-                          {it.cantidad} {it.unidad || ''}
-                          {it.cantidad_ajustada ? <span title={`Cantidad ajustada automáticamente desde ${it.cantidad_solicitada_original} para cubrir el volumen real solicitado — ver Observación en el Excel de cruce.`}> ⚠️</span> : null}
-                        </td>
-                        <td className="px-3 py-2 font-mono" style={{ color: it.cubierto ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>{it.sku_match || 'Sin cobertura'}</td>
-                        <td className="px-3 py-2 font-semibold" style={{ color: 'var(--rmg-off)' }}>{it.margen_pct_estimado != null ? formatPct(it.margen_pct_estimado) : '—'}</td>
-                        <td className="px-3 py-2">{it.cubierto ? <CheckCircle2 size={13} style={{ color: 'var(--rmg-teal)' }} /> : <XCircle size={13} style={{ color: 'var(--rmg-red)' }} />}</td>
-                      </tr>
+                      <Fragment key={it.id}>
+                        <tr style={{ borderTop: '1px solid rgba(15,35,60,0.04)' }}>
+                          <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>{it.descripcion_solicitada}</td>
+                          <td className="px-3 py-2" style={{ color: it.cantidad_ajustada ? 'var(--rmg-red)' : 'var(--rmg-muted)', fontWeight: it.cantidad_ajustada ? 700 : 400 }}>
+                            {it.cantidad} {it.unidad || ''}
+                            {it.cantidad_ajustada ? <span title={`Cantidad ajustada automáticamente desde ${it.cantidad_solicitada_original} para cubrir el volumen real solicitado — ver Observación en el Excel de cruce.`}> ⚠️</span> : null}
+                          </td>
+                          <td className="px-3 py-2 font-mono" style={{ color: it.cubierto ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>
+                            {it.sku_match || 'Sin cobertura'}
+                            {it.sku_forzado_por_usuario ? <span title="SKU fijado manualmente"> ✋</span> : null}
+                          </td>
+                          <td className="px-3 py-2 font-semibold" style={{ color: 'var(--rmg-off)' }}>{it.margen_pct_estimado != null ? formatPct(it.margen_pct_estimado) : '—'}</td>
+                          <td className="px-3 py-2">{it.cubierto ? <CheckCircle2 size={13} style={{ color: 'var(--rmg-teal)' }} /> : <XCircle size={13} style={{ color: 'var(--rmg-red)' }} />}</td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setItemAbierto(itemAbierto === it.id ? null : it.id)
+                                setNotaEdit(prev => ({ ...prev, [it.id]: prev[it.id] ?? (it.correccion_usuario || (it.sku_forzado_por_usuario ? `SKU:${it.sku_forzado_por_usuario}` : '')) }))
+                              }}
+                              className="text-xs font-medium"
+                              style={{ color: 'var(--rmg-blue)' }}
+                            >
+                              {itemAbierto === it.id ? 'Cerrar' : 'Corregir'}
+                            </button>
+                          </td>
+                        </tr>
+                        {itemAbierto === it.id && (
+                          <tr style={{ background: 'rgba(56,182,255,0.04)' }}>
+                            <td colSpan={6} className="px-3 py-3">
+                              <div className="text-xs mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
+                                Si el match salió mal, escribe una pista (ej. "es un anticongelante concentrado, no diluido") para que el sistema
+                                lo vuelva a buscar en el catálogo — o si ya sabes el SKU correcto, escribe <code>SKU:1200212</code> para fijarlo directo.
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={notaEdit[it.id] ?? ''}
+                                  onChange={(e) => setNotaEdit(prev => ({ ...prev, [it.id]: e.target.value }))}
+                                  placeholder='Ej: "es hidráulico ISO 46, no aceite de motor" o "SKU:1200212"'
+                                  className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border"
+                                  style={{ borderColor: 'var(--rmg-border)' }}
+                                />
+                                <button
+                                  type="button"
+                                  disabled={corregirItemMut.isPending}
+                                  onClick={() => corregirItemMut.mutate({ itemId: it.id, correccion_usuario: notaEdit[it.id] || '' })}
+                                  className="text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50"
+                                  style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blue)', border: '1px solid rgba(56,182,255,0.2)' }}
+                                >
+                                  {corregirItemMut.isPending ? 'Recalculando…' : 'Guardar y recalcular'}
+                                </button>
+                                {(it.correccion_usuario || it.sku_forzado_por_usuario) && (
+                                  <button
+                                    type="button"
+                                    disabled={corregirItemMut.isPending}
+                                    onClick={() => { setNotaEdit(prev => ({ ...prev, [it.id]: '' })); corregirItemMut.mutate({ itemId: it.id, correccion_usuario: '' }) }}
+                                    className="text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50"
+                                    style={{ color: 'var(--rmg-red)' }}
+                                  >
+                                    Quitar corrección
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                     {op.items.some(it => it.observacion) && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                        <td colSpan={6} className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>
                           {op.items.filter(it => it.observacion).map(it => (
                             <div key={`obs-${it.id}`} className="mb-1">
                               <span className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{it.sku_match || it.descripcion_solicitada?.slice(0, 30)}:</span> {it.observacion}
@@ -668,6 +757,7 @@ function DetalleModal({ id, onClose }) {
                 icon={ClipboardCheck} label="Preparar postulación" color="#a78bfa" bg="rgba(167,139,250,0.12)" />
               <ActionBtn onClick={handleDescartar} busy={cambiarEstadoMut.isPending} icon={Ban} label="Descartar" color="var(--rmg-red)" bg="rgba(224,90,78,0.08)" />
               <ActionBtn onClick={() => handleVolver('detectada')} busy={cambiarEstadoMut.isPending} icon={Undo2} label="Volver a detectada" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
+              <ActionBtn onClick={handleLimpiarHistorial} busy={limpiarHistorialMut.isPending} icon={Eraser} label="Limpiar historial y reintentar" color="var(--rmg-red)" bg="rgba(224,90,78,0.08)" />
             </>
           )}
           {op.estado === 'preparando_postulacion' && (

@@ -533,8 +533,39 @@ function volumenTotalSolicitado(item, texto) {
 }
 
 /**
+ * Construye un "match" a partir de un SKU que el usuario fijó a mano (ver
+ * sku_forzado_por_usuario) — mismo shape que devuelve buscarSkuCandidato,
+ * pero SIN pasar por preferirFormatoMenor: si el usuario ya eligió el
+ * producto, no se le "corrige" sustituyéndolo por otro formato — se respeta
+ * tal cual. confianza=1 porque no es una sugerencia del heurístico, es una
+ * decisión humana explícita.
+ */
+function matchDesdeSkuForzado(codigoSku) {
+  const sku = db.prepare(`
+    SELECT codigo_sku, descripcion, categoria, producto_generico, marca, tipo_envase, presentacion, precio_venta_neto,
+           costo_unidad_neto, unidades_por_pack, ranking_compra
+    FROM lista_precios WHERE codigo_sku = ? LIMIT 1
+  `).get(codigoSku)
+  if (!sku) return null
+  return { sku, confianza: 1, forzadoPorUsuario: true }
+}
+
+/**
  * Enriquece cada ítem de la oportunidad con su match de catálogo, costo y margen
  * estimado. Escribe directo en oportunidad_chilecompra_items.
+ *
+ * Respeta las correcciones que el usuario haya dejado en cada ítem (ver
+ * migración chilecompra_correccion_usuario_v1 — pedido real: "si el match
+ * de excel salió mal, debemos agregar observaciones para que lo vuelva a
+ * calcular"):
+ *  - sku_forzado_por_usuario: si está presente, este ítem NO se vuelve a
+ *    matchear — se usa ese SKU tal cual (ver matchDesdeSkuForzado). Sigue
+ *    pasando por el ajuste de cantidad/volumen y el chequeo de envase, para
+ *    que el usuario vea si SU elección también tiene una brecha.
+ *  - correccion_usuario: si no hay SKU forzado, esta nota libre se agrega al
+ *    texto de búsqueda (especificación técnica) antes de volver a
+ *    matchear — le da al heurístico una pista que el documento original no
+ *    traía (ej. "es un anticongelante concentrado, no diluido").
  */
 function cruzarItemsConCatalogo(oportunidadId) {
   const items = db.prepare(
@@ -552,13 +583,21 @@ function cruzarItemsConCatalogo(oportunidadId) {
 
   let cubiertos = 0
   for (const item of items) {
-    const texto = `${item.descripcion_solicitada || ''} ${item.especificacion_tecnica || ''}`.trim()
-    const match = buscarSkuCandidato(item.descripcion_solicitada, item.especificacion_tecnica)
+    const especTecnicaEfectiva = item.correccion_usuario && !item.sku_forzado_por_usuario
+      ? [item.especificacion_tecnica, item.correccion_usuario].filter(Boolean).join(' — ')
+      : item.especificacion_tecnica
+    const texto = `${item.descripcion_solicitada || ''} ${especTecnicaEfectiva || ''}`.trim()
+    const match = item.sku_forzado_por_usuario
+      ? matchDesdeSkuForzado(item.sku_forzado_por_usuario)
+      : buscarSkuCandidato(item.descripcion_solicitada, especTecnicaEfectiva)
     if (!match) {
-      upd.run(null, null, null, null, null, 0, null, null, item.cantidad, null, 0, item.id)
+      const motivoSinMatch = item.sku_forzado_por_usuario
+        ? `SKU "${item.sku_forzado_por_usuario}" fijado por el usuario ya no existe en el catálogo — corregir o quitar la corrección.`
+        : null
+      upd.run(null, null, null, null, null, 0, motivoSinMatch, null, item.cantidad, null, 0, item.id)
       continue
     }
-    const { sku, confianza, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa, sinSenalTextual } = match
+    const { sku, confianza, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa, sinSenalTextual, forzadoPorUsuario } = match
     const costoUnitario = sku.unidades_por_pack > 1
       ? Math.round(sku.costo_unidad_neto / sku.unidades_por_pack)
       : sku.costo_unidad_neto
@@ -598,6 +637,11 @@ function cruzarItemsConCatalogo(oportunidadId) {
     const envaseNoCoincide = tipoSolicitado && tipoOfrecido && tipoSolicitado !== tipoOfrecido
 
     const observaciones = []
+    if (forzadoPorUsuario) {
+      observaciones.push('✋ SKU fijado manualmente por el usuario — no se re-matchea automáticamente. Para volver al matching automático, borra la corrección en este ítem.')
+    } else if (item.correccion_usuario) {
+      observaciones.push(`📝 Nota del usuario aplicada al re-match: "${item.correccion_usuario}".`)
+    }
     if (sinSenalTextual) {
       observaciones.push('Sugerencia genérica de categoría — el texto del ítem no coincidió con ningún producto específico del catálogo (marca/término técnico distinto al de RMG). Puede que RMG no tenga este producto exacto: verificar antes de cotizar.')
     }

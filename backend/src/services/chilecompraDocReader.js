@@ -22,10 +22,39 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5'
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 
+// IMPORTANTE (fix 2026-09 — "leyó solo 3 requerimientos"): el usuario reportó
+// que, con 4 documentos adjuntos a una licitación real, la extracción solo
+// devolvió 3 ítems — sospecha fundada de que el modelo se detuvo antes de
+// terminar de revisar todos los documentos, o resumió/fusionó ítems
+// distintos en uno solo. El prompt ahora es explícito sobre EXHAUSTIVIDAD
+// (revisar cada documento completo, no detenerse en los primeros ítems que
+// encuentre, nunca fusionar productos distintos aunque sean del mismo rubro)
+// y se agregó un campo de auto-reporte (extraccion_posiblemente_incompleta)
+// para que, si el propio modelo no está seguro de haber cubierto todo, quede
+// una señal visible en vez de un silencio que parece éxito. Ver también el
+// aumento de max_tokens en llamarAnthropicYParsear — con pocos tokens de
+// salida, una licitación con muchos ítems puede truncar el JSON a mitad de
+// camino (eso SÍ rompe el parseo, con un error claro; el caso más peligroso
+// es cuando el modelo, sin espacio suficiente, decide resumir en vez de
+// truncar — por eso el pedido explícito de exhaustividad además del límite
+// más alto).
 const EXTRACTION_PROMPT = `Eres un asistente experto en compras públicas chilenas (Mercado Público / ChileCompra).
-Te adjunto uno o más documentos (memo, especificaciones técnicas, bases administrativas) de una
+Te adjunto uno o más documentos (memo, especificaciones técnicas, bases administrativas, anexos) de una
 oportunidad de venta al Estado. Extrae SOLO lo que el documento diga explícitamente — si un dato no
 aparece, usa null. Nunca inventes ni estimes cifras, fechas o direcciones.
+
+REGLAS DE EXHAUSTIVIDAD (crítico — un ítem omitido puede costarle dinero real a la empresa que usa
+esta extracción para cotizar):
+- Revisa TODOS los documentos adjuntos completos, de principio a fin, incluyendo tablas, anexos y
+  cualquier listado de productos/ítems — no te detengas después de encontrar los primeros ítems.
+- Lista CADA ítem/producto solicitado como una entrada separada en "items", aunque haya muchos (10,
+  20 o más) y aunque varios sean del mismo rubro (ej. "aceite de motor 15W40" y "aceite hidráulico
+  ISO 68" son DOS ítems distintos, nunca los fusiones en uno ni los resumas como "varios lubricantes").
+- Si una tabla de la licitación lista N líneas de producto, "items" debe tener N entradas — nunca
+  menos porque parezcan repetitivas o similares entre sí.
+- Si tras revisar todo no estás seguro de haber capturado el 100% de los ítems (documento muy largo,
+  tabla cortada, texto poco legible), dilo explícitamente en "extraccion_posiblemente_incompleta" y
+  explica por qué en "resumen" — NUNCA te quedes callado sobre esa incertidumbre.
 
 Devuelve EXCLUSIVAMENTE un JSON válido (sin texto antes ni después) con esta forma exacta:
 {
@@ -47,6 +76,7 @@ Devuelve EXCLUSIVAMENTE un JSON válido (sin texto antes ni después) con esta f
       "precio_unitario_referencial": number|null
     }
   ],
+  "extraccion_posiblemente_incompleta": boolean,
   "resumen": string
 }`
 
@@ -66,7 +96,14 @@ async function llamarAnthropicYParsear(content, origen) {
   try {
     const resp = await axios.post(
       ANTHROPIC_URL,
-      { model: ANTHROPIC_MODEL, max_tokens: 4096, messages: [{ role: 'user', content }] },
+      // max_tokens subido de 4096 a 8192 (fix 2026-09 — "leyó solo 3
+      // requerimientos"): con licitaciones de varios documentos y muchos
+      // ítems, 4096 tokens de salida podían no alcanzar para el JSON
+      // completo — el riesgo no es solo un error de parseo (JSON cortado a
+      // mitad), sino que el modelo, al notar que se queda sin espacio,
+      // puede resumir/fusionar ítems en vez de listarlos todos. Ver también
+      // las reglas de exhaustividad agregadas a EXTRACTION_PROMPT.
+      { model: ANTHROPIC_MODEL, max_tokens: 8192, messages: [{ role: 'user', content }] },
       {
         headers: {
           'x-api-key': ANTHROPIC_API_KEY,
