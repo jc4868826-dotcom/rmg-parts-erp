@@ -466,6 +466,20 @@ function DetalleModal({ id, onClose }) {
             </div>
           )}
 
+          {/* Aviso: el análisis usó solo la ficha pública genérica (sin detalle
+              técnico real) — Mercado Público no expone las Bases/Anexo Técnico
+              como texto ni link de descarga en la ficha pública, así que sin un
+              PDF subido a mano el sistema solo tiene la línea genérica del ítem
+              (ej. "Aceite de motor 1 Global"), no el requerimiento real. */}
+          {op.analisis_fuente === 'ficha_publica' && (
+            <div className="flex items-start gap-2 p-3 rounded-lg text-sm" style={{ background: 'rgba(230,168,49,0.1)', color: 'var(--rmg-gold)' }}>
+              <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>Análisis genérico:</strong> se usó solo la ficha pública de Mercado Público, que no trae el detalle técnico real (viscosidad, norma, marca, cantidad). Descarga las Bases Administrativas / Anexo Técnico desde el portal y súbelas abajo en "Adjuntar PDF, Excel o imagen", luego reintenta el análisis para un match confiable.
+              </span>
+            </div>
+          )}
+
           {/* Info grid */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <InfoRow icon={MapPin} label="Ubicación" value={[op.direccion_entrega, op.comuna, op.region].filter(Boolean).join(', ') || '—'} />

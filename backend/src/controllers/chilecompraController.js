@@ -246,7 +246,7 @@ async function analizarOportunidadInterno(id, user) {
         comuna = COALESCE(?, comuna), region = COALESCE(?, region),
         fecha_cierre = COALESCE(?, fecha_cierre), plazo_entrega = ?,
         presupuesto_estimado = COALESCE(?, presupuesto_estimado),
-        tiene_exigencia_garantia = ?, tiene_exigencia_sds = ?, updated_at = ?
+        tiene_exigencia_garantia = ?, tiene_exigencia_sds = ?, analisis_fuente = ?, updated_at = ?
       WHERE id = ?
     `).run(
       extraccion.resumen || null, extraccion.direccion_entrega || null,
@@ -255,7 +255,7 @@ async function analizarOportunidadInterno(id, user) {
       extraccion.presupuesto_estimado || null,
       extraccion.tiene_exigencia_garantia == null ? null : (extraccion.tiene_exigencia_garantia ? 1 : 0),
       extraccion.tiene_exigencia_sds_ficha_tecnica == null ? null : (extraccion.tiene_exigencia_sds_ficha_tecnica ? 1 : 0),
-      new Date().toISOString(), id
+      fuenteAnalisis, new Date().toISOString(), id
     )
   })()
 
@@ -279,9 +279,21 @@ async function analizarOportunidadInterno(id, user) {
     WHERE id = ?
   `).run(cruce.coberturaPct, scoreRentabilidad, scoreSeguridad, scoreTotal, id)
 
+  // La ficha pública de Mercado Público trae SOLO la línea genérica del ítem
+  // (ej. "Aceite de motor 1 Global") — el requerimiento técnico real vive en
+  // un documento aparte ("Bases Administrativas Especiales" / Anexo Técnico)
+  // que el organismo publica y que Mercado Público NO expone como texto ni
+  // como link de descarga en la ficha (verificado contra la página real).
+  // Cuando el análisis usó esta fuente, se deja explícito en el historial —
+  // antes quedaba "analizado" sin ninguna señal de que el detalle real seguía
+  // sin leerse, lo que hacía parecer que el match usó el requerimiento
+  // técnico completo cuando en realidad solo tuvo la línea genérica.
+  const avisoFuenteGenerica = fuenteAnalisis === 'ficha_publica'
+    ? ' ⚠️ Fuente solo genérica — la ficha pública no trae el detalle técnico real (viscosidad, norma, marca, etc.), que suele venir en un PDF de Bases/Anexo Técnico aparte. Descárgalo del portal y súbelo en "Adjuntar PDF, Excel o imagen" para un análisis con el requerimiento real, luego reintenta el análisis.'
+    : ''
   logEvento(id, 'analisis_completado', {
     usuario_id: user?.id, usuario_nombre: user?.email,
-    detalle: `Fuente: ${fuenteAnalisis === 'ficha_publica' ? 'ficha pública Mercado Público' : 'anexos subidos'} · Cobertura ${Math.round(cruce.coberturaPct * 100)}% · score rentabilidad ${scoreRentabilidad} · score seguridad ${scoreSeguridad}`,
+    detalle: `Fuente: ${fuenteAnalisis === 'ficha_publica' ? 'ficha pública Mercado Público' : 'anexos subidos'} · Cobertura ${Math.round(cruce.coberturaPct * 100)}% · score rentabilidad ${scoreRentabilidad} · score seguridad ${scoreSeguridad}${avisoFuenteGenerica}`,
   })
 
   // Genera y adjunta el Excel de cruce (formato estándar acordado con el

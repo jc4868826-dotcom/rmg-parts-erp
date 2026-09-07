@@ -2576,6 +2576,45 @@ function runMigrations() {
       console.error('❌ Migración lista_precios_categoria_fix_v1 falló:', e.message)
     }
   }
+
+  // Migration chilecompra_analisis_fuente_v1 — nueva columna `analisis_fuente`
+  // en oportunidades_chilecompra.
+  //
+  // Auditoría (2378-105-LE26, I. Municipalidad de La Florida): confirmado
+  // contra la ficha pública real de Mercado Público que para Compra Ágil /
+  // licitaciones de este tipo, el ítem solicitado llega SOLO como una línea
+  // genérica ("Aceite de motor 1 Global") — el requerimiento técnico real
+  // (viscosidad SAE, norma API/ACEA, marca, cantidad de vehículos, etc.) vive
+  // en un documento aparte ("Bases Administrativas Especiales") que el
+  // organismo publica, y que la ficha pública NO expone como texto ni como
+  // link de descarga en su HTML (se verificó contra la página real — solo
+  // dice "Remítase a las Bases Administrativas Especiales", sin adjuntar el
+  // documento ni su URL). Tampoco existe hoy un endpoint público y en tiempo
+  // real de la API de ChileCompra que devuelva esos anexos — solo datasets
+  // históricos masivos (datos-abiertos.chilecompra.cl), no consultables por
+  // código de proceso individual al momento de analizar.
+  //
+  // Por eso, cuando `analizarOportunidadInterno` usa la ficha pública como
+  // fuente (porque el usuario no subió ningún anexo a mano), el análisis
+  // queda basado SOLO en esa línea genérica — nunca en el detalle técnico
+  // real. Antes esto quedaba invisible: la oportunidad se marcaba como
+  // "analizada" sin ninguna señal de que el detalle real seguía sin leerse.
+  // Esta columna guarda la fuente real usada ('anexos_subidos' vs
+  // 'ficha_publica') para que el frontend pueda avisar al usuario cuando el
+  // análisis es genérico y sugerirle subir el PDF de Bases/Anexo Técnico
+  // (descargado a mano desde el portal) — ese es el único camino que hoy
+  // llega al detalle real, vía leerAnexos.
+  const mAnalisisFuente = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('chilecompra_analisis_fuente_v1')
+  if (!mAnalisisFuente) {
+    try {
+      const opCols = db.prepare('PRAGMA table_info(oportunidades_chilecompra)').all().map(c => c.name)
+      if (!opCols.includes('analisis_fuente')) db.exec('ALTER TABLE oportunidades_chilecompra ADD COLUMN analisis_fuente TEXT')
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('chilecompra_analisis_fuente_v1')
+      console.log('✅ Migración chilecompra_analisis_fuente_v1 — columna analisis_fuente añadida')
+    } catch (e) {
+      console.error('❌ Migración chilecompra_analisis_fuente_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
