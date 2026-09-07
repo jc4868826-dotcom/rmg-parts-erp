@@ -163,7 +163,33 @@ async function construirIndiceProductos({ forzar = false } = {}) {
     builtAt: Date.now(),
     erroresCategoria,
   }
+
+  // Antes esto se guardaba en el caché pero nunca se leía en ningún lado: si
+  // Vistony bloqueaba el bot (403/timeout) en las 7 categorías raíz, el índice
+  // quedaba vacío y el único síntoma visible aguas abajo era "0/1 adjuntadas",
+  // sin ninguna pista de por qué. Ahora queda al menos en el log del servidor.
+  if (erroresCategoria.length) {
+    console.warn(
+      `⚠️ construirIndiceProductos: ${erroresCategoria.length}/${CATEGORIAS_RAIZ.length + erroresCategoria.length} categoría(s) fallaron al recorrer vistonylubricantes.cl —`,
+      erroresCategoria.map(e => `${e.url}: ${e.error}`).join(' | ')
+    )
+  }
+  if (!indiceCache.productos.length) {
+    console.warn('⚠️ construirIndiceProductos: el índice quedó vacío (0 productos) — probable bloqueo del sitio o cambio de estructura HTML, ver errores arriba.')
+  }
+
   return indiceCache.productos
+}
+
+/**
+ * Igual que construirIndiceProductos, pero además del array de productos
+ * expone los errores de crawl y si el índice quedó vacío — para que
+ * extraerYGuardarFichaProducto pueda distinguir "no hay un producto Vistony
+ * parecido" de "no se pudo ni siquiera leer el sitio de Vistony".
+ */
+async function construirIndiceProductosConDiagnostico(opts) {
+  const productos = await construirIndiceProductos(opts)
+  return { productos, erroresCategoria: indiceCache?.erroresCategoria || [] }
 }
 
 /**
@@ -172,12 +198,17 @@ async function construirIndiceProductos({ forzar = false } = {}) {
  * heurística de solapamiento de palabras que buscarSkuCandidato en
  * chilecompraScoring.js — umbral más laxo (0.25) porque acá ya se está dentro
  * del universo real de productos Vistony, no del catálogo completo de RMG.
+ *
+ * Umbral de largo de palabra bajado de 3 a 2: con 3, códigos SAE/ACEA de dos
+ * caracteres como "C3", "B4", "SN" quedaban descartados del match aunque son
+ * justamente las palabras más distintivas de una descripción de lubricante
+ * (p.ej. "ATTOM S320 SAE 5W-30 ACEA C3/API SN DE 5 L" perdía "c3" y "sn").
  */
 function buscarProductoVistony(textoBusqueda, indice) {
   const palabras = normalizarTexto(textoBusqueda)
     .replace(/[^a-z0-9 ]/g, ' ')
     .split(/\s+/)
-    .filter(w => w.length >= 3)
+    .filter(w => w.length >= 2)
   if (!palabras.length || !indice.length) return null
 
   let mejor = null
@@ -281,18 +312,24 @@ async function extraerYGuardarFichaProducto(skuLista, urlProductoOverride) {
   let urlProducto = urlProductoOverride
   let matchInfo = null
   if (!urlProducto) {
-    const indice = await construirIndiceProductos()
+    const { productos: indice, erroresCategoria } = await construirIndiceProductosConDiagnostico()
+    if (!indice.length) {
+      const detalleErrores = erroresCategoria.length
+        ? ` (${erroresCategoria.length} categoría(s) fallaron al leer vistonylubricantes.cl, p.ej. "${erroresCategoria[0].error}")`
+        : ' (el sitio no devolvió ningún producto, aunque respondió sin error)'
+      return { sku: skuLista, encontrada: false, motivo: `no se pudo construir el índice de productos de Vistony${detalleErrores}` }
+    }
     const textoBusqueda = `${sku.descripcion || ''} ${sku.producto_generico || ''}`
     matchInfo = buscarProductoVistony(textoBusqueda, indice)
     if (!matchInfo) {
-      return { sku: skuLista, encontrada: false, motivo: 'no se encontró un producto equivalente en vistonylubricantes.cl' }
+      return { sku: skuLista, encontrada: false, motivo: `no se encontró un producto equivalente en vistonylubricantes.cl para "${textoBusqueda.trim()}"` }
     }
     urlProducto = matchInfo.url
   }
 
   const ficha = await extraerFichaDesdeUrlProducto(urlProducto)
   if (!ficha) {
-    return { sku: skuLista, encontrada: false, motivo: 'se encontró la página del producto pero no un PDF de ficha técnica en ella', urlProducto }
+    return { sku: skuLista, encontrada: false, motivo: `se encontró la página del producto (${urlProducto}) pero no un PDF de ficha técnica en ella`, urlProducto }
   }
 
   const resultado = guardarFichaEnLibreria({
@@ -353,14 +390,15 @@ async function adjuntarFichasAOportunidad(oportunidadId, usuario) {
   for (const { sku_match } of items) {
     try {
       let ficha = db.prepare('SELECT * FROM catalogo_fichas_tecnicas WHERE producto_sku = ?').get(sku_match)
+      let extra = null
       if (!ficha) {
-        const extra = await extraerYGuardarFichaProducto(sku_match)
+        extra = await extraerYGuardarFichaProducto(sku_match)
         if (extra.encontrada) {
           ficha = db.prepare('SELECT * FROM catalogo_fichas_tecnicas WHERE id = ?').get(extra.id)
         }
       }
       if (!ficha) {
-        resultado.sinFicha.push(sku_match)
+        resultado.sinFicha.push({ sku: sku_match, motivo: extra?.motivo || 'sin motivo registrado' })
         continue
       }
 

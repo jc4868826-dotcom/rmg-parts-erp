@@ -194,8 +194,15 @@ async function analizarOportunidadInterno(id, user) {
   const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)
   if (!op) throw new Error('Oportunidad no encontrada')
 
+  // Solo PDFs/imágenes subidos por el usuario — nunca el Excel de cruce ni otros
+  // archivos que el propio sistema genera y adjunta a esta misma oportunidad
+  // (categoria 'cruce_auto'), porque Anthropic no acepta Excel/CSV en un bloque
+  // de documento y esos archivos son SALIDA del análisis, no un anexo a leer.
   const anexos = db.prepare(
-    "SELECT * FROM documentos_adjuntos WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ?"
+    `SELECT * FROM documentos_adjuntos
+     WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ?
+       AND tipo IN ('pdf', 'imagen')
+       AND (categoria IS NULL OR categoria != 'cruce_auto')`
   ).all(id)
 
   let extraccion
@@ -315,10 +322,26 @@ async function analizarOportunidadInterno(id, user) {
   try {
     const resultadoFichas = await adjuntarFichasAOportunidad(id, user)
     logEvento(id, 'fichas_tecnicas_adjuntadas', { usuario_id: user?.id, usuario_nombre: user?.email,
-      detalle: `${resultadoFichas.adjuntadas}/${resultadoFichas.total} fichas técnicas adjuntadas automáticamente.` })
+      detalle: `${resultadoFichas.adjuntadas}/${resultadoFichas.total} fichas técnicas adjuntadas automáticamente.${detalleFichasFaltantes(resultadoFichas)}` })
   } catch (e) {
     logEvento(id, 'fichas_tecnicas_error', { usuario_id: user?.id, usuario_nombre: user?.email, detalle: e.message })
   }
+}
+
+// Construye el detalle legible de por qué faltó una ficha (sinFicha) o falló su
+// adjunción (errores), para que el historial de la oportunidad no se quede solo
+// con el conteo "0/1" sin explicación — antes era imposible saber, sin mirar los
+// logs del servidor, si la causa fue que Vistony bloqueó el scraping, que no hubo
+// match de producto, o que el producto no tiene PDF de ficha publicado.
+function detalleFichasFaltantes(resultado) {
+  const partes = []
+  if (resultado.sinFicha?.length) {
+    partes.push(' Sin ficha: ' + resultado.sinFicha.map(s => `${s.sku} (${s.motivo})`).join('; ') + '.')
+  }
+  if (resultado.errores?.length) {
+    partes.push(' Errores: ' + resultado.errores.map(e => `${e.sku} (${e.error})`).join('; ') + '.')
+  }
+  return partes.join('')
 }
 
 const analizarOportunidad = async (req, res) => {
@@ -343,7 +366,7 @@ const extraerFichasTecnicas = async (req, res) => {
     const resultado = await adjuntarFichasAOportunidad(req.params.id, req.user)
     logEvento(req.params.id, 'fichas_tecnicas_adjuntadas', {
       usuario_id: req.user?.id, usuario_nombre: req.user?.email,
-      detalle: `${resultado.adjuntadas}/${resultado.total} fichas técnicas adjuntadas (botón manual).`,
+      detalle: `${resultado.adjuntadas}/${resultado.total} fichas técnicas adjuntadas (botón manual).${detalleFichasFaltantes(resultado)}`,
     })
     res.json(resultado)
   } catch (err) {

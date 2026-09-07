@@ -92,6 +92,13 @@ async function llamarAnthropicYParsear(content, origen) {
   }
 }
 
+// Anthropic solo acepta PDF en bloques "document" y estos formatos en bloques
+// "image" — Excel, CSV, Word, etc. no se pueden mandar tal cual (por eso el
+// filtro también existe en chilecompraController antes de llegar hasta acá;
+// esto es la segunda barrera, para que un llamador futuro nunca reintroduzca
+// el mismo error "Input should be 'application/pdf'").
+const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+
 /**
  * @param {Array<{base64: string, mediaType: string, nombre: string}>} documentos
  * @returns {Promise<object>} extracción estructurada (ver EXTRACTION_PROMPT)
@@ -101,12 +108,21 @@ async function leerAnexos(documentos) {
     throw new Error('leerAnexos: no se recibieron documentos')
   }
 
+  const legibles = documentos.filter(doc => doc.mediaType === 'application/pdf' || TIPOS_IMAGEN.includes(doc.mediaType))
+  const descartados = documentos.filter(doc => !legibles.includes(doc))
+
+  if (!legibles.length) {
+    const detalle = descartados.map(d => `${d.nombre || 'sin nombre'} (${d.mediaType || 'sin tipo'})`).join(', ')
+    throw new Error(`leerAnexos: ninguno de los ${documentos.length} documento(s) es un PDF o imagen legible por IA — Excel/Word/CSV no son compatibles con la lectura automática. Archivo(s) descartado(s): ${detalle}`)
+  }
+
   const content = [
     { type: 'text', text: EXTRACTION_PROMPT },
-    ...documentos.map(doc => ({
-      type: 'document',
-      source: { type: 'base64', media_type: doc.mediaType || 'application/pdf', data: doc.base64 },
-    })),
+    ...legibles.map(doc => (
+      TIPOS_IMAGEN.includes(doc.mediaType)
+        ? { type: 'image', source: { type: 'base64', media_type: doc.mediaType, data: doc.base64 } }
+        : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 } }
+    )),
   ]
 
   return llamarAnthropicYParsear(content, 'leerAnexos')
