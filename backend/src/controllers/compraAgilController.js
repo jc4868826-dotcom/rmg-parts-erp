@@ -10,9 +10,10 @@
  * cotización con IA.
  */
 const { db } = require('../../config/database')
-const { importarCompraAgil, generarFundamentoCotizacion, sugerirPrecio } = require('../services/compraAgilAnalisis')
+const { importarCompraAgil, importarCompraAgilManual, generarFundamentoCotizacion, sugerirPrecio } = require('../services/compraAgilAnalisis')
 const { benchmarkPorSolicitante, benchmarkPorMercado } = require('../services/compraAgilBenchmark')
 const datosAbiertos = require('../services/compraAgilDatosAbiertos')
+const scraper = require('../services/compraAgilScraper')
 
 function withDetails(op) {
   if (!op) return null
@@ -44,6 +45,11 @@ const listar = (req, res) => {
 }
 
 // ── Paso 1: importar por código publicado (ej. "2428-1262-COT26") ──────────
+// ⚠️ Depende de la API interna de Mercado Público, bloqueada por WAF desde
+// el servidor real de RMG (confirmado 2026-09) — HOY este endpoint falla
+// para cualquier código real. Se deja funcionando por si ChileCompra
+// habilita su nueva API oficial de Compra Ágil más adelante. Mientras tanto,
+// usar POST /api/compra-agil/importar-manual (ver abajo).
 const importar = async (req, res) => {
   try {
     const { codigo } = req.body
@@ -52,6 +58,23 @@ const importar = async (req, res) => {
     res.json(withDetails(op))
   } catch (err) {
     res.status(500).json({ error: err.message })
+  }
+}
+
+// ── Paso 1 (alternativo) — importar pegando texto y/o subiendo documento(s) ──
+// La API interna que usa `importar` está bloqueada por WAF desde el servidor
+// real (confirmado 2026-09) — este es el camino que SÍ funciona hoy: el
+// usuario copia el texto de la publicación (ej. desde
+// buscador.mercadopublico.cl/ficha?code=..., que sí carga en un navegador
+// normal) y/o sube el PDF/imagen/Word, y la misma IA que ya lee anexos de
+// licitaciones extrae los ítems, organismo, presupuesto, etc.
+const importarManual = async (req, res) => {
+  try {
+    const { codigo, texto, documentos } = req.body
+    const op = await importarCompraAgilManual({ codigo, texto, documentos, user: req.user })
+    res.json(withDetails(op))
+  } catch (err) {
+    res.status(400).json({ error: err.message })
   }
 }
 
@@ -133,7 +156,21 @@ const datosAbiertosSincronizar = async (req, res) => {
   }
 }
 
+// ── Scraper automático — detección real sin que el usuario pegue nada ──────
+// Corre bajo demanda (botón "Buscar ahora" en la UI); además corre solo cada
+// 2h vía cron (ver jobs/compraAgilScraperCron.js). Puede tardar 1-3 minutos
+// (recorre cada keyword del rubro RMG + cada ficha nueva en un navegador
+// real) — el frontend debe mostrar un loading, no asumir respuesta instantánea.
+const scrapearAhora = async (req, res) => {
+  try {
+    const resumen = await scraper.detectarYImportarNuevas({ user: req.user })
+    res.json(resumen)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 module.exports = {
-  listar, importar, getDetalle, benchmarkSolicitante, benchmarkMercado, fundamento, precioSugerido,
-  datosAbiertosEstado, datosAbiertosSincronizar,
+  listar, importar, importarManual, getDetalle, benchmarkSolicitante, benchmarkMercado, fundamento, precioSugerido,
+  datosAbiertosEstado, datosAbiertosSincronizar, scrapearAhora,
 }

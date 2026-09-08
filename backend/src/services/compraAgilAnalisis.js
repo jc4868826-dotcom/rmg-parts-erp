@@ -21,7 +21,7 @@ const {
   calcularScoreLogistico, calcularScoreCompuesto, volumenTotalSolicitado,
 } = require('./chilecompraScoring')
 const { adjuntarFichasAOportunidad } = require('./fichasTecnicasVistonyService')
-const { compararFichaTecnica } = require('./chilecompraDocReader')
+const { compararFichaTecnica, leerAnexos, leerFichaPublica } = require('./chilecompraDocReader')
 
 function logEvento(oportunidad_id, tipo_evento, opts = {}) {
   const { usuario_id, usuario_nombre, detalle } = opts
@@ -81,14 +81,15 @@ function calcularYGuardarScores(oportunidadId, cruce) {
 }
 
 /**
- * Paso 1 — Ingesta. Trae la publicación de Compra Ágil por su código externo
- * (ej. "2428-1262-COT26"), la guarda/actualiza como oportunidad y corre el
- * cruce con catálogo + adjunta fichas técnicas. Es seguro llamarla varias
- * veces con el mismo código (upsert por UNIQUE(fuente, codigo_externo)).
+ * Guarda/actualiza la oportunidad + sus ítems a partir de un `detalle` ya
+ * normalizado (mismo shape sin importar si vino de la API bloqueada, ver
+ * compraAgilApiClient.mapearCompraAgil, o de la extracción con IA, ver
+ * mapearExtraccionAAgil abajo) y corre el resto del pipeline (cruce con
+ * catálogo, scores, fichas técnicas) — extraído de importarCompraAgil para
+ * que importarCompraAgilManual (2026-09, ver más abajo) reutilice EXACTAMENTE
+ * la misma lógica de guardado, sin duplicar nada.
  */
-async function importarCompraAgil(codigo, user) {
-  const detalle = await api.buscarCompraAgil(codigo)
-
+async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase) {
   const existente = db.prepare(
     `SELECT id FROM oportunidades_chilecompra WHERE fuente = 'compra_agil' AND codigo_externo = ?`
   ).get(codigo)
@@ -138,7 +139,7 @@ async function importarCompraAgil(codigo, user) {
     }
   })()
 
-  logEvento(id, existente ? 'compra_agil_reimportada' : 'compra_agil_importada', {
+  logEvento(id, existente ? `${tipoEventoBase}_reimportada` : `${tipoEventoBase}_importada`, {
     usuario_id: user?.id, usuario_nombre: user?.email,
     detalle: `Código ${codigo} · ${detalle.items.length} ítem(s)${detalle.advertencias?.length ? ' · ⚠️ ' + detalle.advertencias.join(' ') : ''}`,
   })
@@ -163,6 +164,92 @@ async function importarCompraAgil(codigo, user) {
   }
 
   return db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(id)
+}
+
+/**
+ * Paso 1 — Ingesta. Trae la publicación de Compra Ágil por su código externo
+ * (ej. "2428-1262-COT26"), la guarda/actualiza como oportunidad y corre el
+ * cruce con catálogo + adjunta fichas técnicas. Es seguro llamarla varias
+ * veces con el mismo código (upsert por UNIQUE(fuente, codigo_externo)).
+ *
+ * ⚠️ Depende de compraAgilApiClient.buscarCompraAgil, que llama a la API
+ * interna de Mercado Público bloqueada por WAF (confirmado en producción,
+ * 2026-09) — hoy esta función FALLA para cualquier código real. Se deja
+ * intacta (puede volver a funcionar si ChileCompra habilita su nueva API
+ * oficial de Compra Ágil, ver compraAgilDatosAbiertos.js), pero mientras
+ * tanto el camino que SÍ funciona es importarCompraAgilManual() — ver abajo.
+ */
+async function importarCompraAgil(codigo, user) {
+  const detalle = await api.buscarCompraAgil(codigo)
+  return guardarYProcesarOportunidad(codigo, detalle, user, 'compra_agil')
+}
+
+/**
+ * Convierte la extracción genérica de chilecompraDocReader (leerAnexos /
+ * leerFichaPublica — mismo formato ya usado y probado para licitaciones) al
+ * shape de `detalle` que espera guardarYProcesarOportunidad. Los ítems ya
+ * vienen con el mismo nombre de campos (descripcion_solicitada, cantidad,
+ * unidad, especificacion_tecnica, precio_unitario_referencial) — no hace
+ * falta mapearlos.
+ */
+function mapearExtraccionAAgil(extraccion, codigo) {
+  return {
+    nombre: extraccion.organismo_nombre ? `Compra Ágil ${codigo} — ${extraccion.organismo_nombre}` : `Compra Ágil ${codigo}`,
+    descripcion: extraccion.resumen || null,
+    organismo_nombre: extraccion.organismo_nombre || null,
+    organismo_rut: extraccion.organismo_rut || null,
+    region: extraccion.region || null,
+    comuna: extraccion.comuna || null,
+    direccion_entrega: extraccion.direccion_entrega || null,
+    fecha_publicacion: null,
+    fecha_cierre: extraccion.fecha_cierre_cotizacion || null,
+    presupuesto_estimado: extraccion.presupuesto_estimado || null,
+    url_portal: `https://www.mercadopublico.cl/CompraAgil/Modules/Detail/DetailCompraAgil.aspx?qs=${codigo}`,
+    items: extraccion.items || [],
+    advertencias: extraccion.extraccion_posiblemente_incompleta
+      ? ['⚠️ El modelo no está seguro de haber capturado el 100% de los ítems — revisar el documento/texto original antes de cotizar.']
+      : [],
+    debugUltimaRespuesta: extraccion,
+  }
+}
+
+/**
+ * Paso 1 (alternativo, 2026-09) — Ingesta MANUAL: en vez de traer la
+ * publicación desde la API bloqueada, el usuario pega el texto de la
+ * solicitud (ej. copiado de buscador.mercadopublico.cl/ficha?code=..., que sí
+ * carga en un navegador normal — el WAF bloquea llamadas de servidor a
+ * servidor, no la navegación normal) y/o sube el PDF/imagen/Word que
+ * corresponda (a veces Compra Ágil trae anexo, a veces solo texto plano — ver
+ * pedido explícito del usuario de "lectura inteligente" de ambos casos). La
+ * misma IA que ya lee anexos de licitaciones (chilecompraDocReader) hace la
+ * extracción — ítems, organismo, presupuesto, fechas — y de ahí en adelante
+ * es EXACTAMENTE el mismo pipeline que importarCompraAgil (cruce, scores,
+ * fichas técnicas).
+ *
+ * @param {{codigo: string, texto?: string, documentos?: Array<{base64:string,mediaType:string,nombre:string}>, user,
+ *          tipoEventoBase?: string}} args tipoEventoBase por defecto queda como
+ *          "compra_agil_manual" (pegado a mano en la UI); el scraper automático
+ *          (ver compraAgilScraper.js) pasa "compra_agil_auto" para que el
+ *          historial distinga "detectada sola" de "pegada por un usuario",
+ *          sin duplicar nada del resto del pipeline (mismo guardado, mismo
+ *          cruce, mismos scores).
+ */
+async function importarCompraAgilManual({ codigo, texto, documentos, user, tipoEventoBase = 'compra_agil_manual' }) {
+  if (!codigo?.trim()) throw new Error('importarCompraAgilManual: falta el código de la Compra Ágil')
+  if (!texto?.trim() && !documentos?.length) {
+    throw new Error('importarCompraAgilManual: pega el texto de la publicación o sube al menos un documento (PDF/imagen/Word)')
+  }
+
+  const extraccion = documentos?.length
+    ? await leerAnexos(documentos)
+    : await leerFichaPublica(texto)
+
+  const detalle = mapearExtraccionAAgil(extraccion, codigo.trim())
+  if (!detalle.items.length) {
+    throw new Error('La IA no encontró ningún ítem/producto solicitado en el texto o documento entregado — revisa que efectivamente sea una solicitud de cotización.')
+  }
+
+  return guardarYProcesarOportunidad(codigo.trim(), detalle, user, tipoEventoBase)
 }
 
 /**
@@ -257,4 +344,6 @@ function sugerirPrecio(oportunidadId) {
   })
 }
 
-module.exports = { importarCompraAgil, generarFundamentoCotizacion, sugerirPrecio, calcularYGuardarScores }
+module.exports = {
+  importarCompraAgil, importarCompraAgilManual, generarFundamentoCotizacion, sugerirPrecio, calcularYGuardarScores,
+}
