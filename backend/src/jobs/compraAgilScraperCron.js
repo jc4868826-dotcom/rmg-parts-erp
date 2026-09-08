@@ -13,16 +13,17 @@
 const cron = require('node-cron')
 const { detectarYImportarNuevas } = require('../services/compraAgilScraper')
 
-let corriendo = false
-
+// El candado contra corridas solapadas vive DENTRO de compraAgilScraper.js
+// (compartido con el botón "Buscar ahora" de la UI) — acá no hace falta uno
+// propio, detectarYImportarNuevas() ya se devuelve sola ({yaEnCurso:true}) si
+// hay otra corrida en curso.
 async function ejecutar(disparadoPor = 'cron') {
-  if (corriendo) {
-    console.log('⏭️ Compra Ágil scraper — ya hay una corrida en curso, se salta esta.')
-    return
-  }
-  corriendo = true
   try {
     const resumen = await detectarYImportarNuevas()
+    if (resumen.yaEnCurso) {
+      console.log('⏭️ Compra Ágil scraper — ya hay una corrida en curso, se salta esta.')
+      return resumen
+    }
     if (resumen.errores.length) {
       console.warn(`⚠️ Compra Ágil scraper (${disparadoPor}) terminó con errores:`, resumen.errores.slice(0, 5))
     }
@@ -30,8 +31,6 @@ async function ejecutar(disparadoPor = 'cron') {
   } catch (e) {
     console.error(`❌ Compra Ágil scraper (${disparadoPor}) falló:`, e.message)
     throw e
-  } finally {
-    corriendo = false
   }
 }
 

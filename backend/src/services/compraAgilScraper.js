@@ -70,8 +70,24 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 // Render), mismo criterio que DIAS_HACIA_ATRAS en chilecompraCron.js.
 const DIAS_VENTANA = Number(process.env.COMPRA_AGIL_SCRAPER_DIAS || 4)
 const MAX_PAGINAS_POR_KEYWORD = 6
-const ESPERA_RENDER_MS = 1800
+const ESPERA_RENDER_MS = 2500
 const USER_AUTOMATICO = { email: 'scraper-automatico' }
+
+// ── Estado compartido (una sola corrida a la vez, sea por cron o por el botón
+// "Buscar ahora") ────────────────────────────────────────────────────────────
+// El endpoint /scrapear-ahora NO puede esperar a que esto termine (1-3 min):
+// el proxy de Render corta conexiones HTTP largas antes de eso y el navegador
+// del usuario muestra "Network Error" aunque el servidor siga trabajando bien
+// de fondo — confirmado en producción (2026-09-08). Por eso el controlador
+// dispara detectarYImportarNuevas() SIN esperarlo (fire-and-forget) y el
+// frontend consulta este estado por separado (GET /scraper-estado) hasta que
+// termine, en vez de mantener la conexión original abierta.
+let _corriendo = false
+let _ultimoResumen = null
+
+function estado() {
+  return { corriendo: _corriendo, ultimoResumen: _ultimoResumen }
+}
 
 function fechaISO(d) {
   return d.toISOString().slice(0, 10)
@@ -90,6 +106,23 @@ async function lanzarNavegador() {
 }
 
 /**
+ * Espera a que la SPA termine de pintar (no hay señal de red confiable — ver
+ * nota en extraerCodigosDeListado) y devuelve el texto renderizado. Si el
+ * texto sale sospechosamente corto (la SPA todavía en su spinner de carga),
+ * reintenta UNA vez con más margen antes de darse por vencido — más barato y
+ * más robusto que subir el timeout fijo para todos los casos.
+ */
+async function esperarTextoRenderizado(page, minCaracteres = 200) {
+  await new Promise(r => setTimeout(r, ESPERA_RENDER_MS))
+  let texto = await page.evaluate(() => document.body.innerText)
+  if (texto.length < minCaracteres) {
+    await new Promise(r => setTimeout(r, ESPERA_RENDER_MS * 2))
+    texto = await page.evaluate(() => document.body.innerText)
+  }
+  return texto
+}
+
+/**
  * Extrae los códigos de Compra Ágil que calzan con `keyword`, recorriendo
  * todas las páginas de resultados que el buscador devuelva (tope
  * MAX_PAGINAS_POR_KEYWORD por seguridad — Compra Ágil real casi nunca pasa
@@ -103,9 +136,15 @@ async function extraerCodigosDeListado(page, keyword) {
   for (let pagina = 1; pagina <= MAX_PAGINAS_POR_KEYWORD; pagina++) {
     const url = `${BASE}/compra-agil?date_from=${fechaISO(desde)}&date_to=${fechaISO(hasta)}` +
       `&order_by=recent&page_number=${pagina}&region=all&status=2&keywords=${encodeURIComponent(keyword)}`
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30_000 })
-    await new Promise(r => setTimeout(r, ESPERA_RENDER_MS))
-    const texto = await page.evaluate(() => document.body.innerText)
+    // 'domcontentloaded', NO 'networkidle2': el buscador mantiene conexiones
+    // de fondo (analytics, etc.) que nunca quedan "quietas" — con
+    // networkidle2 cada navegación esperaba el timeout completo (30s) sin
+    // avanzar nunca, dejando la búsqueda entera en cero resultados sin que
+    // se notara (quedaba como error silencioso por keyword). La espera fija
+    // de ESPERA_RENDER_MS de abajo es la que realmente le da tiempo a la SPA
+    // para pintar los resultados.
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    const texto = await esperarTextoRenderizado(page)
 
     const encontrados = texto.match(CODE_RE) || []
     if (!encontrados.length) break
@@ -120,9 +159,8 @@ async function extraerCodigosDeListado(page, keyword) {
 
 /** Texto completo de la ficha pública — mismo texto que un usuario vería y copiaría a mano. */
 async function extraerTextoFicha(page, codigo) {
-  await page.goto(`${BASE}/ficha?code=${encodeURIComponent(codigo)}`, { waitUntil: 'networkidle2', timeout: 30_000 })
-  await new Promise(r => setTimeout(r, ESPERA_RENDER_MS))
-  return page.evaluate(() => document.body.innerText)
+  await page.goto(`${BASE}/ficha?code=${encodeURIComponent(codigo)}`, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+  return esperarTextoRenderizado(page)
 }
 
 /**
@@ -132,6 +170,13 @@ async function extraerTextoFicha(page, codigo) {
  * seguido vía cron (ver compraAgilScraperCron.js) — sin ningún paso manual.
  */
 async function detectarYImportarNuevas({ user = USER_AUTOMATICO } = {}) {
+  if (_corriendo) {
+    // Ya hay una corrida en curso (cron o botón) — no se solapan, evita que
+    // dos navegadores headless corran a la vez y agoten la memoria de Render.
+    return { yaEnCurso: true, ...(_ultimoResumen || {}) }
+  }
+  _corriendo = true
+
   const resumen = {
     keywordsRevisadas: 0, codigosVistos: 0, nuevas: 0,
     importadas: [], errores: [], iniciado: new Date().toISOString(),
@@ -181,6 +226,7 @@ async function detectarYImportarNuevas({ user = USER_AUTOMATICO } = {}) {
     resumen.errores.push(`Scraper: ${e.message}`)
   } finally {
     if (browser) await browser.close()
+    _corriendo = false
   }
 
   resumen.finalizado = new Date().toISOString()
@@ -189,7 +235,8 @@ async function detectarYImportarNuevas({ user = USER_AUTOMATICO } = {}) {
     `${resumen.codigosVistos} código(s) vistos, ${resumen.nuevas} nueva(s), ` +
     `${resumen.importadas.length} importada(s), ${resumen.errores.length} error(es)`
   )
+  _ultimoResumen = resumen
   return resumen
 }
 
-module.exports = { detectarYImportarNuevas, extraerCodigosDeListado, extraerTextoFicha }
+module.exports = { detectarYImportarNuevas, extraerCodigosDeListado, extraerTextoFicha, estado }

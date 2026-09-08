@@ -157,20 +157,30 @@ const datosAbiertosSincronizar = async (req, res) => {
 }
 
 // ── Scraper automático — detección real sin que el usuario pegue nada ──────
-// Corre bajo demanda (botón "Buscar ahora" en la UI); además corre solo cada
+// Corre bajo demanda (botón "Buscar ahora" en la UI); además corre sola cada
 // 2h vía cron (ver jobs/compraAgilScraperCron.js). Puede tardar 1-3 minutos
 // (recorre cada keyword del rubro RMG + cada ficha nueva en un navegador
-// real) — el frontend debe mostrar un loading, no asumir respuesta instantánea.
-const scrapearAhora = async (req, res) => {
-  try {
-    const resumen = await scraper.detectarYImportarNuevas({ user: req.user })
-    res.json(resumen)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
+// real) — el proxy de Render corta conexiones HTTP así de largas antes de
+// que terminen (confirmado en producción, 2026-09-08: el navegador del
+// usuario mostraba "Network Error" aunque el servidor seguía trabajando
+// bien de fondo). Por eso este endpoint NO espera el resultado: lo dispara
+// (fire-and-forget) y responde al toque; el frontend consulta el avance con
+// GET /scraper-estado hasta que `corriendo` vuelva a false.
+const scrapearAhora = (req, res) => {
+  const estadoActual = scraper.estado()
+  if (estadoActual.corriendo) {
+    return res.status(202).json({ iniciado: false, mensaje: 'Ya hay una búsqueda en curso — espera a que termine.' })
   }
+  scraper.detectarYImportarNuevas({ user: req.user })
+    .catch(e => console.error('❌ Compra Ágil "Buscar ahora" falló:', e.message))
+  res.status(202).json({ iniciado: true, mensaje: 'Búsqueda iniciada — puede tardar 1-3 minutos.' })
+}
+
+const scraperEstado = (req, res) => {
+  res.json(scraper.estado())
 }
 
 module.exports = {
   listar, importar, importarManual, getDetalle, benchmarkSolicitante, benchmarkMercado, fundamento, precioSugerido,
-  datosAbiertosEstado, datosAbiertosSincronizar, scrapearAhora,
+  datosAbiertosEstado, datosAbiertosSincronizar, scrapearAhora, scraperEstado,
 }

@@ -23,7 +23,11 @@
  * POST   /api/compra-agil/scrapear-ahora                dispara el detector automático (navegador headless) YA MISMO
  *                                                        en vez de esperar al cron cada 2h — busca por cada keyword del
  *                                                        rubro RMG, importa solo, sin que el usuario pegue nada
- *                                                        (ver services/compraAgilScraper.js). Puede tardar 1-3 min.
+ *                                                        (ver services/compraAgilScraper.js). Responde al toque
+ *                                                        (fire-and-forget, 202) — el trabajo real (1-3 min) sigue de
+ *                                                        fondo, consultar el avance con GET /scraper-estado.
+ * GET    /api/compra-agil/scraper-estado                { corriendo, ultimoResumen } — para el polling del frontend
+ *                                                        mientras "Buscar ahora" trabaja de fondo.
  *
  * No se duplica nada de /api/chilecompra/:id (analizar, checklist, extraer-fichas-tecnicas,
  * limpiar-historial, items/:itemId/observacion, documentos) — esas rutas ya funcionan igual
@@ -37,6 +41,7 @@ router.get('/benchmark-mercado', authenticate, c.benchmarkMercado)
 router.get('/datos-abiertos/estado', authenticate, c.datosAbiertosEstado)
 router.post('/datos-abiertos/sincronizar', authenticate, c.datosAbiertosSincronizar)
 router.post('/scrapear-ahora', authenticate, c.scrapearAhora)
+router.get('/scraper-estado', authenticate, c.scraperEstado)
 router.get('/', authenticate, c.listar)
 router.post('/importar', authenticate, c.importar)
 router.post('/importar-manual', authenticate, c.importarManual)

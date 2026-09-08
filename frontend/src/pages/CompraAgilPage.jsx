@@ -11,7 +11,7 @@
  * completa de ChileCompra (/chilecompra) — esta página es la puerta de
  * entrada rápida para el caso Compra Ágil específicamente.
  */
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
@@ -68,18 +68,50 @@ export default function CompraAgilPage() {
   // Detección 100% automática (2026-09) — navega el buscador público con un
   // navegador real (headless) y detecta/importa solo, sin que nadie pegue
   // texto ni código. Corre sola cada 2h vía cron; este botón la dispara YA.
+  //
+  // OJO: la búsqueda tarda 1-3 min (recorre cada rubro + cada ficha nueva) y
+  // el proxy de Render corta conexiones HTTP así de largas antes de que
+  // terminen — se confirmó en producción que eso mostraba "Network Error" en
+  // el navegador aunque el servidor seguía trabajando bien de fondo. Por eso
+  // el POST solo AVISA que empezó (responde al toque) y el progreso real se
+  // sigue con polling a GET /scraper-estado hasta que `corriendo` sea false.
+  const [buscando, setBuscando] = useState(false)
+  const ultimoResumenVisto = useRef(null)
+
+  const { data: scraperEstado } = useQuery({
+    queryKey: ['compra-agil', 'scraper-estado'],
+    queryFn: () => api.get('/compra-agil/scraper-estado').then(r => r.data),
+    refetchInterval: buscando ? 4000 : false,
+  })
+
+  useEffect(() => {
+    if (!scraperEstado) return
+    if (scraperEstado.corriendo) { setBuscando(true); return }
+    if (!buscando) return // no era nuestra corrida (ej. la del cron) — no avisar nada
+    setBuscando(false)
+    const resumen = scraperEstado.ultimoResumen
+    if (!resumen || resumen === ultimoResumenVisto.current) return
+    ultimoResumenVisto.current = resumen
+    qc.invalidateQueries({ queryKey: ['compra-agil'] })
+    if (resumen.importadas?.length) {
+      toast.success(`${resumen.importadas.length} oportunidad(es) nueva(s) detectada(s) e importada(s) automáticamente.`)
+    } else {
+      toast(`Sin oportunidades nuevas por ahora (${resumen.codigosVistos ?? 0} revisadas).`, { icon: '🔎' })
+    }
+    if (resumen.errores?.length) {
+      toast.error(`${resumen.errores.length} error(es) durante la búsqueda: ${resumen.errores[0]}`, { duration: 12000 })
+    }
+  }, [scraperEstado, buscando, qc])
+
   const scrapearMut = useMutation({
-    mutationFn: () => api.post('/compra-agil/scrapear-ahora', {}, { timeout: 180_000 }).then(r => r.data),
-    onSuccess: (resumen) => {
-      qc.invalidateQueries({ queryKey: ['compra-agil'] })
-      if (resumen.importadas?.length) {
-        toast.success(`${resumen.importadas.length} oportunidad(es) nueva(s) detectada(s) e importada(s) automáticamente.`)
+    mutationFn: () => api.post('/compra-agil/scrapear-ahora', {}).then(r => r.data),
+    onSuccess: (r) => {
+      if (r.iniciado === false) {
+        toast(r.mensaje || 'Ya hay una búsqueda en curso.', { icon: '⏳' })
       } else {
-        toast(`Sin oportunidades nuevas por ahora (${resumen.codigosVistos ?? 0} revisadas).`, { icon: '🔎' })
+        toast('Búsqueda iniciada — puede tardar 1-3 minutos, avisamos cuando termine.', { icon: '🔎' })
       }
-      if (resumen.errores?.length) {
-        toast.error(`${resumen.errores.length} error(es) durante la búsqueda — revisa la consola del servidor.`)
-      }
+      setBuscando(true)
     },
     onError: (e) => toast.error(e.response?.data?.error || e.message),
   })
@@ -161,13 +193,13 @@ export default function CompraAgilPage() {
             </p>
           </div>
           <button
-            disabled={scrapearMut.isPending}
+            disabled={scrapearMut.isPending || buscando}
             onClick={() => scrapearMut.mutate()}
             className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 text-white disabled:opacity-50 shrink-0"
             style={{ background: 'var(--rmg-teal)' }}
           >
-            {scrapearMut.isPending ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-            {scrapearMut.isPending ? 'Buscando… (1-3 min)' : 'Buscar ahora'}
+            {(scrapearMut.isPending || buscando) ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            {buscando ? 'Buscando… (1-3 min)' : 'Buscar ahora'}
           </button>
         </div>
       </div>
