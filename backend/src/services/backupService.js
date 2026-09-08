@@ -6,8 +6,15 @@ const BACKUP_DIR  = IS_RENDER
   ? '/var/data/backups'
   : path.join(__dirname, '../../../data/backups')
 const DB_PATH     = process.env.DB_PATH || '/var/data/rmg_parts.db'
-const MAX_BACKUPS = 24
-const BACKUP_INTERVAL = 2 * 60 * 60 * 1000   // 2 horas
+// Bajado de cada 2h/24 respaldos (12/día, ~2.7GB en disco) a 4/día — pedido
+// explícito del usuario para liberar espacio en el disco de Render (2026-09-08).
+// MAX_BACKUPS=8 mantiene la misma cobertura de 48h de antes (8 × 6h = 48h),
+// pero con 8 archivos en vez de 24 → ~900MB en vez de ~2.7GB para una base de
+// ~114MB. Si crece la base de datos, este disco vuelve a ajustarse en la
+// misma proporción — avisar si hace falta más historial (subir MAX_BACKUPS)
+// o menos disco todavía (bajar más el intervalo).
+const MAX_BACKUPS = 8
+const BACKUP_INTERVAL = 6 * 60 * 60 * 1000   // 6 horas → 4 respaldos/día
 
 let _db  = null   // SQLiteWrapper instance
 let _SQL = null   // sql.js SQL constructor
@@ -148,7 +155,7 @@ function init(dbInstance, sqlConstructor) {
     _nextBackupTime = new Date(Date.now() + BACKUP_INTERVAL)
   }, BACKUP_INTERVAL)
 
-  console.log('🔄 Backup automático activado: cada 2 horas')
+  console.log('🔄 Backup automático activado: cada 6 horas (4/día), últimos 8 respaldos')
 }
 
 function getNextBackupTime() { return _nextBackupTime }
