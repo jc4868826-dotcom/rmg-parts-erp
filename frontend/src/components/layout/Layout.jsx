@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark, Zap
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -41,6 +41,7 @@ const NAV_SECTIONS = [
     label: 'Canal Estatal',
     items: [
       { to: '/chilecompra',  icon: Landmark,        label: 'ChileCompra',     badge: 'chilecompra' },
+      { to: '/chilecompra/compra-agil', icon: Zap,   label: '↳ Compra Ágil',  badge: 'nuevo', indent: true },
     ],
   },
   {
@@ -203,7 +204,7 @@ export default function Layout() {
                 </div>
               )}
               <div className="space-y-0.5">
-                {section.items.filter(item => !item.adminOnly || user?.rol === 'admin').map(({ to, icon: Icon, label, badge }) => {
+                {section.items.filter(item => !item.adminOnly || user?.rol === 'admin').map(({ to, icon: Icon, label, badge, indent }) => {
                   const badgeValue = badge === 'prospeccion'
                     ? (prospeccionCount !== null ? String(prospeccionCount) : null)
                     : badge === 'oc'
@@ -228,8 +229,10 @@ export default function Layout() {
                       background: 'rgba(21,104,184,0.1)',
                       borderLeft: '2px solid var(--rmg-blue)',
                       color: 'var(--rmg-blt)',
+                      paddingLeft: indent && sidebarOpen ? 28 : undefined,
                     } : {
                       color: 'var(--rmg-muted)',
+                      paddingLeft: indent && sidebarOpen ? 28 : undefined,
                     }}
                   >
                     <Icon size={16} className="flex-shrink-0" />

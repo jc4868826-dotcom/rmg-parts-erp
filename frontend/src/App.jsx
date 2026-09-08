@@ -43,6 +43,7 @@ import CampanasPage from '@pages/CampanasPage'
 import BackupsPage   from '@pages/BackupsPage'
 import AsesorProductos from '@pages/AsesorProductos'
 import ChileCompraPage from '@pages/ChileCompraPage'
+import CompraAgilPage from '@pages/CompraAgilPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -121,6 +122,7 @@ export default function App() {
               <Route path="backups"           element={<BackupsPage />} />
               <Route path="asesor-productos" element={<AsesorProductos />} />
               <Route path="chilecompra"       element={<ChileCompraPage />} />
+              <Route path="chilecompra/compra-agil" element={<CompraAgilPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

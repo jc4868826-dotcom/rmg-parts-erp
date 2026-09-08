@@ -228,4 +228,70 @@ async function leerFichaPublica(textoFicha) {
   return llamarAnthropicYParsear(content, 'leerFichaPublica')
 }
 
-module.exports = { leerAnexos, leerFichaPublica }
+// ── Comparación ficha técnica del producto RMG vs. exigencia del organismo ──
+//
+// Nace del ejercicio manual hecho para Quilpué/2428-1262-COT26: el organismo
+// pedía "ACEA C2, C3 · API SQ · BMW Longlife-04 · MB-Approval 229.51" y había
+// que revisar, punto por punto, cuáles certificaciones SÍ tiene la ficha
+// técnica real del producto (Vistony ATTOM S320/S400, etc.) y cuáles no,
+// antes de decidir si postular y cómo redactar la observación. Esto
+// automatiza esa lectura punto por punto — nunca decide "cumple/no cumple"
+// por similitud de nombre, solo por lo que la ficha técnica dice explícito.
+const COMPARACION_PROMPT = `Eres un asesor técnico de lubricantes/repuestos que compara la ficha técnica de UN
+producto que la empresa RMG ofrece contra la exigencia técnica publicada por un organismo comprador del
+Estado (licitación o Compra Ágil), para decidir si conviene postular con este producto y cómo redactar
+la observación de la cotización.
+
+Reglas:
+- Compara punto por punto CADA especificación exigida (norma SAE, ACEA, API, aprobaciones OEM como BMW
+  Longlife / MB-Approval, presentación/envase, cantidad, etc.) contra lo que la ficha técnica adjunta
+  dice EXPLÍCITAMENTE. Nunca asumas que un producto cumple una norma que la ficha no menciona, aunque
+  sea "probable" o "equivalente" — si no está en la ficha, es "no_confirmado", no "cumple".
+- Nunca inventes datos que no aparezcan en la ficha ni en el texto de la exigencia.
+- "cumple": la ficha lo confirma explícitamente. "no_cumple": la ficha lo contradice o exige algo distinto.
+  "no_confirmado": la exigencia lo pide pero la ficha no lo menciona (ni a favor ni en contra).
+- redactar_observacion_sugerida: un párrafo breve (3-5 líneas) para el campo "observaciones" de la
+  cotización real. Debe ser honesto (nunca afirmar una certificación que no está en "cumple") pero
+  estratégicamente redactado para no matar la venta por una lectura apresurada del solicitante: parte
+  por lo que SÍ se cumple y suena fuerte, menciona equivalencias técnicas relevantes cuando existan
+  (p.ej. "cumple ACEA C2/C3, estándar europeo equivalente a..."), y solo al final —si corresponde—
+  menciona con tono neutro lo no confirmado, sin subrayarlo como una falla. Nunca mentir ni afirmar
+  cumplimiento de algo marcado "no_cumple".
+
+Devuelve EXCLUSIVAMENTE un JSON válido (sin texto antes ni después) con esta forma exacta:
+{
+  "puntos": [
+    { "exigencia": string, "estado": "cumple"|"no_cumple"|"no_confirmado", "detalle": string }
+  ],
+  "recomendacion": "postular_sin_reservas"|"postular_con_observacion"|"no_postular",
+  "redactar_observacion_sugerida": string
+}`
+
+/**
+ * @param {string} especificacionSolicitada texto de la exigencia técnica (del ítem de la oportunidad)
+ * @param {{base64: string, mediaType: string, nombre: string}} fichaTecnica PDF/imagen de la ficha técnica RMG
+ * @param {string} [productoNombre]
+ */
+async function compararFichaTecnica(especificacionSolicitada, fichaTecnica, productoNombre) {
+  if (!especificacionSolicitada?.trim()) {
+    throw new Error('compararFichaTecnica: falta la especificación técnica solicitada por el organismo')
+  }
+  if (!fichaTecnica?.base64) {
+    throw new Error('compararFichaTecnica: falta la ficha técnica del producto RMG a comparar')
+  }
+
+  const esImagen = TIPOS_IMAGEN.includes(fichaTecnica.mediaType)
+  const content = [
+    {
+      type: 'text',
+      text: `${COMPARACION_PROMPT}\n\nProducto RMG a evaluar: ${productoNombre || fichaTecnica.nombre || '(sin nombre)'}\n\nExigencia técnica publicada por el organismo:\n${especificacionSolicitada.slice(0, 8_000)}`,
+    },
+    esImagen
+      ? { type: 'image', source: { type: 'base64', media_type: fichaTecnica.mediaType, data: fichaTecnica.base64 } }
+      : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fichaTecnica.base64 } },
+  ]
+
+  return llamarAnthropicYParsear(content, 'compararFichaTecnica')
+}
+
+module.exports = { leerAnexos, leerFichaPublica, compararFichaTecnica }

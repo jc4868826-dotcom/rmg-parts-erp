@@ -2742,6 +2742,46 @@ function runMigrations() {
       console.error('❌ Migración chilecompra_correccion_usuario_v1 falló:', e.message)
     }
   }
+
+  // Migration compra_agil_v1 — soporte del submenú "Compra Ágil" bajo ChileCompra
+  // (ver services/compraAgilApiClient.js, compraAgilAnalisis.js, compraAgilBenchmark.js):
+  //   - oportunidad_chilecompra_items.cumplimiento_json: resultado punto por punto de
+  //     comparar la ficha técnica RMG contra la exigencia del organismo (IA) — cumple /
+  //     no_cumple / no_confirmado por cada especificación (norma SAE, ACEA, API, OEM, etc.).
+  //   - oportunidad_chilecompra_items.observacion_cotizacion: párrafo sugerido para el
+  //     campo "observaciones" de la cotización real — DISTINTO de `observacion` (esa es
+  //     la nota interna del match de catálogo, no lo que se le muestra al organismo).
+  //   - compra_agil_benchmark_cache: cache de 24h de los dos botones de benchmark
+  //     ("¿este organismo ya compró esto?" / "¿a qué precio se vende en el mercado?"),
+  //     para no golpear la API de Mercado Público cada vez que se abre la ficha.
+  const mCompraAgil = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('compra_agil_v1')
+  if (!mCompraAgil) {
+    try {
+      const itemCols4 = db.prepare('PRAGMA table_info(oportunidad_chilecompra_items)').all().map(c => c.name)
+      if (!itemCols4.includes('cumplimiento_json')) {
+        db.exec('ALTER TABLE oportunidad_chilecompra_items ADD COLUMN cumplimiento_json TEXT')
+      }
+      if (!itemCols4.includes('observacion_cotizacion')) {
+        db.exec('ALTER TABLE oportunidad_chilecompra_items ADD COLUMN observacion_cotizacion TEXT')
+      }
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS compra_agil_benchmark_cache (
+          id           TEXT PRIMARY KEY,
+          tipo         TEXT NOT NULL CHECK(tipo IN ('solicitante','mercado')),
+          clave        TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          fetched_at   TEXT DEFAULT (datetime('now')),
+          UNIQUE(tipo, clave)
+        );
+      `)
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('compra_agil_v1')
+      console.log('✅ Migración compra_agil_v1 — soporte de submenú Compra Ágil añadido')
+    } catch (e) {
+      console.error('❌ Migración compra_agil_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
