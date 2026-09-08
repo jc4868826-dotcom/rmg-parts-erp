@@ -1,215 +1,162 @@
 /**
- * RMG Parts — Cliente Compra Ágil / Órdenes de Compra (Mercado Público)
+ * RMG Parts — Cliente API OFICIAL de Compra Ágil (Mercado Público) — v2
  *
- * CONTEXTO (2026-09): chilecompraApiClient.fetchComprasAgiles() lleva meses como
- * un stub que solo lanza error, porque la API OFICIAL de ChileCompra
- * (api.mercadopublico.cl/servicios/v1/publico) documentada con ticket NO cubre
- * Compra Ágil — solo Licitaciones. Se investigó a mano, con el inspector de red
- * del navegador, la API interna (no documentada) que usa el propio buscador
- * público del portal (buscador.mercadopublico.cl) y que SÍ cubre Compra Ágil y
- * Órdenes de Compra:
+ * REEMPLAZA POR COMPLETO (2026-09-08 noche) a la versión anterior de este
+ * archivo, que llamaba a la API INTERNA no documentada del buscador público
+ * (api.buscador.mercadopublico.cl) y estaba bloqueada por WAF en producción.
+ * Ese enfoque llevó a construir un scraper con navegador headless
+ * (compraAgilScraper.js) que a su vez tumbó el servidor por consumo de
+ * memoria (Chromium + toda la DB sql.js en RAM > 512MB del plan de Render).
+ * Ver RMG_CompraAgil_Implementacion.md para el detalle completo de esa
+ * historia — compraAgilScraper.js se deja intacto como referencia pero deja
+ * de usarse desde aquí en adelante.
  *
- *   Host base: https://api.buscador.mercadopublico.cl
- *   - GET /compra-agil?code=<codigo>                     → detalle de una compra ágil por su código
- *   - GET /compra-agil?action=ficha&code=<codigo>         → ficha/detalle ampliado (visto en la SPA)
- *   - GET /ordenes-de-compra?keyword=<texto>&buyer_code=<n>&date_from=<dd-mm-aaaa>&date_to=<dd-mm-aaaa>
- *                                                          → búsqueda de órdenes de compra (histórico de compras)
- *   - GET /filtros/organismo-comprador?q=<texto>&org_class=2
- *                                                          → autocompletar organismo comprador → buyer_code
+ * ChileCompra publicó en mayo 2026 una API OFICIAL y documentada
+ * específica para Compra Ágil (separada de la de Licitaciones/Órdenes de
+ * Compra: dominio distinto, autenticación distinta). Guía completa:
+ * "API Compra Ágil v2 — Guía de uso para desarrolladores y ciudadanía"
+ * (chilecompra.cl/api/, mayo 2026, v3.0).
  *
- * ⚠️ IMPORTANTE — RIESGO CONOCIDO Y NO RESUELTO: esta API es INTERNA (no
- * documentada, no versionada, puede cambiar sin aviso) y está protegida por un
- * WAF que devuelve 403 Forbidden a peticiones que no calcen con lo que espera
- * (probablemente exige un Referer/Origin de buscador.mercadopublico.cl, o
- * cabeceras específicas que el navegador agrega solas). Se intentó verificar el
- * formato exacto de la respuesta JSON desde:
- *   1) La consola del navegador (fetch directo) → bloqueado (CORS/WAF).
- *   2) Un curl desde el sandbox de desarrollo → bloqueado dos veces: 403 del
- *      propio servidor Y la política de salida de red del sandbox.
- * Es decir: el MAPEO DE CAMPOS de abajo (`mapearCompraAgil`, `mapearOrden`) es
- * el mejor esfuerzo basado en lo que se alcanzó a ver en el árbol de React de
- * la SPA — NO está confirmado contra una respuesta real. La primera vez que
- * esto corra desde el servidor real de RMG (otro origen de red, no sujeto al
- * CORS del navegador ni al firewall de salida del sandbox de desarrollo):
- *   - Revisar `debugUltimaRespuesta` (se guarda automáticamente) para confirmar
- *     o corregir el mapeo de campos.
- *   - Si el WAF también bloquea al servidor de RMG (403), la única alternativa
- *     realista es usar el archivo de "Datos Abiertos" masivo que publica
- *     ChileCompra (descarga periódica, no tiempo real) — ver nota al pie del
- *     diagrama publicado — o volver al flujo 100% manual (browser) que ya se
- *     usó para esta cotización.
- * NUNCA se debe inventar un campo que no venga en la respuesta real: si el
- * mapeo falla o el campo esperado no existe, se deja null y se registra el
- * problema (`advertencias`), nunca un valor estimado — mismo criterio que
- * chilecompraDocReader.js.
+ * - Base URL:       https://api2.mercadopublico.cl
+ * - Autenticación:  header HTTP "ticket" (NO query param — a diferencia de
+ *                   la API de Licitaciones, que sí usa ?ticket=... en la URL).
+ *                   Mismo ticket de desarrollador que ya se pidió una vez en
+ *                   https://www.chilecompra.cl/api/ (Clave Única).
+ * - Endpoints:
+ *     GET /v2/compra-agil            listado + filtros + paginación
+ *     GET /v2/compra-agil/{codigo}   detalle completo de una Compra Ágil
+ * - Cuota: límite diario de solicitudes por ticket — la API responde 429
+ *   cuando se agota, con Retry-After. Ver manejarError().
+ *
+ * El ticket NUNCA se hardcodea acá — vive solo en la variable de entorno
+ * COMPRA_AGIL_API_TICKET (Render → Environment), igual que cualquier otra
+ * credencial de este proyecto.
  */
 const axios = require('axios')
 
-const BASE_URL = process.env.COMPRA_AGIL_API_BASE || 'https://api.buscador.mercadopublico.cl'
+const BASE_URL = process.env.COMPRA_AGIL_API_BASE || 'https://api2.mercadopublico.cl'
+const TICKET = process.env.COMPRA_AGIL_API_TICKET || null
 
-// Cabeceras que imitan a un navegador real navegando el buscador público — el
-// WAF observado rechaza peticiones "de script" sin esto, aunque no hay
-// garantía de que sea suficiente (ver aviso arriba).
-const HEADERS_BASE = {
-  'Accept': 'application/json, text/plain, */*',
-  'Referer': 'https://buscador.mercadopublico.cl/',
-  'Origin': 'https://buscador.mercadopublico.cl',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-}
-
-function ddmmyyyy(fecha) {
-  const d = fecha instanceof Date ? fecha : new Date(fecha)
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  return `${dd}-${mm}-${d.getFullYear()}`
+// Códigos de región según la guía oficial (sección 5.1, Grupo 4).
+const REGIONES = {
+  1: 'Tarapacá', 2: 'Antofagasta', 3: 'Atacama', 4: 'Coquimbo', 5: 'Valparaíso',
+  6: "O'Higgins", 7: 'Maule', 8: 'Biobío', 9: 'Araucanía', 10: 'Los Lagos',
+  11: 'Aysén', 12: 'Magallanes y Antártica', 13: 'Metropolitana', 14: 'Los Ríos',
+  15: 'Arica y Parinacota', 16: 'Ñuble',
 }
 
 async function llamar(path, params, origen) {
+  if (!TICKET) {
+    throw new Error(`${origen}: falta la variable de entorno COMPRA_AGIL_API_TICKET (ticket de la API oficial de Compra Ágil).`)
+  }
+  let resp
   try {
-    const resp = await axios.get(`${BASE_URL}${path}`, {
+    resp = await axios.get(`${BASE_URL}${path}`, {
       params,
-      headers: HEADERS_BASE,
+      headers: { ticket: TICKET },
       timeout: 20_000,
       validateStatus: () => true,
     })
-    if (resp.status === 403) {
-      throw new Error(
-        `${origen}: la API interna de Mercado Público devolvió 403 Forbidden (WAF). ` +
-        `Esta API no es oficial/documentada — ver cabecera de este archivo. ` +
-        `Como alternativa inmediata, use el flujo manual en buscador.mercadopublico.cl.`
-      )
-    }
-    if (resp.status >= 400) {
-      throw new Error(`${origen}: HTTP ${resp.status} — ${JSON.stringify(resp.data)?.slice(0, 300)}`)
-    }
-    return resp.data
   } catch (err) {
-    if (err.response) throw err
-    if (err.message?.startsWith(origen)) throw err
     throw new Error(`${origen}: no se pudo contactar ${BASE_URL}${path} — ${err.message}`)
   }
-}
 
-/**
- * Resuelve el buyer_code interno de Mercado Público a partir del nombre o RUT
- * del organismo comprador (necesario para filtrar /ordenes-de-compra por
- * "compras de este mismo solicitante").
- * @param {string} texto nombre o RUT del organismo (ej. "Municipalidad de Quilpué")
- * @returns {Promise<{buyerCode: string|null, nombre: string|null, rut: string|null, opciones: Array}>}
- */
-async function resolverOrganismo(texto) {
-  const data = await llamar('/filtros/organismo-comprador', { q: texto, org_class: 2 }, 'resolverOrganismo')
-  const opciones = Array.isArray(data) ? data : (data?.items || data?.results || data?.data || [])
-  const primero = opciones[0] || null
-  return {
-    buyerCode: primero?.buyer_code ?? primero?.buyerCode ?? primero?.codigo ?? primero?.code ?? null,
-    nombre: primero?.name ?? primero?.nombre ?? null,
-    rut: primero?.rut ?? null,
-    opciones,
+  if (resp.status === 429) {
+    const espera = resp.headers?.['retry-after']
+    throw new Error(`${origen}: cuota diaria de la API Compra Ágil agotada (429)${espera ? ` — reintentar en ${espera}` : ' — reintentar mañana'}.`)
   }
+  if (resp.status >= 400) {
+    const msg = resp.data?.errors?.[0]?.mensaje || (typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data))?.slice(0, 300)
+    throw new Error(`${origen}: HTTP ${resp.status} — ${msg}`)
+  }
+  if (resp.data?.success === 'NOK') {
+    throw new Error(`${origen}: ${resp.data.errors?.[0]?.mensaje || 'la API respondió success:NOK sin mensaje.'}`)
+  }
+  return resp.data.payload
 }
 
 /**
- * Detalle de una Compra Ágil por su código externo (ej. "2428-1262-COT26").
- * Mapea al mismo formato de ítem que usa oportunidad_chilecompra_items para
- * poder reutilizar cruzarItemsConCatalogo() sin cambios.
+ * Detalle completo de una Compra Ágil por su código externo
+ * (ej. "1057539-228-COT26"). Mapea al mismo shape de `detalle` que ya
+ * consume compraAgilAnalisis.guardarYProcesarOportunidad — cero cambios
+ * necesarios ahí.
  */
 async function buscarCompraAgil(codigo) {
   if (!codigo) throw new Error('buscarCompraAgil: falta el código de la compra ágil')
-  const data = await llamar('/compra-agil', { code: codigo }, 'buscarCompraAgil')
-  return mapearCompraAgil(data, codigo)
+  const payload = await llamar(`/v2/compra-agil/${encodeURIComponent(codigo)}`, {}, 'buscarCompraAgil')
+  return mapearDetalle(payload, codigo)
 }
 
-function mapearCompraAgil(data, codigoSolicitado) {
-  // La SPA puede envolver el resultado en { items: [...] } o { data: {...} } o
-  // devolver el objeto plano — se cubren las formas más probables sin asumir
-  // una sola. Ver aviso de riesgo al inicio del archivo.
-  const raw = Array.isArray(data?.items) ? data.items[0] : (data?.data || data || {})
-  const advertencias = []
-  if (!raw || Object.keys(raw).length === 0) {
-    advertencias.push('La respuesta llegó vacía o en un formato inesperado — revisar debugUltimaRespuesta antes de confiar en este resultado.')
-  }
-
-  const itemsRaw = raw.items || raw.lineItems || raw.productos || []
-  const items = (Array.isArray(itemsRaw) ? itemsRaw : []).map(it => ({
-    descripcion_solicitada: it.description || it.descripcion || it.name || null,
-    cantidad: it.quantity ?? it.cantidad ?? null,
-    unidad: it.unit || it.unidad || null,
-    especificacion_tecnica: it.specification || it.especificacion || it.observation || raw.description || raw.descripcion || null,
-    precio_unitario_referencial: it.unitPrice ?? it.precioUnitario ?? null,
+function mapearDetalle(p, codigoSolicitado) {
+  const itemsRaw = p.productos_solicitados || []
+  const items = itemsRaw.map(it => ({
+    descripcion_solicitada: it.nombre || it.descripcion || null,
+    cantidad: it.cantidad ?? null,
+    unidad: it.unidad_medida || null,
+    especificacion_tecnica: it.descripcion || it.nombre || null,
+    // La API no entrega precio unitario en los productos solicitados — solo
+    // aparece en proveedores_cotizando[].productos_cotizados[] una vez que
+    // hay cotizaciones (incluida la propia, después de postular). Antes de
+    // eso queda null, igual que en el flujo manual/scraper anteriores.
+    precio_unitario_referencial: null,
   }))
 
-  // Si no vino desglose de ítems (probable en Compra Ágil: suele ser una sola
-  // línea genérica), se deja un único ítem con la descripción general — igual
-  // que hace analizarOportunidadInterno con la ficha pública de licitaciones.
-  if (!items.length && (raw.description || raw.descripcion || raw.name)) {
+  if (!items.length && (p.nombre || p.descripcion)) {
     items.push({
-      descripcion_solicitada: raw.description || raw.descripcion || raw.name,
-      cantidad: raw.quantity ?? raw.cantidad ?? null,
-      unidad: raw.unit || raw.unidad || null,
-      especificacion_tecnica: raw.description || raw.descripcion || null,
-      precio_unitario_referencial: raw.unitPrice ?? raw.estimatedAmount ?? null,
+      descripcion_solicitada: p.nombre || p.descripcion,
+      cantidad: null,
+      unidad: null,
+      especificacion_tecnica: p.descripcion || null,
+      precio_unitario_referencial: null,
     })
   }
 
   return {
     codigo_externo: codigoSolicitado,
-    nombre: raw.name || raw.title || raw.description || `Compra Ágil ${codigoSolicitado}`,
-    descripcion: raw.description || raw.descripcion || null,
-    organismo_nombre: raw.buyerName || raw.organismo || raw.buyer?.name || null,
-    organismo_rut: raw.buyerRut || raw.buyer?.rut || null,
-    region: raw.region || null,
-    comuna: raw.commune || raw.comuna || null,
-    direccion_entrega: raw.deliveryAddress || raw.direccionEntrega || null,
-    fecha_publicacion: raw.publicationDate || raw.fechaPublicacion || null,
-    fecha_cierre: raw.closingDate || raw.fechaCierre || raw.dueDate || null,
-    presupuesto_estimado: raw.estimatedAmount ?? raw.presupuesto ?? raw.totalAmount ?? null,
+    nombre: p.nombre || `Compra Ágil ${codigoSolicitado}`,
+    descripcion: p.descripcion || null,
+    organismo_nombre: p.institucion?.organismo_comprador || null,
+    organismo_rut: p.institucion?.rut || null,
+    region: REGIONES[p.institucion?.region] || null,
+    comuna: null, // la API no entrega comuna, solo región + dirección de entrega
+    direccion_entrega: p.entrega?.direccion_entrega || null,
+    fecha_publicacion: p.fechas?.fecha_publicacion || null,
+    fecha_cierre: p.fechas?.fecha_cierre || null,
+    presupuesto_estimado: p.presupuesto?.monto_disponible_clp ?? p.presupuesto?.presupuesto_estimado ?? null,
     url_portal: `https://www.mercadopublico.cl/CompraAgil/Modules/Detail/DetailCompraAgil.aspx?qs=${codigoSolicitado}`,
     items,
-    numero_cotizaciones_recibidas: raw.quotesCount ?? raw.numeroCotizaciones ?? null,
-    advertencias,
-    debugUltimaRespuesta: data,
+    numero_cotizaciones_recibidas: p.resumen?.total_ofertas_recibidas ?? null,
+    estado_codigo: p.estado?.codigo || null,
+    advertencias: [],
+    debugUltimaRespuesta: p,
   }
 }
 
 /**
- * Histórico de Órdenes de Compra — con `buyerCode` filtra solo compras del
- * mismo organismo solicitante ("¿ya compró esto antes y a qué precio?"); sin
- * `buyerCode` es la búsqueda de mercado (cualquier organismo).
+ * Lista códigos de Compra Ágil en estado "publicada" (abiertas, recibiendo
+ * cotizaciones) que coincidan con `q` y hayan tenido cambios dentro de
+ * `ventanaMs` — pagina automáticamente hasta traer todo. Es la base del
+ * detector automático (ver compraAgilAnalisis.detectarYImportarAutomatico).
  */
-async function buscarOrdenesDeCompra({ keyword, buyerCode = null, fechaDesde = null, fechaHasta = null, limite = 30 } = {}) {
-  if (!keyword) throw new Error('buscarOrdenesDeCompra: falta la palabra clave de búsqueda')
-  const params = { keyword, page_size: limite }
-  if (buyerCode) params.buyer_code = buyerCode
-  if (fechaDesde) params.date_from = ddmmyyyy(fechaDesde)
-  if (fechaHasta) params.date_to = ddmmyyyy(fechaHasta)
-
-  const data = await llamar('/ordenes-de-compra', params, 'buscarOrdenesDeCompra')
-  const listado = Array.isArray(data?.items) ? data.items : (data?.results || data?.data || [])
-  const ordenes = listado.map(mapearOrden)
-  return { ordenes, total: data?.total ?? ordenes.length, debugUltimaRespuesta: data }
+async function listarCodigosPublicados({ q, ventanaMs = 6 * 3600_000 } = {}) {
+  const codigos = new Set()
+  let pagina = 1
+  let totalPaginas = 1
+  do {
+    const payload = await llamar('/v2/compra-agil', {
+      ttl_cambio_ms: ventanaMs,
+      estado: 'publicada',
+      q,
+      tamano_pagina: 50,
+      numero_pagina: pagina,
+    }, 'listarCodigosPublicados')
+    for (const it of payload?.items || []) {
+      if (it.codigo) codigos.add(it.codigo)
+    }
+    totalPaginas = payload?.paginacion?.total_paginas || 1
+    pagina++
+  } while (pagina <= totalPaginas)
+  return [...codigos]
 }
 
-function mapearOrden(o) {
-  return {
-    codigo: o.code || o.codigo || o.orderNumber || null,
-    fecha: o.date || o.fecha || o.creationDate || null,
-    organismo_nombre: o.buyerName || o.organismo || null,
-    organismo_rut: o.buyerRut || null,
-    proveedor: o.supplierName || o.proveedor || null,
-    descripcion: o.description || o.descripcion || o.name || null,
-    monto_total: o.totalAmount ?? o.montoTotal ?? null,
-    cantidad: o.quantity ?? o.cantidad ?? null,
-    precio_unitario: o.unitPrice ?? o.precioUnitario ?? null,
-    url_portal: (o.code || o.codigo)
-      ? `https://www.mercadopublico.cl/PurchaseOrder/Modules/PO/DetailsPurchaseOrder.aspx?qs=${encodeURIComponent(o.code || o.codigo)}`
-      : null,
-  }
-}
-
-module.exports = {
-  resolverOrganismo,
-  buscarCompraAgil,
-  buscarOrdenesDeCompra,
-  ddmmyyyy,
-}
+module.exports = { buscarCompraAgil, listarCodigosPublicados }

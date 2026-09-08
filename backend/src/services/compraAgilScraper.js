@@ -1,4 +1,15 @@
 /**
+ * ⚠️ DEPRECADO desde 2026-09-08 noche — YA NO SE USA ni se registra en
+ * app.js. ChileCompra tiene una API OFICIAL de Compra Ágil (v2, mayo 2026)
+ * que reemplaza por completo la necesidad de este navegador headless — ver
+ * services/compraAgilApiClient.js (reescrito) y
+ * services/compraAgilAnalisis.detectarYImportarAutomatico(). Este archivo se
+ * deja intacto solo como referencia histórica de por qué se intentó este
+ * camino y por qué se abandonó (tumbó el servidor por memoria — ver abajo).
+ * NO reactivar sin instalar de nuevo puppeteer-core + @sparticuz/chromium
+ * (se sacaron de package.json) y sin resolver antes el problema de memoria
+ * que causó el incidente de producción del 2026-09-08.
+ *
  * RMG Parts — Detección 100% automática de Compra Ágil (2026-09)
  *
  * Reemplaza la dependencia de la API interna bloqueada por WAF

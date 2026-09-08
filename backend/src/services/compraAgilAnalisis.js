@@ -23,6 +23,18 @@ const {
 const { adjuntarFichasAOportunidad } = require('./fichasTecnicasVistonyService')
 const { compararFichaTecnica, leerAnexos, leerFichaPublica } = require('./chilecompraDocReader')
 
+// ── Detector automático (2026-09-08 noche) — API oficial, sin navegador ────
+// Candado contra corridas solapadas, compartido entre el cron y el botón
+// "Buscar ahora" — mismo patrón que tenía compraAgilScraper.js.
+let _corriendo = false
+let _ultimoResumen = null
+const USER_AUTOMATICO = { email: 'api-automatico' }
+const VENTANA_DEFAULT_MS = Number(process.env.COMPRA_AGIL_API_VENTANA_MS || 6 * 3600_000) // 6h de margen
+
+function estado() {
+  return { corriendo: _corriendo, ultimoResumen: _ultimoResumen }
+}
+
 function logEvento(oportunidad_id, tipo_evento, opts = {}) {
   const { usuario_id, usuario_nombre, detalle } = opts
   try {
@@ -168,20 +180,85 @@ async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase
 
 /**
  * Paso 1 — Ingesta. Trae la publicación de Compra Ágil por su código externo
- * (ej. "2428-1262-COT26"), la guarda/actualiza como oportunidad y corre el
- * cruce con catálogo + adjunta fichas técnicas. Es seguro llamarla varias
- * veces con el mismo código (upsert por UNIQUE(fuente, codigo_externo)).
- *
- * ⚠️ Depende de compraAgilApiClient.buscarCompraAgil, que llama a la API
- * interna de Mercado Público bloqueada por WAF (confirmado en producción,
- * 2026-09) — hoy esta función FALLA para cualquier código real. Se deja
- * intacta (puede volver a funcionar si ChileCompra habilita su nueva API
- * oficial de Compra Ágil, ver compraAgilDatosAbiertos.js), pero mientras
- * tanto el camino que SÍ funciona es importarCompraAgilManual() — ver abajo.
+ * (ej. "1057539-228-COT26") desde la API OFICIAL de Compra Ágil
+ * (compraAgilApiClient.js, reescrito 2026-09-08 noche contra
+ * api2.mercadopublico.cl/v2/compra-agil — ya no depende de la API interna
+ * bloqueada por WAF), la guarda/actualiza como oportunidad y corre el cruce
+ * con catálogo + adjunta fichas técnicas. Es seguro llamarla varias veces
+ * con el mismo código (upsert por UNIQUE(fuente, codigo_externo)).
  */
-async function importarCompraAgil(codigo, user) {
+async function importarCompraAgil(codigo, user, tipoEventoBase = 'compra_agil') {
   const detalle = await api.buscarCompraAgil(codigo)
-  return guardarYProcesarOportunidad(codigo, detalle, user, 'compra_agil')
+  return guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase)
+}
+
+/**
+ * Detector automático — reemplaza a compraAgilScraper.detectarYImportarNuevas
+ * (navegador headless, deshabilitado desde 2026-09-08 por saturar la memoria
+ * de Render). Por cada palabra clave del rubro RMG (misma lista que
+ * chilecompraCron.js), consulta la API oficial de Compra Ágil filtrando
+ * estado=publicada + ventana de cambios recientes, junta los códigos nuevos
+ * (que no existan aún como oportunidad) y los importa con el pipeline de
+ * siempre (cruce, scores, fichas técnicas) — cero navegador, cero pasos
+ * manuales, cero riesgo de memoria.
+ */
+async function detectarYImportarAutomatico({ ventanaMs = VENTANA_DEFAULT_MS, user = USER_AUTOMATICO } = {}) {
+  if (_corriendo) {
+    return { yaEnCurso: true, ...(_ultimoResumen || {}) }
+  }
+  _corriendo = true
+
+  const resumen = {
+    keywordsRevisadas: 0, codigosVistos: 0, nuevas: 0,
+    importadas: [], errores: [], iniciado: new Date().toISOString(),
+  }
+  try {
+    const { KEYWORDS } = require('../jobs/chilecompraCron')
+    const codigosVistos = new Set()
+
+    for (const keyword of KEYWORDS) {
+      resumen.keywordsRevisadas++
+      try {
+        const codigos = await api.listarCodigosPublicados({ q: keyword, ventanaMs })
+        codigos.forEach(c => codigosVistos.add(c))
+      } catch (e) {
+        resumen.errores.push(`Búsqueda "${keyword}": ${e.message}`)
+        if (/cuota diaria/i.test(e.message)) break // sin seguir gastando cuota si ya se agotó
+      }
+    }
+    resumen.codigosVistos = codigosVistos.size
+
+    if (codigosVistos.size) {
+      const existentes = new Set(
+        db.prepare(`SELECT codigo_externo FROM oportunidades_chilecompra WHERE fuente = 'compra_agil'`)
+          .all().map(r => r.codigo_externo)
+      )
+      const nuevos = [...codigosVistos].filter(c => !existentes.has(c))
+      resumen.nuevas = nuevos.length
+
+      for (const codigo of nuevos) {
+        try {
+          const op = await importarCompraAgil(codigo, user, 'compra_agil_auto')
+          resumen.importadas.push({ codigo, id: op.id, nombre: op.nombre })
+        } catch (e) {
+          resumen.errores.push(`Código ${codigo}: ${e.message}`)
+        }
+      }
+    }
+  } catch (e) {
+    resumen.errores.push(`Detector: ${e.message}`)
+  } finally {
+    _corriendo = false
+  }
+
+  resumen.finalizado = new Date().toISOString()
+  console.log(
+    `ℹ️ Compra Ágil API — ${resumen.keywordsRevisadas} keyword(s), ` +
+    `${resumen.codigosVistos} código(s) vistos, ${resumen.nuevas} nueva(s), ` +
+    `${resumen.importadas.length} importada(s), ${resumen.errores.length} error(es)`
+  )
+  _ultimoResumen = resumen
+  return resumen
 }
 
 /**
@@ -346,4 +423,5 @@ function sugerirPrecio(oportunidadId) {
 
 module.exports = {
   importarCompraAgil, importarCompraAgilManual, generarFundamentoCotizacion, sugerirPrecio, calcularYGuardarScores,
+  detectarYImportarAutomatico, estado,
 }

@@ -10,10 +10,12 @@
  * cotización con IA.
  */
 const { db } = require('../../config/database')
-const { importarCompraAgil, importarCompraAgilManual, generarFundamentoCotizacion, sugerirPrecio } = require('../services/compraAgilAnalisis')
+const {
+  importarCompraAgil, importarCompraAgilManual, generarFundamentoCotizacion, sugerirPrecio,
+  detectarYImportarAutomatico, estado: estadoDetector,
+} = require('../services/compraAgilAnalisis')
 const { benchmarkPorSolicitante, benchmarkPorMercado } = require('../services/compraAgilBenchmark')
 const datosAbiertos = require('../services/compraAgilDatosAbiertos')
-const scraper = require('../services/compraAgilScraper')
 
 function withDetails(op) {
   if (!op) return null
@@ -156,28 +158,24 @@ const datosAbiertosSincronizar = async (req, res) => {
   }
 }
 
-// ── Scraper automático — detección real sin que el usuario pegue nada ──────
+// ── Detector automático — API oficial de Compra Ágil, sin navegador ────────
 // Corre bajo demanda (botón "Buscar ahora" en la UI); además corre sola cada
-// 2h vía cron (ver jobs/compraAgilScraperCron.js). Puede tardar 1-3 minutos
-// (recorre cada keyword del rubro RMG + cada ficha nueva en un navegador
-// real) — el proxy de Render corta conexiones HTTP así de largas antes de
-// que terminen (confirmado en producción, 2026-09-08: el navegador del
-// usuario mostraba "Network Error" aunque el servidor seguía trabajando
-// bien de fondo). Por eso este endpoint NO espera el resultado: lo dispara
-// (fire-and-forget) y responde al toque; el frontend consulta el avance con
-// GET /scraper-estado hasta que `corriendo` vuelva a false.
+// 15 min vía cron (ver jobs/compraAgilApiPollerCron.js). Es una llamada de
+// API normal (segundos, no minutos) — se deja el mismo patrón
+// fire-and-forget + polling que ya tenía el scraper por prolijidad (cero
+// cambios de contrato con el frontend), aunque ya no hace falta por lentitud.
 const scrapearAhora = (req, res) => {
-  const estadoActual = scraper.estado()
+  const estadoActual = estadoDetector()
   if (estadoActual.corriendo) {
     return res.status(202).json({ iniciado: false, mensaje: 'Ya hay una búsqueda en curso — espera a que termine.' })
   }
-  scraper.detectarYImportarNuevas({ user: req.user })
+  detectarYImportarAutomatico({ user: req.user })
     .catch(e => console.error('❌ Compra Ágil "Buscar ahora" falló:', e.message))
-  res.status(202).json({ iniciado: true, mensaje: 'Búsqueda iniciada — puede tardar 1-3 minutos.' })
+  res.status(202).json({ iniciado: true, mensaje: 'Búsqueda iniciada.' })
 }
 
 const scraperEstado = (req, res) => {
-  res.json(scraper.estado())
+  res.json(estadoDetector())
 }
 
 module.exports = {

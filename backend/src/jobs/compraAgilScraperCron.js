@@ -1,4 +1,9 @@
 /**
+ * ⚠️ DEPRECADO desde 2026-09-08 noche — YA NO SE REGISTRA en app.js.
+ * Reemplazado por jobs/compraAgilApiPollerCron.js (API oficial de Compra
+ * Ágil, sin navegador). Se deja intacto solo como referencia — ver el
+ * aviso al inicio de services/compraAgilScraper.js.
+ *
  * RMG Parts — Cron del scraper automático de Compra Ágil (2026-09)
  *
  * Corre el detector (compraAgilScraper.detectarYImportarNuevas) cada 2 horas

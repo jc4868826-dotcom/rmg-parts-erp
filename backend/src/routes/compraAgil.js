@@ -2,13 +2,15 @@
  * RMG Parts — Rutas Compra Ágil (submenú nuevo bajo ChileCompra)
  *
  * GET    /api/compra-agil                        listar (filtros: estado, q)
- * POST   /api/compra-agil/importar                { codigo } → importa/actualiza la publicación,
- *                                                  cruza con catálogo y adjunta fichas técnicas
- *                                                  ⚠️ WAF-bloqueado desde 2026-09 — usar importar-manual
+ * POST   /api/compra-agil/importar                { codigo } → importa/actualiza la publicación desde la
+ *                                                  API OFICIAL de Compra Ágil (api2.mercadopublico.cl/v2,
+ *                                                  ver services/compraAgilApiClient.js — reescrito
+ *                                                  2026-09-08 noche), cruza con catálogo y adjunta fichas
+ *                                                  técnicas. Requiere COMPRA_AGIL_API_TICKET en el entorno.
  * POST   /api/compra-agil/importar-manual         { codigo, texto?, documentos? } → mismo resultado que
- *                                                  /importar pero SIN depender de la API bloqueada: el
- *                                                  usuario pega el texto de la publicación y/o sube el PDF,
- *                                                  y una IA extrae los ítems (mismo lector que licitaciones)
+ *                                                  /importar pero pegando texto/PDF a mano — fallback por si
+ *                                                  la API oficial falla o se agota la cuota diaria del ticket,
+ *                                                  una IA extrae los ítems (mismo lector que licitaciones)
  * GET    /api/compra-agil/:id                     detalle + ítems + historial
  *                                                  (para cambiar estado, usar PATCH /api/chilecompra/:id/estado
  *                                                  — misma tabla, mismo endpoint, ya soporta fuente='compra_agil')
@@ -20,12 +22,14 @@
  * GET    /api/compra-agil/datos-abiertos/estado        qué meses de Datos Abiertos ya están sincronizados localmente
  * POST   /api/compra-agil/datos-abiertos/sincronizar   fuerza la sincronización de los últimos meses disponibles
  *                                                       (también corre solo, mensualmente — ver jobs/compraAgilDatosAbiertosCron.js)
- * POST   /api/compra-agil/scrapear-ahora                dispara el detector automático (navegador headless) YA MISMO
- *                                                        en vez de esperar al cron cada 2h — busca por cada keyword del
- *                                                        rubro RMG, importa solo, sin que el usuario pegue nada
- *                                                        (ver services/compraAgilScraper.js). Responde al toque
- *                                                        (fire-and-forget, 202) — el trabajo real (1-3 min) sigue de
- *                                                        fondo, consultar el avance con GET /scraper-estado.
+ * POST   /api/compra-agil/scrapear-ahora                dispara el detector automático (API oficial, sin
+ *                                                        navegador) YA MISMO en vez de esperar al cron cada
+ *                                                        15 min — busca por cada keyword del rubro RMG, importa
+ *                                                        solo, sin que el usuario pegue nada (ver
+ *                                                        services/compraAgilAnalisis.detectarYImportarAutomatico).
+ *                                                        Responde al toque (fire-and-forget, 202) — el trabajo
+ *                                                        real (segundos) sigue de fondo, consultar el avance con
+ *                                                        GET /scraper-estado.
  * GET    /api/compra-agil/scraper-estado                { corriendo, ultimoResumen } — para el polling del frontend
  *                                                        mientras "Buscar ahora" trabaja de fondo.
  *

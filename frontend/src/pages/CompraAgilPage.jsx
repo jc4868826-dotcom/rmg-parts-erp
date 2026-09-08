@@ -65,16 +65,12 @@ export default function CompraAgilPage() {
     enabled: !!seleccionId,
   })
 
-  // Detección 100% automática (2026-09) — navega el buscador público con un
-  // navegador real (headless) y detecta/importa solo, sin que nadie pegue
-  // texto ni código. Corre sola cada 2h vía cron; este botón la dispara YA.
-  //
-  // OJO: la búsqueda tarda 1-3 min (recorre cada rubro + cada ficha nueva) y
-  // el proxy de Render corta conexiones HTTP así de largas antes de que
-  // terminen — se confirmó en producción que eso mostraba "Network Error" en
-  // el navegador aunque el servidor seguía trabajando bien de fondo. Por eso
-  // el POST solo AVISA que empezó (responde al toque) y el progreso real se
-  // sigue con polling a GET /scraper-estado hasta que `corriendo` sea false.
+  // Detección 100% automática (2026-09-08 noche) — consulta la API OFICIAL
+  // de Compra Ágil de Mercado Público (sin navegador) y detecta/importa
+  // solo, sin que nadie pegue texto ni código. Corre sola cada 15 min vía
+  // cron; este botón la dispara YA. El POST avisa que empezó (responde al
+  // toque) y el progreso real se sigue con polling a GET /scraper-estado
+  // hasta que `corriendo` sea false — toma segundos, no minutos.
   const [buscando, setBuscando] = useState(false)
   const ultimoResumenVisto = useRef(null)
 
@@ -109,7 +105,7 @@ export default function CompraAgilPage() {
       if (r.iniciado === false) {
         toast(r.mensaje || 'Ya hay una búsqueda en curso.', { icon: '⏳' })
       } else {
-        toast('Búsqueda iniciada — puede tardar 1-3 minutos, avisamos cuando termine.', { icon: '🔎' })
+        toast('Búsqueda iniciada — avisamos cuando termine.', { icon: '🔎' })
       }
       setBuscando(true)
     },
@@ -177,9 +173,10 @@ export default function CompraAgilPage() {
         </div>
       </header>
 
-      {/* Detección 100% automática (2026-09) — navegador headless que busca y
-          lee cada oportunidad sola, sin que nadie pegue código ni texto.
-          Corre sola cada 2h; este botón la dispara ahora mismo. */}
+      {/* Detección 100% automática (2026-09-08 noche) — API oficial de Compra
+          Ágil, sin navegador, que busca e importa cada oportunidad sola, sin
+          que nadie pegue código ni texto. Corre sola cada 15 min; este botón
+          la dispara ahora mismo. */}
       <div className="rounded-xl p-4 space-y-2" style={{ background: 'var(--rmg-card)', border: '1px solid rgba(45,201,138,0.35)' }}>
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -187,9 +184,9 @@ export default function CompraAgilPage() {
               <Radar size={16} style={{ color: 'var(--rmg-teal)' }} /> Detección automática
             </h3>
             <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>
-              Corre sola cada 2 horas: busca en Mercado Público por los rubros de RMG (lubricantes, baterías,
-              neumáticos, grasas, etc.), detecta publicaciones nuevas y las importa — cruce con catálogo, scores
-              y fichas técnicas incluidos. Cero código o texto que pegar.
+              Corre sola cada 15 minutos: consulta la API oficial de Compra Ágil de Mercado Público por los rubros
+              de RMG (lubricantes, baterías, neumáticos, grasas, etc.), detecta publicaciones nuevas y las importa —
+              cruce con catálogo, scores y fichas técnicas incluidos. Cero código o texto que pegar.
             </p>
           </div>
           <button
@@ -199,7 +196,7 @@ export default function CompraAgilPage() {
             style={{ background: 'var(--rmg-teal)' }}
           >
             {(scrapearMut.isPending || buscando) ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-            {buscando ? 'Buscando… (1-3 min)' : 'Buscar ahora'}
+            {buscando ? 'Buscando…' : 'Buscar ahora'}
           </button>
         </div>
       </div>

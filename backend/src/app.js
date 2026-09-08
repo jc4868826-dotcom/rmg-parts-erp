@@ -140,7 +140,7 @@ initDB()
   .then(() => {
     require('./jobs/chilecompraCron').iniciarCron();
     require('./jobs/compraAgilDatosAbiertosCron').iniciarCron();
-    require('./jobs/compraAgilScraperCron').iniciarCron(); // detección automática Compra Ágil (headless browser)
+    require('./jobs/compraAgilApiPollerCron').iniciarCron(); // detección automática Compra Ágil (API oficial v2)
     app.listen(PORT, () => {
       console.log(`
   ╔══════════════════════════════════════╗
