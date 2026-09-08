@@ -12,6 +12,9 @@
  * POST   /api/compra-agil/:id/fundamento          compara cada ficha técnica RMG vs. exigencia (IA) y
  *                                                  guarda cumplimiento + observación sugerida por ítem
  * GET    /api/compra-agil/:id/precio-sugerido     sugerencia de precio por ítem (costo + margen vs. presupuesto ref.)
+ * GET    /api/compra-agil/datos-abiertos/estado        qué meses de Datos Abiertos ya están sincronizados localmente
+ * POST   /api/compra-agil/datos-abiertos/sincronizar   fuerza la sincronización de los últimos meses disponibles
+ *                                                       (también corre solo, mensualmente — ver jobs/compraAgilDatosAbiertosCron.js)
  *
  * No se duplica nada de /api/chilecompra/:id (analizar, checklist, extraer-fichas-tecnicas,
  * limpiar-historial, items/:itemId/observacion, documentos) — esas rutas ya funcionan igual
@@ -22,6 +25,8 @@ const c = require('../controllers/compraAgilController')
 const { authenticate } = require('../middleware/auth')
 
 router.get('/benchmark-mercado', authenticate, c.benchmarkMercado)
+router.get('/datos-abiertos/estado', authenticate, c.datosAbiertosEstado)
+router.post('/datos-abiertos/sincronizar', authenticate, c.datosAbiertosSincronizar)
 router.get('/', authenticate, c.listar)
 router.post('/importar', authenticate, c.importar)
 router.get('/:id', authenticate, c.getDetalle)

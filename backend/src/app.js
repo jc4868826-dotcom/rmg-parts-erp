@@ -139,6 +139,7 @@ app.use((err, req, res, next) => {
 initDB()
   .then(() => {
     require('./jobs/chilecompraCron').iniciarCron();
+    require('./jobs/compraAgilDatosAbiertosCron').iniciarCron();
     app.listen(PORT, () => {
       console.log(`
   ╔══════════════════════════════════════╗

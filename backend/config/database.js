@@ -2782,6 +2782,82 @@ function runMigrations() {
       console.error('❌ Migración compra_agil_v1 falló:', e.message)
     }
   }
+
+  // Migration compra_agil_v2_logistico_datos_abiertos — 2026-09.
+  // Pedido real del usuario sobre la Compra Ágil de San Nicolás (1493-495-COT26,
+  // Ñuble): "esta solicitud es más riesgosa por el costo de envío, debería
+  // tener un puntaje ¿no?" + queja de que los botones de benchmark ("¿ya
+  // compró esto antes?" / "¿a qué precio se vende en el mercado?") no
+  // encontraban nada — la causa real es que dependían de una API interna de
+  // Mercado Público bloqueada por WAF incluso desde el servidor real de RMG
+  // (ver compraAgilApiClient.js). Este cambio agrega:
+  //   - oportunidades_chilecompra.score_logistico: tercer score (junto a
+  //     rentabilidad/seguridad) que penaliza distancia + costo de flete
+  //     estimado vs. presupuesto — ver chilecompraScoring.calcularScoreLogistico.
+  //   - compra_agil_cotizaciones_historicas: cache LOCAL de las cotizaciones
+  //     de Compra Ágil publicadas por ChileCompra en su portal de Datos
+  //     Abiertos (https://datos-abiertos.chilecompra.cl/descargas/compra-agil,
+  //     archivos mensuales públicos, SIN WAF, SIN autenticación — confirmado
+  //     accesible con un GET simple) — reemplaza la dependencia de la API
+  //     bloqueada para los benchmarks. Es RETROSPECTIVO (el mes se publica
+  //     ~2 meses después), así que sirve para benchmark de precios, NO para
+  //     detectar oportunidades nuevas en tiempo real — ver
+  //     services/compraAgilDatosAbiertos.js para el detalle completo.
+  //   - compra_agil_datos_abiertos_meses: qué meses ya se sincronizaron (para
+  //     no volver a descargar/parsear el mismo archivo de ~100-700MB).
+  const mCompraAgilV2 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('compra_agil_v2_logistico_datos_abiertos')
+  if (!mCompraAgilV2) {
+    try {
+      const opCols = db.prepare('PRAGMA table_info(oportunidades_chilecompra)').all().map(c => c.name)
+      if (!opCols.includes('score_logistico')) {
+        db.exec('ALTER TABLE oportunidades_chilecompra ADD COLUMN score_logistico REAL')
+      }
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS compra_agil_cotizaciones_historicas (
+          id                        TEXT PRIMARY KEY,
+          mes_referencia            TEXT NOT NULL,   -- 'YYYY-MM' del archivo Datos Abiertos de origen
+          codigo_cotizacion         TEXT,
+          nombre_cotizacion         TEXT,
+          descripcion_cotizacion    TEXT,
+          organismo_nombre          TEXT,
+          organismo_rut             TEXT,
+          region                    TEXT,
+          direccion_entrega         TEXT,
+          fecha_publicacion         TEXT,
+          fecha_cierre              TEXT,
+          monto_total_disponible    INTEGER,
+          producto_cotizado         TEXT,
+          codigo_producto           TEXT,
+          nombre_producto_generico  TEXT,
+          cantidad_solicitada       REAL,
+          estado                    TEXT,
+          proveedor_nombre          TEXT,
+          proveedor_rut             TEXT,
+          monto_total               INTEGER,
+          moneda                    TEXT,
+          proveedor_seleccionado    TEXT,            -- 'si' | 'no', tal cual viene del CSV
+          codigo_oc                 TEXT,
+          created_at                TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_cach_mes ON compra_agil_cotizaciones_historicas(mes_referencia);
+        CREATE INDEX IF NOT EXISTS idx_cach_organismo_rut ON compra_agil_cotizaciones_historicas(organismo_rut);
+        CREATE INDEX IF NOT EXISTS idx_cach_producto ON compra_agil_cotizaciones_historicas(nombre_producto_generico);
+
+        CREATE TABLE IF NOT EXISTS compra_agil_datos_abiertos_meses (
+          mes_referencia   TEXT PRIMARY KEY,   -- 'YYYY-MM'
+          filas_totales    INTEGER,            -- filas escaneadas del CSV completo (auditoría)
+          filas_relevantes INTEGER,            -- filas insertadas (calzaron con el rubro RMG)
+          sincronizado_at  TEXT DEFAULT (datetime('now'))
+        );
+      `)
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('compra_agil_v2_logistico_datos_abiertos')
+      console.log('✅ Migración compra_agil_v2_logistico_datos_abiertos — score logístico + cache local Datos Abiertos añadidos')
+    } catch (e) {
+      console.error('❌ Migración compra_agil_v2_logistico_datos_abiertos falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

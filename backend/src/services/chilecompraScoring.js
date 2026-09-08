@@ -63,6 +63,109 @@ const { db } = require('../../config/database')
 const MARGEN_OBJETIVO_MINIMO = 0.15 // 15% — por debajo de esto, rentabilidad cae fuerte
 
 /**
+ * ── Score logístico (2026-09) — pedido explícito del usuario sobre la Compra
+ * Ágil de San Nicolás (1493-495-COT26, Ñuble): "esta solicitud es más
+ * riesgosa por el costo de envío, debería tener un puntaje ¿no?"
+ *
+ * RMG despacha desde Santiago (RM). Dos señales, combinadas:
+ *  1. Distancia pura al organismo (a más lejos, más caro y más lento el
+ *     despacho, más cosas pueden salir mal en tránsito).
+ *  2. Qué tan grande es el costo de flete ESTIMADO respecto al presupuesto
+ *     de la propia oportunidad — un flete de $50.000 es irrelevante en una
+ *     compra de $5.000.000, pero devora el margen en una de $500.000 (caso
+ *     real San Nicolás: ~10% del presupuesto autorizado).
+ *
+ * Honesto sobre sus límites (mismo criterio que el score de seguridad, ver
+ * nota al inicio del archivo): el costo de flete es una ESTIMACIÓN
+ * referencial (tarifa base + $/km), no una cotización real de transportista.
+ * Nunca reemplaza pedir un flete real antes de confirmar una cotización con
+ * despacho a una región lejana — solo advierte cuándo conviene hacerlo.
+ *
+ * Distancias aproximadas por carretera desde Santiago a la capital de cada
+ * región (km, redondeadas) — para regiones extremas (Aysén, Magallanes) el
+ * despacho real suele ser marítimo/aéreo, no terrestre, así que el "riesgo"
+ * ahí está deliberadamente al tope.
+ */
+const KM_DESDE_SANTIAGO = [
+  { patron: /metropolitana|santiago/, km: 0 },
+  { patron: /valparaiso/, km: 115 },
+  { patron: /o.?higgins|libertador/, km: 135 },
+  { patron: /maule/, km: 250 },
+  { patron: /nuble/, km: 400 },
+  { patron: /biobio|bio.?bio|concepcion/, km: 500 },
+  { patron: /araucania|temuco/, km: 670 },
+  { patron: /los rios|valdivia/, km: 820 },
+  { patron: /los lagos|puerto montt/, km: 1020 },
+  { patron: /coquimbo/, km: 470 },
+  { patron: /atacama|copiapo/, km: 800 },
+  { patron: /antofagasta/, km: 1360 },
+  { patron: /tarapaca|iquique/, km: 1850 },
+  { patron: /arica|parinacota/, km: 2050 },
+  { patron: /aysen/, km: 1600 },
+  { patron: /magallanes|antartica/, km: 3000 },
+]
+
+/**
+ * Costo de flete REFERENCIAL (no un tarifario real) — tarifa base + $/km,
+ * con recargo si el volumen total del pedido es grande (más de un bulto
+ * chico, probablemente carga que no cabe en un envío tipo courier). Sirve
+ * solo para estimar qué % del presupuesto se lo puede comer el despacho —
+ * antes de cotizar en firme, siempre pedir un flete real a un transportista.
+ */
+function estimarCostoFleteReferencial(km, volumenTotalLitros) {
+  const BASE = 25_000
+  const POR_KM = 45
+  let costo = BASE + km * POR_KM
+  if (volumenTotalLitros != null && volumenTotalLitros > 150) costo *= 1.4
+  return Math.round(costo)
+}
+
+function kmDesdeSantiago(regionTexto) {
+  const t = normalizarPalabra(regionTexto || '')
+  if (!t) return null
+  for (const { patron, km } of KM_DESDE_SANTIAGO) {
+    if (patron.test(t)) return km
+  }
+  return null
+}
+
+/**
+ * Score logístico (0-100). null cuando no hay región identificable — se
+ * trata como "sin información" (score neutro 70), NO como "riesgoso", mismo
+ * criterio usado en calcularScoreSeguridad().
+ *
+ * @param {{region?: string, presupuestoEstimado?: number, volumenTotalLitros?: number}} args
+ */
+function calcularScoreLogistico({ region, presupuestoEstimado, volumenTotalLitros } = {}) {
+  const km = kmDesdeSantiago(region)
+  if (km == null) {
+    return { score: 70, km: null, costoFleteEstimado: null, riesgoPresupuestoPct: null, motivo: 'Región no identificada — score neutro, no se puede estimar flete.' }
+  }
+
+  const costoFleteEstimado = estimarCostoFleteReferencial(km, volumenTotalLitros)
+  const riesgoPresupuestoPct = (presupuestoEstimado && presupuestoEstimado > 0)
+    ? costoFleteEstimado / presupuestoEstimado
+    : null
+
+  let score = 100
+  score -= Math.min(50, Math.round(km / 40)) // ~1 punto cada 40km de distancia, tope 50
+  if (riesgoPresupuestoPct != null) {
+    if (riesgoPresupuestoPct > 0.30) score -= 35
+    else if (riesgoPresupuestoPct > 0.15) score -= 20
+    else if (riesgoPresupuestoPct > 0.08) score -= 8
+  }
+  score = Math.max(0, Math.min(100, score))
+
+  return {
+    score, km, costoFleteEstimado,
+    riesgoPresupuestoPct: riesgoPresupuestoPct != null ? Math.round(riesgoPresupuestoPct * 1000) / 10 : null,
+    motivo: riesgoPresupuestoPct != null && riesgoPresupuestoPct > 0.15
+      ? `Flete estimado ($${costoFleteEstimado.toLocaleString('es-CL')}) equivale a ~${Math.round(riesgoPresupuestoPct * 100)}% del presupuesto — pedir flete real a un transportista antes de cotizar en firme.`
+      : null,
+  }
+}
+
+/**
  * Patrón de análisis acordado con el usuario (licitación La Florida 2026,
  * ítem 18): cuando el mejor candidato de catálogo para un ítem es un
  * Tambor/Cilindro (formato grande, 55 GAL o más), NUNCA se ofrece por
@@ -717,11 +820,26 @@ function calcularScoreSeguridad({ organismoRut, tieneExigenciaGarantia, tieneDem
 /**
  * Score compuesto — la ponderación (60/40 por defecto) es un parámetro de negocio,
  * no una constante técnica. Configurable vía CHILECOMPRA_PESO_RENTABILIDAD.
+ *
+ * (2026-09) Tercer parámetro opcional `scoreLogistico` — cuando se pasa (hoy
+ * solo desde el flujo de Compra Ágil, ver compraAgilAnalisis.js), se suma a
+ * la ponderación con su propio peso (CHILECOMPRA_PESO_LOGISTICO, default
+ * 0.2) restado proporcionalmente de rentabilidad/seguridad. Si se omite
+ * (licitaciones, flujo existente), el cálculo queda IDÉNTICO al de antes —
+ * no se rompe ningún score ya guardado.
  */
-function calcularScoreCompuesto(scoreRentabilidad, scoreSeguridad) {
-  const pesoRentabilidad = Number(process.env.CHILECOMPRA_PESO_RENTABILIDAD || 0.6)
-  const pesoSeguridad = 1 - pesoRentabilidad
-  return Math.round(scoreRentabilidad * pesoRentabilidad + scoreSeguridad * pesoSeguridad)
+function calcularScoreCompuesto(scoreRentabilidad, scoreSeguridad, scoreLogistico = null) {
+  const pesoRentabilidadBase = Number(process.env.CHILECOMPRA_PESO_RENTABILIDAD || 0.6)
+  if (scoreLogistico == null) {
+    const pesoSeguridad = 1 - pesoRentabilidadBase
+    return Math.round(scoreRentabilidad * pesoRentabilidadBase + scoreSeguridad * pesoSeguridad)
+  }
+  const pesoLogistico = Number(process.env.CHILECOMPRA_PESO_LOGISTICO || 0.2)
+  const pesoRentabilidad = pesoRentabilidadBase * (1 - pesoLogistico)
+  const pesoSeguridad = 1 - pesoRentabilidad - pesoLogistico
+  return Math.round(
+    scoreRentabilidad * pesoRentabilidad + scoreSeguridad * pesoSeguridad + scoreLogistico * pesoLogistico
+  )
 }
 
 module.exports = {
@@ -729,6 +847,7 @@ module.exports = {
   cruzarItemsConCatalogo,
   calcularScoreRentabilidad,
   calcularScoreSeguridad,
+  calcularScoreLogistico,
   calcularScoreCompuesto,
   parseVolumenPresentacion,
   esFormatoGrande,

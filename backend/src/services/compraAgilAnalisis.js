@@ -16,7 +16,10 @@
  */
 const { db, uuidv4 } = require('../../config/database')
 const api = require('./compraAgilApiClient')
-const { cruzarItemsConCatalogo } = require('./chilecompraScoring')
+const {
+  cruzarItemsConCatalogo, calcularScoreRentabilidad, calcularScoreSeguridad,
+  calcularScoreLogistico, calcularScoreCompuesto, volumenTotalSolicitado,
+} = require('./chilecompraScoring')
 const { adjuntarFichasAOportunidad } = require('./fichasTecnicasVistonyService')
 const { compararFichaTecnica } = require('./chilecompraDocReader')
 
@@ -28,6 +31,53 @@ function logEvento(oportunidad_id, tipo_evento, opts = {}) {
       VALUES (?,?,?,?,?,?)`)
       .run(uuidv4(), oportunidad_id, tipo_evento, usuario_id || null, usuario_nombre || null, detalle || null)
   } catch (_) { /* el historial nunca debe tumbar el flujo principal */ }
+}
+
+/**
+ * Scores de la oportunidad — antes de este fix (2026-09) Compra Ágil NUNCA
+ * calculaba score_rentabilidad/score_seguridad/score_total (a diferencia de
+ * licitaciones, ver chilecompraController.js), así que toda Compra Ágil
+ * quedaba sin puntaje visible en el listado. Se agrega además el score
+ * logístico (pedido explícito del usuario: "esta solicitud es más riesgosa
+ * por el costo de envío, debería tener un puntaje ¿no?" — caso real
+ * San Nicolás/1493-495-COT26, Ñuble) como tercer factor del compuesto.
+ */
+function calcularYGuardarScores(oportunidadId, cruce) {
+  const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(oportunidadId)
+  const items = db.prepare('SELECT * FROM oportunidad_chilecompra_items WHERE oportunidad_id = ?').all(oportunidadId)
+
+  const scoreRentabilidad = calcularScoreRentabilidad({
+    coberturaPct: cruce.coberturaPct, presupuestoEstimado: op.presupuesto_estimado, items,
+  })
+  const scoreSeguridad = calcularScoreSeguridad({
+    organismoRut: op.organismo_rut, tieneExigenciaGarantia: false, tieneDemandas: null,
+  })
+
+  // Volumen total en litros de TODOS los ítems (suma) — señal para el recargo
+  // por carga voluminosa dentro de calcularScoreLogistico (ver ahí).
+  let volumenTotalLitros = null
+  for (const item of items) {
+    const texto = `${item.descripcion_solicitada || ''} ${item.especificacion_tecnica || ''}`
+    const vol = volumenTotalSolicitado(item, texto)
+    if (vol != null) volumenTotalLitros = (volumenTotalLitros || 0) + vol
+  }
+
+  const logistico = calcularScoreLogistico({
+    region: op.region, presupuestoEstimado: op.presupuesto_estimado, volumenTotalLitros,
+  })
+  const scoreTotal = calcularScoreCompuesto(scoreRentabilidad, scoreSeguridad, logistico.score)
+
+  db.prepare(`
+    UPDATE oportunidades_chilecompra
+    SET cobertura_catalogo_pct = ?, score_rentabilidad = ?, score_seguridad = ?, score_logistico = ?, score_total = ?
+    WHERE id = ?
+  `).run(cruce.coberturaPct, scoreRentabilidad, scoreSeguridad, logistico.score, scoreTotal, oportunidadId)
+
+  if (logistico.motivo) {
+    logEvento(oportunidadId, 'score_logistico_alerta', { detalle: logistico.motivo })
+  }
+
+  return { scoreRentabilidad, scoreSeguridad, scoreLogistico: logistico, scoreTotal }
 }
 
 /**
@@ -95,7 +145,8 @@ async function importarCompraAgil(codigo, user) {
 
   // Cruce con catálogo (heurística, sin IA — barato y reutilizado tal cual de licitaciones).
   try {
-    cruzarItemsConCatalogo(id)
+    const cruce = cruzarItemsConCatalogo(id)
+    calcularYGuardarScores(id, cruce)
   } catch (e) {
     logEvento(id, 'cruce_error', { usuario_id: user?.id, usuario_nombre: user?.email, detalle: e.message })
   }
@@ -206,4 +257,4 @@ function sugerirPrecio(oportunidadId) {
   })
 }
 
-module.exports = { importarCompraAgil, generarFundamentoCotizacion, sugerirPrecio }
+module.exports = { importarCompraAgil, generarFundamentoCotizacion, sugerirPrecio, calcularYGuardarScores }

@@ -9,13 +9,25 @@
  * para fundamentar el precio de la cotización — el mismo ejercicio hecho a
  * mano en el chat para Quilpué/2428-1262-COT26, ahora repetible desde la UI.
  *
- * Se cachea cada búsqueda por 24h en compra_agil_benchmark_cache — la API de
- * Mercado Público es lenta e inestable (ver compraAgilApiClient.js), y el
- * usuario suele volver a abrir la misma oportunidad varias veces mientras
- * decide el precio.
+ * ── Cambio 2026-09 — "no encuentra nada" ────────────────────────────────────
+ * Antes, estos dos botones llamaban a compraAgilApiClient.buscarOrdenesDeCompra,
+ * que golpea una API interna de Mercado Público bloqueada por WAF — confirmado
+ * en producción (caso real 1493-495-COT26) que devuelve 403 incluso desde el
+ * servidor real de RMG, no solo desde el navegador. Por eso los botones no
+ * encontraban nada.
+ *
+ * Reemplazado por compraAgilDatosAbiertos.js: una cache LOCAL, sincronizada
+ * mensualmente, de las cotizaciones de Compra Ágil que ChileCompra publica
+ * públicamente (sin WAF, sin autenticación) en su portal de Datos Abiertos.
+ * Es retrospectivo (~2 meses de rezago), correcto para benchmark de precios
+ * históricos — que es exactamente lo que estos dos botones necesitan.
+ *
+ * Se sigue cacheando 24h en compra_agil_benchmark_cache — aunque ahora la
+ * consulta es sobre una tabla local (rápida), evita recalcular el mismo
+ * resumen estadístico cada vez que el usuario reabre la misma oportunidad.
  */
 const { db, uuidv4 } = require('../../config/database')
-const api = require('./compraAgilApiClient')
+const datosAbiertos = require('./compraAgilDatosAbiertos')
 
 const TTL_HORAS = 24
 
@@ -45,16 +57,14 @@ function guardarCache(tipo, clave, payload) {
   } catch (_) { /* el cache es solo optimización, nunca debe tumbar la respuesta */ }
 }
 
-function resumenEstadistico(ordenes) {
-  const precios = ordenes.map(o => o.precio_unitario).filter(p => typeof p === 'number' && p > 0)
-  if (!precios.length) return { min: null, max: null, promedio: null, n: 0 }
-  const suma = precios.reduce((a, b) => a + b, 0)
-  return {
-    min: Math.min(...precios),
-    max: Math.max(...precios),
-    promedio: Math.round(suma / precios.length),
-    n: precios.length,
-  }
+/**
+ * Sin datos sincronizados todavía, se avisa explícitamente en vez de devolver
+ * un array vacío sin explicación — mismo principio de "nunca hacer parecer
+ * que buscamos y no encontramos nada" que causó la queja original.
+ */
+function sinDatosSincronizados() {
+  const meses = datosAbiertos.estadoSincronizacion()
+  return !meses.length
 }
 
 /**
@@ -71,23 +81,21 @@ async function benchmarkPorSolicitante({ organismoNombre, organismoRut, keyword,
     if (cache) return cache
   }
 
-  const resuelto = await api.resolverOrganismo(organismoRut || organismoNombre)
-  if (!resuelto.buyerCode) {
+  if (!organismoRut) {
     const resultado = {
-      ordenes: [], estadisticas: resumenEstadistico([]),
-      advertencia: `No se pudo resolver el organismo "${organismoNombre || organismoRut}" en el buscador de Mercado Público — puede que el nombre no calce exacto. Revisar manualmente en buscador.mercadopublico.cl/ordenes-de-compra.`,
+      ordenes: [], estadisticas: { min: null, max: null, promedio: null, n: 0 },
+      advertencia: `Falta el RUT del organismo ("${organismoNombre}") para buscar en el histórico local — Datos Abiertos indexa por RUT, no por nombre.`,
     }
     guardarCache('solicitante', clave, resultado)
     return resultado
   }
 
-  const hace6Meses = new Date()
-  hace6Meses.setMonth(hace6Meses.getMonth() - 6)
-  const { ordenes } = await api.buscarOrdenesDeCompra({
-    keyword, buyerCode: resuelto.buyerCode, fechaDesde: hace6Meses, fechaHasta: new Date(),
-  })
-
-  const resultado = { ordenes, estadisticas: resumenEstadistico(ordenes), organismoResuelto: resuelto.nombre || organismoNombre }
+  const resultado = datosAbiertos.benchmarkLocalPorSolicitante({ organismoRut, keyword })
+  if (sinDatosSincronizados()) {
+    resultado.advertencia = 'Todavía no se ha sincronizado ningún mes de Datos Abiertos de Compra Ágil — usa "Sincronizar histórico" en el módulo, o espera a la sincronización mensual automática.'
+  } else if (!resultado.ordenes.length) {
+    resultado.advertencia = `Sin cotizaciones históricas de "${organismoNombre || organismoRut}" para "${keyword}" en los meses sincronizados. Los datos de Compra Ágil se publican con ~2 meses de rezago — puede que este organismo simplemente no haya comprado esto antes, o que aún no se haya sincronizado el mes relevante.`
+  }
   guardarCache('solicitante', clave, resultado)
   return resultado
 }
@@ -105,13 +113,12 @@ async function benchmarkPorMercado({ keyword, forzar = false }) {
     if (cache) return cache
   }
 
-  const hace6Meses = new Date()
-  hace6Meses.setMonth(hace6Meses.getMonth() - 6)
-  const { ordenes } = await api.buscarOrdenesDeCompra({
-    keyword, fechaDesde: hace6Meses, fechaHasta: new Date(), limite: 50,
-  })
-
-  const resultado = { ordenes, estadisticas: resumenEstadistico(ordenes) }
+  const resultado = datosAbiertos.benchmarkLocalPorMercado({ keyword, limite: 50 })
+  if (sinDatosSincronizados()) {
+    resultado.advertencia = 'Todavía no se ha sincronizado ningún mes de Datos Abiertos de Compra Ágil — usa "Sincronizar histórico" en el módulo, o espera a la sincronización mensual automática.'
+  } else if (!resultado.ordenes.length) {
+    resultado.advertencia = `Sin cotizaciones históricas para "${keyword}" en los meses sincronizados. Los datos de Compra Ágil se publican con ~2 meses de rezago.`
+  }
   guardarCache('mercado', clave, resultado)
   return resultado
 }

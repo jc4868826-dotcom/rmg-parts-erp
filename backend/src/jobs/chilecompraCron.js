@@ -238,4 +238,4 @@ function iniciarCron() {
   console.log('⏰ Cron ChileCompra activado — todos los días 09:00 America/Santiago')
 }
 
-module.exports = { ejecutarIngesta, iniciarCron }
+module.exports = { ejecutarIngesta, iniciarCron, KEYWORDS }

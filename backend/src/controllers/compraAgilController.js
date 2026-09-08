@@ -12,6 +12,7 @@
 const { db } = require('../../config/database')
 const { importarCompraAgil, generarFundamentoCotizacion, sugerirPrecio } = require('../services/compraAgilAnalisis')
 const { benchmarkPorSolicitante, benchmarkPorMercado } = require('../services/compraAgilBenchmark')
+const datosAbiertos = require('../services/compraAgilDatosAbiertos')
 
 function withDetails(op) {
   if (!op) return null
@@ -114,4 +115,25 @@ const precioSugerido = (req, res) => {
   }
 }
 
-module.exports = { listar, importar, getDetalle, benchmarkSolicitante, benchmarkMercado, fundamento, precioSugerido }
+// ── Datos Abiertos — estado + sincronización manual (además de la mensual automática) ──
+const datosAbiertosEstado = (req, res) => {
+  try {
+    res.json({ meses: datosAbiertos.estadoSincronizacion() })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const datosAbiertosSincronizar = async (req, res) => {
+  try {
+    const resultados = await datosAbiertos.sincronizarMesesRecientes({ maxIntentos: 5 })
+    res.json({ resultados })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = {
+  listar, importar, getDetalle, benchmarkSolicitante, benchmarkMercado, fundamento, precioSugerido,
+  datosAbiertosEstado, datosAbiertosSincronizar,
+}
