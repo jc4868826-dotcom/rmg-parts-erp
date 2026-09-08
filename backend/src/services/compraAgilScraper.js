@@ -169,7 +169,39 @@ async function extraerTextoFicha(page, codigo) {
  * automáticamente con el mismo pipeline de siempre. Pensada para correr
  * seguido vía cron (ver compraAgilScraperCron.js) — sin ningún paso manual.
  */
+// ── INTERRUPTOR DE EMERGENCIA (2026-09-08, tarde) ───────────────────────────
+// Confirmado en los eventos de Render: lanzar Chromium (headless) tumbaba
+// TODO el servidor con "Ran out of memory (used over 512MB)" — el plan
+// actual de Render ("Starter", 512MB) no alcanza para el resto de la app
+// (la base SQLite completa vive en memoria vía sql.js — el respaldo pesaba
+// ~114MB solo esa) MÁS un Chromium real corriendo encima. El resultado fue
+// un crash-loop cada pocos minutos (login fallando, dashboard en cero) desde
+// que se activó este scraper — nada que ver con el login en sí.
+//
+// Mientras no se resuelva esto (subir el plan de Render, o mover el scraper
+// a un servicio/worker aparte con su propia memoria), el detector queda
+// apagado por defecto: no lanza Chromium, solo avisa por qué. Para
+// reactivarlo cuando haya memoria de sobra, poner la variable de entorno
+// COMPRA_AGIL_SCRAPER_ENABLED=true en Render. El código del scraper en sí
+// (todo lo de abajo) NO se tocó — sigue listo para usarse tal cual.
+const SCRAPER_HABILITADO = process.env.COMPRA_AGIL_SCRAPER_ENABLED === 'true'
+const MOTIVO_DESHABILITADO =
+  'Detector automático deshabilitado temporalmente: lanzar el navegador headless (Chromium) ' +
+  'satura la memoria del plan actual de Render (512MB) y tumbaba todo el sistema (confirmado ' +
+  'en los eventos de Render — "Ran out of memory"). Hay que subir el plan de Render (más RAM) o ' +
+  'mover este scraper a un servicio aparte antes de reactivarlo — ver detalle en ' +
+  'RMG_CompraAgil_Implementacion.md del proyecto.'
+
 async function detectarYImportarNuevas({ user = USER_AUTOMATICO } = {}) {
+  if (!SCRAPER_HABILITADO) {
+    const resumen = {
+      keywordsRevisadas: 0, codigosVistos: 0, nuevas: 0, importadas: [],
+      errores: [MOTIVO_DESHABILITADO], deshabilitado: true,
+      iniciado: new Date().toISOString(), finalizado: new Date().toISOString(),
+    }
+    _ultimoResumen = resumen
+    return resumen
+  }
   if (_corriendo) {
     // Ya hay una corrida en curso (cron o botón) — no se solapan, evita que
     // dos navegadores headless corran a la vez y agoten la memoria de Render.
