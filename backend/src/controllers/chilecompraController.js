@@ -71,9 +71,16 @@ function withDetails(op) {
 // ── Listado con filtros (fecha, región, días para el cierre, estado, texto) ──
 const getOportunidades = (req, res) => {
   try {
-    const { estado, region, fecha_desde, fecha_hasta, dias_vencimiento, q } = req.query
+    const { estado, region, fecha_desde, fecha_hasta, dias_vencimiento, q, fuente } = req.query
     let sql = 'SELECT * FROM oportunidades_chilecompra WHERE 1=1'
     const params = []
+    // 2026-09-09 — pedido explícito del usuario: filtro por tipo (Licitación /
+    // Compra Ágil) directamente en el Kanban de /chilecompra, que YA carga
+    // sin problemas (a diferencia de la página separada de Compra Ágil, que
+    // dependía de una llamada EN VIVO a la API de ChileCompra y podía
+    // demorar/fallar con 504 — este filtro solo lee de la base local, cero
+    // riesgo de timeout).
+    if (fuente)      { sql += ' AND fuente = ?';                params.push(fuente) }
     if (estado)      { sql += ' AND estado = ?';              params.push(estado) }
     if (region)      { sql += ' AND region = ?';               params.push(region) }
     if (fecha_desde) { sql += ' AND fecha_publicacion >= ?';   params.push(fecha_desde) }

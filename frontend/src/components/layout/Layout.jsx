@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark, Zap
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -41,11 +41,14 @@ const NAV_SECTIONS = [
     label: 'Canal Estatal',
     items: [
       { to: '/chilecompra',  icon: Landmark,        label: 'ChileCompra',     badge: 'chilecompra' },
-      // 2026-09-09 — esta página existía pero nunca tuvo entrada en el sidebar
-      // ni ruta en App.jsx: era invisible en la práctica salvo escribiendo la
-      // URL a mano. Corregido junto con el resto del esquema de Compra Ágil
-      // aprobado por el usuario.
-      { to: '/compra-agil',  icon: Zap,             label: 'Compra Ágil',     badge: null },
+      // 2026-09-09 — hubo una pestaña separada "/compra-agil" (Zap) acá; el
+      // usuario pidió explícitamente sacarla ("te pedí una pestaña nueva para
+      // evitar enredos y fue peor") porque dependía de una llamada en vivo a
+      // la API de ChileCompra que podía demorar/fallar, mientras que ESTE
+      // menú (ChileCompra) siempre carga sin problema al leer solo de la base
+      // local. La ruta /compra-agil sigue existiendo (App.jsx) por si hace
+      // falta para depurar, pero ya no se enlaza desde el sidebar — todo el
+      // flujo de Compra Ágil vive ahora acá, con el filtro de tipo de abajo.
     ],
   },
   {

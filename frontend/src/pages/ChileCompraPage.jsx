@@ -18,7 +18,7 @@ import {
   Landmark, Search, RefreshCw, X, AlertTriangle, CheckCircle2,
   XCircle, Clock, FileSearch, ClipboardCheck, Send, Trophy, Ban,
   MapPin, Calendar, Package, TrendingUp, ShieldCheck, ExternalLink,
-  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack, Eraser
+  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack, Eraser, Zap, Loader2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -77,7 +77,12 @@ const RANGOS_ANALISIS = [
 
 export default function ChileCompraPage() {
   const qc = useQueryClient()
-  const [filtros, setFiltros] = useState({ region: '', dias_vencimiento: '', q: '' })
+  // 2026-09-09 — pedido explícito del usuario: "agrégale un filtro donde
+  // aparezca el tipo (compra ágil)" en ESTE menú (ChileCompra), que actualiza
+  // sin problemas (lee solo de la base local) — a diferencia de la página
+  // separada de Compra Ágil, que dependía de una llamada en vivo a la API y
+  // podía demorar/fallar. fuente: '' = todos, 'licitacion' | 'compra_agil'.
+  const [filtros, setFiltros] = useState({ region: '', dias_vencimiento: '', q: '', fuente: '' })
   const [seleccionId, setSeleccionId] = useState(null)
   // 2026-09-09 — deep link ?abrir=<id> (pieza 3 del esquema aprobado): permite
   // que CompraAgilPage enlace directo al modal de gestión/pipeline de una
@@ -94,6 +99,7 @@ export default function ChileCompraPage() {
     region: filtros.region || undefined,
     dias_vencimiento: filtros.dias_vencimiento || undefined,
     q: filtros.q || undefined,
+    fuente: filtros.fuente || undefined,
   }
 
   const { data: oportunidades = [], isLoading } = useQuery({
@@ -122,6 +128,30 @@ export default function ChileCompraPage() {
       toast.success(n > 0 ? `Análisis completo: ${n} oportunidad(es) nueva(s)${dias}` : `Análisis completo: sin oportunidades nuevas${dias}`)
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al ejecutar el análisis'),
+  })
+
+  // 2026-09-09 — el detector de Compra Ágil (API oficial) y la sincronización
+  // de estado real de ChileCompra ya corren solas (cron cada 15 min / cada
+  // 2h). Estos dos botones las disparan ya mismo, sin depender de la página
+  // separada "/compra-agil" que el usuario pidió sacar del sidebar — todo el
+  // flujo de gestión vive en este único menú. Fire-and-forget simple: se
+  // avisa que empezó y se refresca el Kanban solo, sin UI de progreso extra.
+  const compraAgilBuscarMut = useMutation({
+    mutationFn: () => api.post('/compra-agil/scrapear-ahora').then(r => r.data),
+    onSuccess: (r) => {
+      toast(r.iniciado === false ? (r.mensaje || 'Ya hay una búsqueda en curso.') : 'Buscando Compra Ágil (RM, ayer/hoy)…', { icon: '⚡' })
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['chilecompra'] }), 8000)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || e.message),
+  })
+
+  const compraAgilSyncMut = useMutation({
+    mutationFn: () => api.post('/compra-agil/sincronizar-estado-ahora').then(r => r.data),
+    onSuccess: (r) => {
+      toast(r.iniciado === false ? (r.mensaje || 'Ya hay una sincronización en curso.') : 'Actualizando estado real desde ChileCompra…', { icon: '🔄' })
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['chilecompra'] }), 8000)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || e.message),
   })
 
   const porEstado = (estado) => oportunidades.filter(o => o.estado === estado)
@@ -169,6 +199,21 @@ export default function ChileCompraPage() {
             <RefreshCw size={15} className={analisisMut.isPending ? 'animate-spin' : ''} />
             {analisisMut.isPending ? 'Analizando…' : 'Hacer análisis ahora'}
           </button>
+          {/* 2026-09-09 — acciones de Compra Ágil movidas acá (ver nota arriba) */}
+          <button onClick={() => compraAgilBuscarMut.mutate()} disabled={compraAgilBuscarMut.isPending}
+            title="Busca Compra Ágil nuevas (Región Metropolitana, ayer/hoy)"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
+            style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
+            {compraAgilBuscarMut.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
+            Compra Ágil ahora
+          </button>
+          <button onClick={() => compraAgilSyncMut.mutate()} disabled={compraAgilSyncMut.isPending}
+            title="Consulta si alguna Compra Ágil ya importada se adjudicó/cerró en ChileCompra"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
+            style={{ background: 'rgba(15,35,60,0.05)', color: 'var(--rmg-off)' }}>
+            {compraAgilSyncMut.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+            Estado real
+          </button>
         </div>
       </div>
 
@@ -205,6 +250,13 @@ export default function ChileCompraPage() {
             className="w-full pl-8 pr-3 py-2 rounded-lg text-sm outline-none"
             style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)' }} />
         </div>
+        <select value={filtros.fuente} onChange={e => setFiltros(f => ({ ...f, fuente: e.target.value }))}
+          className="px-3 py-2 rounded-lg text-sm outline-none"
+          style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
+          <option value="">Todos los tipos</option>
+          <option value="licitacion">Licitación</option>
+          <option value="compra_agil">Compra Ágil</option>
+        </select>
         <select value={filtros.region} onChange={e => setFiltros(f => ({ ...f, region: e.target.value }))}
           className="px-3 py-2 rounded-lg text-sm outline-none"
           style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
@@ -220,8 +272,8 @@ export default function ChileCompraPage() {
           <option value="7">Cierra en 7 días</option>
           <option value="15">Cierra en 15 días</option>
         </select>
-        {(filtros.region || filtros.dias_vencimiento || filtros.q) && (
-          <button onClick={() => setFiltros({ region: '', dias_vencimiento: '', q: '' })}
+        {(filtros.region || filtros.dias_vencimiento || filtros.q || filtros.fuente) && (
+          <button onClick={() => setFiltros({ region: '', dias_vencimiento: '', q: '', fuente: '' })}
             className="text-xs px-2.5 py-2 rounded-lg font-medium" style={{ color: 'var(--rmg-muted)' }}>
             Limpiar filtros
           </button>

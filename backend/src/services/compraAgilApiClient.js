@@ -57,6 +57,19 @@ const REGIONES = {
  * sube el timeout base y se reintenta una vez con más margen antes de darse
  * por vencido.
  */
+// 2026-09-09 (incidente #4, real: "HTTP 504 — Endpoint request timed out" con
+// Metropolitana + ayer/hoy, es decir YA con el alcance chico) — el reintento
+// de arriba (30s→60s) solo cubría errores de RED (catch: DNS, conexión
+// rechazada, timeout del propio axios). Un 504 de gateway es una RESPUESTA
+// real que sí llega (solo que tarde) — antes caía directo en
+// `resp.status >= 400` de abajo y nunca pasaba por el reintento, así que un
+// solo 504 tumbaba la búsqueda entera sin segunda oportunidad. 502/503/504
+// son errores de infraestructura (gateway/proxy), típicamente transitorios —
+// vale la pena reintentar igual que un fallo de red. 429 (cuota agotada) y el
+// resto de los 4xx NO se reintentan: son errores del pedido mismo, reintentar
+// no cambia el resultado.
+const HTTP_REINTENTABLES = new Set([502, 503, 504])
+
 async function llamar(path, params, origen, intento = 1) {
   if (!TICKET) {
     throw new Error(`${origen}: falta la variable de entorno COMPRA_AGIL_API_TICKET (ticket de la API oficial de Compra Ágil).`)
@@ -81,9 +94,12 @@ async function llamar(path, params, origen, intento = 1) {
     const espera = resp.headers?.['retry-after']
     throw new Error(`${origen}: cuota diaria de la API Compra Ágil agotada (429)${espera ? ` — reintentar en ${espera}` : ' — reintentar mañana'}.`)
   }
+  if (HTTP_REINTENTABLES.has(resp.status) && intento < 2) {
+    return llamar(path, params, origen, intento + 1) // 502/503/504 — mismo reintento que un fallo de red
+  }
   if (resp.status >= 400) {
     const msg = resp.data?.errors?.[0]?.mensaje || (typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data))?.slice(0, 300)
-    throw new Error(`${origen}: HTTP ${resp.status} — ${msg}`)
+    throw new Error(`${origen}: HTTP ${resp.status} tras ${intento} intento(s) — ${msg}`)
   }
   if (resp.data?.success === 'NOK') {
     throw new Error(`${origen}: ${resp.data.errors?.[0]?.mensaje || 'la API respondió success:NOK sin mensaje.'}`)
