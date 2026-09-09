@@ -340,6 +340,14 @@ async function detectarYImportarAutomatico({
     // Ahora queda en el propio resumen que ve la UI (y el log del cron).
     parametrosBusqueda: { ventanaMs, estados, regiones },
   }
+  // 2026-09-09 — se publica el objeto `resumen` como "en curso" DESDE YA (no
+  // solo al terminar): como es el mismo objeto por referencia, cada campo que
+  // se va llenando abajo (codigosVistos, nuevas, importadas) queda visible de
+  // inmediato para quien esté haciendo polling de GET /scraper-estado
+  // mientras `corriendo` sigue en true — pedido del usuario tras quedarse sin
+  // ninguna señal de avance ("dónde veo el progreso"), más relevante ahora
+  // que la búsqueda es nacional y sin filtro de palabras (puede tardar más).
+  _ultimoResumen = resumen
   try {
     const codigosVistos = new Set()
 
@@ -582,6 +590,10 @@ async function sincronizarEstadosReales({ user = USER_AUTOMATICO } = {}) {
     revisadas: 0, actualizadas: 0, cambiosDetectados: [], errores: [],
     iniciado: new Date().toISOString(),
   }
+  // Mismo motivo que en detectarYImportarAutomatico: publicar el resumen "en
+  // curso" desde ya para que el polling de GET /sincronizar-estado-estado
+  // muestre avance real mientras corre, no solo el resultado final.
+  _ultimoResumenSync = resumen
   try {
     // Solo las que todavía pueden cambiar: sin estado real guardado, o con uno
     // que no es terminal, Y que tampoco ya tienen Orden de Compra registrada

@@ -8,7 +8,7 @@
  * "publicada" es SIEMPRE una confirmación manual — el sistema nunca envía
  * una oferta por sí solo, solo prepara y el humano confirma que ya la subió.
  */
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
@@ -152,22 +152,88 @@ export default function ChileCompraPage() {
   // de estado real de ChileCompra ya corren solas (cron cada 15 min / cada
   // 2h). Estos dos botones las disparan ya mismo, sin depender de la página
   // separada "/compra-agil" que el usuario pidió sacar del sidebar — todo el
-  // flujo de gestión vive en este único menú. Fire-and-forget simple: se
-  // avisa que empezó y se refresca el Kanban solo, sin UI de progreso extra.
+  // flujo de gestión vive en este único menú.
+  //
+  // 2026-09-09 (corregido) — el usuario preguntó "¿dónde veo el progreso?"
+  // tras quedarse con el toast de "ya hay una búsqueda en curso" sin ninguna
+  // señal de avance ni de cuándo termina. La versión anterior era
+  // fire-and-forget puro (un toast y un invalidate a ciegas a los 8s), lo que
+  // dejaba al usuario sin saber si seguía corriendo, si terminó, o si se
+  // trabó — más grave ahora que el detector trae TODO el país sin filtro de
+  // palabras (puede tardar bastante más que antes). Portado de la página
+  // separada CompraAgilPage.jsx (que ya tenía este polling resuelto):
+  // GET /scraper-estado y /sincronizar-estado-estado cada 4s mientras la
+  // corrida está activa, hasta que `corriendo` vuelva a false.
+  const [buscandoCompraAgil, setBuscandoCompraAgil] = useState(false)
+  const ultimoResumenBuscarVisto = useRef(null)
+
+  const { data: scraperEstado } = useQuery({
+    queryKey: ['chilecompra', 'compra-agil-scraper-estado'],
+    queryFn: () => api.get('/compra-agil/scraper-estado').then(r => r.data),
+    refetchInterval: buscandoCompraAgil ? 4000 : false,
+  })
+
+  useEffect(() => {
+    if (!scraperEstado) return
+    if (scraperEstado.corriendo) { setBuscandoCompraAgil(true); return }
+    if (!buscandoCompraAgil) return // no era nuestra corrida (ej. la del cron) — no avisar nada
+    setBuscandoCompraAgil(false)
+    const resumen = scraperEstado.ultimoResumen
+    if (!resumen || resumen === ultimoResumenBuscarVisto.current) return
+    ultimoResumenBuscarVisto.current = resumen
+    qc.invalidateQueries({ queryKey: ['chilecompra'] })
+    if (resumen.importadas?.length) {
+      toast.success(`${resumen.importadas.length} oportunidad(es) nueva(s) de Compra Ágil detectada(s) e importada(s).`)
+    } else {
+      toast(`Sin oportunidades nuevas por ahora (${resumen.codigosVistos ?? 0} código(s) revisado(s) a nivel nacional).`, { icon: '🔎' })
+    }
+    if (resumen.errores?.length) {
+      toast.error(`${resumen.errores.length} error(es) durante la búsqueda: ${resumen.errores[0]}`, { duration: 12000 })
+    }
+  }, [scraperEstado, buscandoCompraAgil, qc])
+
   const compraAgilBuscarMut = useMutation({
     mutationFn: () => api.post('/compra-agil/scrapear-ahora').then(r => r.data),
     onSuccess: (r) => {
       toast(r.iniciado === false ? (r.mensaje || 'Ya hay una búsqueda en curso.') : 'Buscando Compra Ágil (todo el país, últimas 24h)…', { icon: '⚡' })
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['chilecompra'] }), 8000)
+      setBuscandoCompraAgil(true)
     },
     onError: (e) => toast.error(e.response?.data?.error || e.message),
   })
+
+  const [sincronizandoEstadoReal, setSincronizandoEstadoReal] = useState(false)
+  const ultimoResumenSyncVisto = useRef(null)
+
+  const { data: syncEstadoData } = useQuery({
+    queryKey: ['chilecompra', 'compra-agil-sync-estado-estado'],
+    queryFn: () => api.get('/compra-agil/sincronizar-estado-estado').then(r => r.data),
+    refetchInterval: sincronizandoEstadoReal ? 4000 : false,
+  })
+
+  useEffect(() => {
+    if (!syncEstadoData) return
+    if (syncEstadoData.corriendo) { setSincronizandoEstadoReal(true); return }
+    if (!sincronizandoEstadoReal) return
+    setSincronizandoEstadoReal(false)
+    const resumen = syncEstadoData.ultimoResumen
+    if (!resumen || resumen === ultimoResumenSyncVisto.current) return
+    ultimoResumenSyncVisto.current = resumen
+    qc.invalidateQueries({ queryKey: ['chilecompra'] })
+    if (resumen.cambiosDetectados?.length) {
+      toast.success(`${resumen.cambiosDetectados.length} oportunidad(es) cambiaron de estado en ChileCompra.`, { duration: 8000 })
+    } else {
+      toast(`Sin cambios de estado (${resumen.revisadas ?? 0} revisada(s)).`, { icon: '🔄' })
+    }
+    if (resumen.errores?.length) {
+      toast.error(`${resumen.errores.length} error(es) sincronizando estado: ${resumen.errores[0]}`, { duration: 10000 })
+    }
+  }, [syncEstadoData, sincronizandoEstadoReal, qc])
 
   const compraAgilSyncMut = useMutation({
     mutationFn: () => api.post('/compra-agil/sincronizar-estado-ahora').then(r => r.data),
     onSuccess: (r) => {
       toast(r.iniciado === false ? (r.mensaje || 'Ya hay una sincronización en curso.') : 'Actualizando estado real desde ChileCompra…', { icon: '🔄' })
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['chilecompra'] }), 8000)
+      setSincronizandoEstadoReal(true)
     },
     onError: (e) => toast.error(e.response?.data?.error || e.message),
   })
@@ -243,22 +309,44 @@ export default function ChileCompraPage() {
             {analisisMut.isPending ? 'Analizando…' : 'Hacer análisis ahora'}
           </button>
           {/* 2026-09-09 — acciones de Compra Ágil movidas acá (ver nota arriba) */}
-          <button onClick={() => compraAgilBuscarMut.mutate()} disabled={compraAgilBuscarMut.isPending}
+          <button onClick={() => compraAgilBuscarMut.mutate()} disabled={buscandoCompraAgil || compraAgilBuscarMut.isPending}
             title="Trae TODAS las Compra Ágil publicadas en todo el país (últimas 24h), sin filtro de palabras — filtra después con los filtros de esta página"
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
             style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
-            {compraAgilBuscarMut.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
-            Compra Ágil ahora
+            {(buscandoCompraAgil || compraAgilBuscarMut.isPending) ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
+            {buscandoCompraAgil
+              ? `Buscando… (${scraperEstado?.ultimoResumen?.codigosVistos ?? 0} vistos)`
+              : 'Compra Ágil ahora'}
           </button>
-          <button onClick={() => compraAgilSyncMut.mutate()} disabled={compraAgilSyncMut.isPending}
+          <button onClick={() => compraAgilSyncMut.mutate()} disabled={sincronizandoEstadoReal || compraAgilSyncMut.isPending}
             title="Consulta si alguna Compra Ágil ya importada se adjudicó/cerró en ChileCompra"
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
             style={{ background: 'rgba(15,35,60,0.05)', color: 'var(--rmg-off)' }}>
-            {compraAgilSyncMut.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-            Estado real
+            {(sincronizandoEstadoReal || compraAgilSyncMut.isPending) ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+            {sincronizandoEstadoReal ? 'Actualizando…' : 'Estado real'}
           </button>
         </div>
       </div>
+
+      {/* 2026-09-09 — línea de progreso: antes el único indicador era un toast
+          que desaparecía a los pocos segundos, dejando al usuario sin forma
+          de saber si la búsqueda (ahora nacional, sin filtro) seguía corriendo
+          o ya terminó. Esta línea vive mientras cualquiera de las dos corridas
+          esté activa y se actualiza sola cada 4s con el polling de arriba. */}
+      {(buscandoCompraAgil || sincronizandoEstadoReal) && (
+        <div className="flex items-center gap-2 -mt-2 px-1 text-xs" style={{ color: 'var(--rmg-muted)' }}>
+          <Loader2 size={12} className="animate-spin" />
+          {buscandoCompraAgil && (
+            <span>
+              Buscando Compra Ágil en todo el país… {scraperEstado?.ultimoResumen?.codigosVistos ?? 0} código(s) revisado(s),{' '}
+              {scraperEstado?.ultimoResumen?.importadas?.length ?? 0} nueva(s) importada(s) hasta ahora.
+            </span>
+          )}
+          {sincronizandoEstadoReal && (
+            <span>Sincronizando estado real desde ChileCompra…</span>
+          )}
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
