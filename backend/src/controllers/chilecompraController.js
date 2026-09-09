@@ -90,8 +90,13 @@ const getOportunidades = (req, res) => {
       params.push(Number(dias_vencimiento))
     }
     if (q) {
-      sql += ' AND (LOWER(nombre) LIKE LOWER(?) OR LOWER(organismo_nombre) LIKE LOWER(?))'
-      params.push(`%${q}%`, `%${q}%`)
+      // 2026-09-09 (bug real, confirmado): el buscador NUNCA incluyó
+      // codigo_externo — buscar el código exacto de una publicación (ej.
+      // "2428-1262-COT26", como aparece en el propio portal de Mercado
+      // Público) devolvía "sin resultados" aunque el registro existiera,
+      // porque solo comparaba contra nombre/organismo. Agregado acá.
+      sql += ' AND (LOWER(nombre) LIKE LOWER(?) OR LOWER(organismo_nombre) LIKE LOWER(?) OR LOWER(codigo_externo) LIKE LOWER(?))'
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`)
     }
     sql += ' ORDER BY score_total DESC NULLS LAST, fecha_cierre ASC'
     const rows = db.prepare(sql).all(...params)
