@@ -30,15 +30,37 @@ let _corriendo = false
 let _ultimoResumen = null
 const USER_AUTOMATICO = { email: 'api-automatico' }
 
-// 2026-09-09 — alcance inicial ACOTADO a propósito ("empezar chico y
-// amplificar después", pedido explícito del usuario tras dos incidentes de
-// timeout/500 con ventanas y regiones amplias): por defecto, solo Región
-// Metropolitana (código 13) y solo lo publicado ayer/hoy (24h). Se amplía
-// SIN redeploy cambiando las variables de entorno en Render — un eje a la
-// vez (primero ventana, después regiones) — o desde el botón "Buscar ahora"
-// de la UI, que puede mandar sus propios valores por corrida.
+// 2026-09-09 (corregido tras un caso real perdido: Quilpué/2428-1262-COT26,
+// Región de Valparaíso — el detector nunca la vio porque este archivo
+// restringía la búsqueda automática a solo Región Metropolitana) — pedido
+// explícito del usuario: "debió traerlo, debió hacer match con los
+// intereses...si lo hace en ChileCompras [Licitaciones], de hecho lo que
+// debe hacer es traer lo que ve en Mercado Público, no inventar...luego en
+// el dash se filtra".
+//
+// Corrección final (misma sesión, tras un segundo comentario del usuario):
+// "debes traer lo que encuentra Mercado Público, yo agregué palabras...si tú
+// restringes a palabras específicas, no conversa con lo que hago en el
+// portal...tú solo extrae lo que sale en Mercado Público en mi búsqueda,
+// luego filtramos en el sistema nuestro" — a diferencia de Licitaciones
+// (chilecompraCron.js), que SÍ filtra por lista de palabras clave (KEYWORDS)
+// porque el volumen nacional diario de licitaciones es demasiado alto para
+// importar todo, Compra Ágil NO aplica ningún filtro de palabras clave al
+// ingestar: se trae TODO lo publicado a nivel nacional (regiones=[] →
+// listarPublicadasEnVentana no manda parámetro `region`, la API devuelve
+// TODO el país) y CUALQUIER código nuevo visto se importa. El filtrado real
+// (búsqueda por texto, tipo, región) vive enteramente en el dashboard
+// (GET /chilecompra?...), nunca antes de que el dato llegue a la base de
+// datos. Esta asimetría entre Licitaciones y Compra Ágil fue confirmada
+// explícitamente por el usuario vía pregunta directa ("Todo, sin filtro de
+// palabras (Recomendado)"). La ventana de 24h se mantiene (el cron corre
+// cada 15 min, así que no hace falta traer más que "cambios recientes"; ver
+// listarPublicadasEnVentana para el detalle de qué es `ttl_cambio_ms`). El
+// timeout/504 que motivó la restricción original ya se resolvió por otro
+// lado (reintento en 502/503/504, ver compraAgilApiClient.llamar) — no hacía
+// falta sacrificar cobertura nacional para evitarlo.
 const VENTANA_DEFAULT_MS = Number(process.env.COMPRA_AGIL_API_VENTANA_MS || 24 * 3600_000) // 24h (ayer/hoy)
-const REGIONES_DEFAULT = (process.env.COMPRA_AGIL_API_REGIONES || '13').split(',').map(s => s.trim()).filter(Boolean).map(Number)
+const REGIONES_DEFAULT = (process.env.COMPRA_AGIL_API_REGIONES || '').split(',').map(s => s.trim()).filter(Boolean).map(Number) // [] = todo el país
 const ESTADOS_DEFAULT = (process.env.COMPRA_AGIL_API_ESTADOS || 'publicada').split(',').map(s => s.trim()).filter(Boolean)
 
 function estado() {
@@ -275,22 +297,30 @@ function normalizar(txt) {
 /**
  * Detector automático — reemplaza a compraAgilScraper.detectarYImportarNuevas
  * (navegador headless, deshabilitado desde 2026-09-08 por saturar la memoria
- * de Render). Trae TODAS las Compra Ágil "publicada" con cambios recientes
- * (una sola consulta paginada, ver listarPublicadasEnVentana) y filtra en
- * memoria por las palabras clave del rubro RMG (misma lista que
- * chilecompraCron.js) contra el nombre de cada publicación — cero navegador,
- * cero pasos manuales, cero riesgo de memoria.
+ * de Render). Trae TODAS las Compra Ágil "publicada" con cambios recientes,
+ * a nivel NACIONAL (una sola consulta paginada, ver listarPublicadasEnVentana)
+ * — cero navegador, cero pasos manuales, cero riesgo de memoria.
  *
- * ⚠️ 2026-09-08 (noche, incidente #2): ANTES esto hacía 12 búsquedas
- * separadas (`q=<palabra clave>`) contra la API. En producción, 5 de esas 12
- * palabras — las más genéricas ("lubricante", "aceite", "grasa",
- * "refrigerante", "anticongelante") — devolvían HTTP 500 en el 100% de las
- * corridas (confirmado en los logs de Render, mismo resultado en 8+
- * corridas separadas), mientras que palabras más específicas sí funcionaban
- * — el detector quedaba ciego a esas 5 categorías (justo las más
- * importantes del rubro) en cada pasada. Ver el aviso completo en
- * compraAgilApiClient.listarPublicadasEnVentana(). El fix (esta versión)
- * evita el parámetro `q` por completo.
+ * ⚠️ 2026-09-09 (caso real perdido: Quilpué/2428-1262-COT26) — ANTES esto
+ * filtraba en memoria por una lista fija de palabras clave del rubro (la
+ * misma de chilecompraCron.js). Pedido explícito del usuario tras perder ese
+ * caso real: "debió traerlo, debió hacer match con los intereses...si lo
+ * hace en Licitaciones, de hecho lo que debe hacer es traer lo que ve en
+ * Mercado Público, no inventar...luego en el dash se filtra". Licitaciones
+ * (chilecompraCron.js) SÍ sigue filtrando por keyword porque ahí el volumen
+ * nacional diario es demasiado alto para traer todo — pero para Compra Ágil
+ * el usuario decidió explícitamente (tras comparar las opciones) NO aplicar
+ * ningún filtro de palabras en la ingesta: se trae TODO lo publicado a nivel
+ * nacional tal cual, y el filtrado/relevancia se hace después en el
+ * dashboard (buscador, filtro de tipo/región) — nunca se pierde un caso real
+ * por un filtro de palabras mal calibrado. A cambio, hay más volumen en la
+ * base de datos; es la contrapartida aceptada.
+ *
+ * ⚠️ 2026-09-08 (noche, incidente #2, contexto histórico): ANTES de todo esto
+ * el sistema hacía 12 búsquedas separadas (`q=<palabra clave>`) contra la
+ * API, y 5 de esas 12 palabras devolvían HTTP 500 en el 100% de las corridas
+ * — otra razón más para no depender de una lista de palabras contra esta
+ * API. Ver el aviso completo en compraAgilApiClient.listarPublicadasEnVentana().
  */
 async function detectarYImportarAutomatico({
   ventanaMs = VENTANA_DEFAULT_MS, user = USER_AUTOMATICO,
@@ -302,7 +332,7 @@ async function detectarYImportarAutomatico({
   _corriendo = true
 
   const resumen = {
-    keywordsRevisadas: 0, codigosVistos: 0, nuevas: 0,
+    codigosVistos: 0, nuevas: 0,
     importadas: [], errores: [], iniciado: new Date().toISOString(),
     // 2026-09-09 — transparencia pedida por el usuario: "que esta buscando...
     // que estado? entre que fechas? regiones?" — antes esto era invisible,
@@ -311,18 +341,12 @@ async function detectarYImportarAutomatico({
     parametrosBusqueda: { ventanaMs, estados, regiones },
   }
   try {
-    const { KEYWORDS } = require('../jobs/chilecompraCron')
-    resumen.keywordsRevisadas = KEYWORDS.length
-    const keywordsNorm = KEYWORDS.map(normalizar)
     const codigosVistos = new Set()
 
     try {
       const publicadas = await api.listarPublicadasEnVentana({ ventanaMs, estados, regiones })
       for (const it of publicadas) {
-        const nombreNorm = normalizar(it.nombre)
-        if (keywordsNorm.some(k => nombreNorm.includes(k))) {
-          codigosVistos.add(it.codigo)
-        }
+        if (it.codigo) codigosVistos.add(it.codigo)
       }
     } catch (e) {
       resumen.errores.push(`Listado publicada: ${e.message}`)
@@ -357,7 +381,7 @@ async function detectarYImportarAutomatico({
   console.log(
     `ℹ️ Compra Ágil API — estado=[${resumen.parametrosBusqueda.estados.join(',')}] ` +
     `ventana=${horas}h región=[${resumen.parametrosBusqueda.regiones.join(',') || 'todas'}] — ` +
-    `${resumen.keywordsRevisadas} keyword(s), ${resumen.codigosVistos} código(s) vistos, ` +
+    `${resumen.codigosVistos} código(s) vistos, ` +
     `${resumen.nuevas} nueva(s), ${resumen.importadas.length} importada(s), ${resumen.errores.length} error(es)`
   )
   _ultimoResumen = resumen

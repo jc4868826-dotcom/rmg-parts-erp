@@ -19,9 +19,26 @@ import {
   XCircle, Clock, FileSearch, ClipboardCheck, Send, Trophy, Ban,
   MapPin, Calendar, Package, TrendingUp, ShieldCheck, ExternalLink,
   History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack, Eraser, Zap, Loader2,
-  Building2, Globe2,
+  Building2, Globe2, ClipboardPaste, Paperclip,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+
+// 2026-09-09 — caso real que expuso el hueco: "2428-1262-COT26" (Quilpué)
+// nunca quedó guardado como registro real en este sistema — solo existía como
+// referencia en comentarios del código de un ejercicio manual anterior. Esta
+// función (traída de la página separada "/compra-agil", ya sacada del
+// sidebar) es la única forma de meter a mano una Compra Ágil que el detector
+// automático no encontró — lee un File del navegador como base64 puro (sin el
+// prefijo "data:...;base64,"), mismo formato que espera
+// chilecompraDocReader.leerAnexos en el backend.
+function archivoABase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 const REGIONES = [
   'Arica y Parinacota', 'Tarapacá', 'Antofagasta', 'Atacama', 'Coquimbo',
@@ -140,7 +157,7 @@ export default function ChileCompraPage() {
   const compraAgilBuscarMut = useMutation({
     mutationFn: () => api.post('/compra-agil/scrapear-ahora').then(r => r.data),
     onSuccess: (r) => {
-      toast(r.iniciado === false ? (r.mensaje || 'Ya hay una búsqueda en curso.') : 'Buscando Compra Ágil (RM, ayer/hoy)…', { icon: '⚡' })
+      toast(r.iniciado === false ? (r.mensaje || 'Ya hay una búsqueda en curso.') : 'Buscando Compra Ágil (todo el país, últimas 24h)…', { icon: '⚡' })
       setTimeout(() => qc.invalidateQueries({ queryKey: ['chilecompra'] }), 8000)
     },
     onError: (e) => toast.error(e.response?.data?.error || e.message),
@@ -151,6 +168,31 @@ export default function ChileCompraPage() {
     onSuccess: (r) => {
       toast(r.iniciado === false ? (r.mensaje || 'Ya hay una sincronización en curso.') : 'Actualizando estado real desde ChileCompra…', { icon: '🔄' })
       setTimeout(() => qc.invalidateQueries({ queryKey: ['chilecompra'] }), 8000)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || e.message),
+  })
+
+  // ── Agregar una puntual a mano (2026-09-09, traído de la página separada)
+  // Caso real: "2428-1262-COT26" (Quilpué) nunca quedó guardada — el detector
+  // automático solo cubre RM y palabras clave del rubro; esto es lo único que
+  // permite meter a mano una que se escapó (otra región, ya cerrada, etc.).
+  const [mostrarManual, setMostrarManual] = useState(false)
+  const [codigoManual, setCodigoManual] = useState('')
+  const [textoManual, setTextoManual] = useState('')
+  const [archivosManual, setArchivosManual] = useState([]) // File[]
+
+  const importarManualMut = useMutation({
+    mutationFn: async ({ codigo: cod, texto, archivos }) => {
+      const documentos = await Promise.all(archivos.map(async (f) => ({
+        base64: await archivoABase64(f), mediaType: f.type, nombre: f.name,
+      })))
+      return api.post('/compra-agil/importar-manual', { codigo: cod, texto, documentos }).then(r => r.data)
+    },
+    onSuccess: (op) => {
+      toast.success(`Importada: ${op.nombre || op.codigo_externo}`)
+      qc.invalidateQueries({ queryKey: ['chilecompra'] })
+      setSeleccionId(op.id)
+      setCodigoManual(''); setTextoManual(''); setArchivosManual([]); setMostrarManual(false)
     },
     onError: (e) => toast.error(e.response?.data?.error || e.message),
   })
@@ -202,7 +244,7 @@ export default function ChileCompraPage() {
           </button>
           {/* 2026-09-09 — acciones de Compra Ágil movidas acá (ver nota arriba) */}
           <button onClick={() => compraAgilBuscarMut.mutate()} disabled={compraAgilBuscarMut.isPending}
-            title="Busca Compra Ágil nuevas (Región Metropolitana, ayer/hoy)"
+            title="Trae TODAS las Compra Ágil publicadas en todo el país (últimas 24h), sin filtro de palabras — filtra después con los filtros de esta página"
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
             style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
             {compraAgilBuscarMut.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
@@ -278,6 +320,68 @@ export default function ChileCompraPage() {
             className="text-xs px-2.5 py-2 rounded-lg font-medium" style={{ color: 'var(--rmg-muted)' }}>
             Limpiar filtros
           </button>
+        )}
+      </div>
+
+      {/* Agregar una puntual a mano — para lo que el detector automático no
+          encuentra (otra región, ya cerrada, fuera de las palabras clave del
+          rubro, etc.). Colapsado por defecto. */}
+      <div className="rmg-card p-0 overflow-hidden">
+        <button
+          onClick={() => setMostrarManual(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium"
+        >
+          <span className="flex items-center gap-2">
+            <ClipboardPaste size={15} style={{ color: 'var(--rmg-muted)' }} /> Agregar una puntual a mano (no la encontró el detector automático)
+          </span>
+          <ChevronDown size={16} style={{ transform: mostrarManual ? 'rotate(180deg)' : 'none', color: 'var(--rmg-muted)' }} />
+        </button>
+        {mostrarManual && (
+          <div className="px-4 pb-4 space-y-3">
+            <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+              Abre la publicación en <a href="https://buscador.mercadopublico.cl" target="_blank" rel="noreferrer" style={{ color: 'var(--rmg-teal)' }}>buscador.mercadopublico.cl</a> o
+              en el portal de Compra Ágil, copia el código y el texto de lo que piden (o descarga el PDF si trae anexo) y pégalo/súbelo acá — una IA lee lo que sea (texto plano o PDF) y extrae los ítems.
+            </p>
+            <input
+              value={codigoManual}
+              onChange={e => setCodigoManual(e.target.value)}
+              placeholder="Código de la publicación (ej. 2428-1262-COT26)"
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={{ border: '1px solid rgba(15,35,60,0.15)' }}
+            />
+            <textarea
+              value={textoManual}
+              onChange={e => setTextoManual(e.target.value)}
+              placeholder="Pega acá el texto de lo que piden (opcional si subes un PDF)…"
+              rows={4}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={{ border: '1px solid rgba(15,35,60,0.15)' }}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer" style={{ border: '1px solid rgba(15,35,60,0.15)' }}>
+                <Paperclip size={14} /> Adjuntar PDF/imagen/Word
+                <input
+                  type="file" multiple hidden accept=".pdf,.doc,.docx,image/*"
+                  onChange={e => setArchivosManual(prev => [...prev, ...Array.from(e.target.files || [])])}
+                />
+              </label>
+              {archivosManual.map((f, i) => (
+                <span key={i} className="text-xs px-2 py-1 rounded-lg flex items-center gap-1" style={{ background: 'rgba(15,35,60,0.04)' }}>
+                  {f.name}
+                  <button onClick={() => setArchivosManual(prev => prev.filter((_, j) => j !== i))}><X size={12} /></button>
+                </span>
+              ))}
+            </div>
+            <button
+              disabled={!codigoManual.trim() || (!textoManual.trim() && !archivosManual.length) || importarManualMut.isPending}
+              onClick={() => importarManualMut.mutate({ codigo: codigoManual.trim(), texto: textoManual.trim(), archivos: archivosManual })}
+              className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 text-white disabled:opacity-50"
+              style={{ background: 'var(--rmg-teal)' }}
+            >
+              {importarManualMut.isPending ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              Leer con IA e importar
+            </button>
+          </div>
         )}
       </div>
 
