@@ -46,19 +46,28 @@ const USER_AUTOMATICO = { email: 'api-automatico' }
 // (chilecompraCron.js), que SÍ filtra por lista de palabras clave (KEYWORDS)
 // porque el volumen nacional diario de licitaciones es demasiado alto para
 // importar todo, Compra Ágil NO aplica ningún filtro de palabras clave al
-// ingestar: se trae TODO lo publicado a nivel nacional (regiones=[] →
-// listarPublicadasEnVentana no manda parámetro `region`, la API devuelve
-// TODO el país) y CUALQUIER código nuevo visto se importa. El filtrado real
-// (búsqueda por texto, tipo, región) vive enteramente en el dashboard
-// (GET /chilecompra?...), nunca antes de que el dato llegue a la base de
-// datos. Esta asimetría entre Licitaciones y Compra Ágil fue confirmada
-// explícitamente por el usuario vía pregunta directa ("Todo, sin filtro de
-// palabras (Recomendado)"). La ventana de 24h se mantiene (el cron corre
-// cada 15 min, así que no hace falta traer más que "cambios recientes"; ver
-// listarPublicadasEnVentana para el detalle de qué es `ttl_cambio_ms`). El
-// timeout/504 que motivó la restricción original ya se resolvió por otro
-// lado (reintento en 502/503/504, ver compraAgilApiClient.llamar) — no hacía
-// falta sacrificar cobertura nacional para evitarlo.
+// ingestar: se trae TODO lo publicado a nivel nacional (regiones=[]) y
+// CUALQUIER código nuevo visto se importa. El filtrado real (búsqueda por
+// texto, tipo, región) vive enteramente en el dashboard (GET /chilecompra?...),
+// nunca antes de que el dato llegue a la base de datos. Esta asimetría entre
+// Licitaciones y Compra Ágil fue confirmada explícitamente por el usuario vía
+// pregunta directa ("Todo, sin filtro de palabras (Recomendado)"). La ventana
+// de 24h se mantiene (el cron corre cada 15 min, así que no hace falta traer
+// más que "cambios recientes"; ver listarPublicadasEnVentana para el detalle
+// de qué es `ttl_cambio_ms`).
+//
+// 2026-09-09 (incidente #5, confirmado en producción con evidencia real): la
+// primera versión de este fix pedía el listado nacional SIN `region` en una
+// sola llamada — y esa consulta le da 504 "Endpoint request timed out" a la
+// propia API de ChileCompra, incluso después del reintento a 60s
+// (compraAgilApiClient.llamar). No era un problema de nuestro timeout: es que
+// sin filtro de región, la consulta de ELLOS es demasiado pesada. La solución
+// (en compraAgilApiClient.listarPublicadasEnVentana) fue partir la misma
+// consulta nacional, sin ningún filtro de palabras ni exclusión de región, en
+// 16 llamadas — una por región — en vez de una sola. Cobertura sigue siendo
+// 100% nacional; solo cambió CÓMO se le pide a la API. Si una región puntual
+// falla, se salta esa región (queda registrada en el resumen) y se sigue con
+// las demás, en vez de perder la corrida completa por un solo timeout.
 const VENTANA_DEFAULT_MS = Number(process.env.COMPRA_AGIL_API_VENTANA_MS || 24 * 3600_000) // 24h (ayer/hoy)
 const REGIONES_DEFAULT = (process.env.COMPRA_AGIL_API_REGIONES || '').split(',').map(s => s.trim()).filter(Boolean).map(Number) // [] = todo el país
 const ESTADOS_DEFAULT = (process.env.COMPRA_AGIL_API_ESTADOS || 'publicada').split(',').map(s => s.trim()).filter(Boolean)
@@ -352,9 +361,18 @@ async function detectarYImportarAutomatico({
     const codigosVistos = new Set()
 
     try {
-      const publicadas = await api.listarPublicadasEnVentana({ ventanaMs, estados, regiones })
+      // 2026-09-09 (incidente #5) — listarPublicadasEnVentana ahora pide una
+      // región a la vez (16 llamadas chicas en vez de 1 pesada) porque el
+      // listado nacional sin `region` respondía 504 del lado de ChileCompra.
+      // Devuelve { items, erroresPorRegion } — una región que falle no tumba
+      // las demás, así que se registra el detalle pero se sigue con lo que sí
+      // llegó.
+      const { items: publicadas, erroresPorRegion } = await api.listarPublicadasEnVentana({ ventanaMs, estados, regiones })
       for (const it of publicadas) {
         if (it.codigo) codigosVistos.add(it.codigo)
+      }
+      if (erroresPorRegion?.length) {
+        resumen.errores.push(...erroresPorRegion.map(e => `Listado publicada — ${e}`))
       }
     } catch (e) {
       resumen.errores.push(`Listado publicada: ${e.message}`)

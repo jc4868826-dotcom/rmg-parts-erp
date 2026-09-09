@@ -214,8 +214,10 @@ async function listarCodigosPublicados({ q, ventanaMs = 6 * 3600_000 } = {}) {
 
 /**
  * Lista TODAS las Compra Ágil "publicada" con cambios dentro de `ventanaMs`
- * — SIN filtro `q` — y pagina hasta traer todo. Cada ítem trae al menos
- * {codigo, nombre}.
+ * — SIN filtro `q` — pidiendo una región a la vez (ver incidente #5 abajo) y
+ * paginando cada una hasta traer todo. Cada ítem trae al menos {codigo,
+ * nombre}. Devuelve `{ items, erroresPorRegion }` — no solo el arreglo — para
+ * que una región puntual que falle no tumbe la corrida completa.
  *
  * ⚠️ 2026-09-08 (noche, incidente #2 — "sigue el error al buscar"): el
  * detector automático hacía 12 llamadas separadas (una por palabra clave del
@@ -249,25 +251,67 @@ async function listarCodigosPublicados({ q, ventanaMs = 6 * 3600_000 } = {}) {
  * plano a axios (que serializaría un array como region[]=5, que la API no
  * entiende).
  */
+// 2026-09-09 (incidente #5, real: nationwide sin `region` → 504 "Endpoint
+// request timed out" en la propia API de ChileCompra, incluso con el
+// reintento a 60s de `llamar()` — ver más abajo). Todos los códigos de región
+// válidos según la guía oficial (mismo mapa que REGIONES) — se usa para
+// partir la consulta nacional en una llamada por región cuando no se pide
+// ninguna región específica.
+const TODAS_LAS_REGIONES = Object.keys(REGIONES).map(Number)
+
+/**
+ * ⚠️ 2026-09-09 (incidente #5 — reportado en producción con evidencia real):
+ * pedirle a la API el listado nacional SIN `region` (un solo llamado, sin
+ * filtro) responde 504 "Endpoint request timed out" ya en la página 1 — y
+ * eso NO se arregla subiendo el timeout del cliente (el reintento de
+ * `llamar()` ya sube a 60s y igual da 504): es un timeout del LADO DE
+ * CHILECOMPRA, probablemente porque sin `region` su consulta hace un barrido
+ * mucho más pesado. La misma consulta acotada a una región (como
+ * `region=13`, Metropolitana, que es como corría antes) responde normal.
+ *
+ * La solución NO es volver a restringir cobertura — eso es justo lo que el
+ * usuario pidió sacar ("debes traer lo que encuentra Mercado Público... tú
+ * solo extrae lo que sale, luego filtramos en el sistema nuestro"). La
+ * solución es partir la MISMA consulta nacional (sin ningún filtro de
+ * palabras ni exclusión de región) en 16 llamadas chicas — una por región —
+ * en vez de una sola pesada. Cobertura sigue siendo 100% nacional; solo
+ * cambia CÓMO se le pide a la API, no QUÉ se trae. Si una región puntual
+ * falla (504, 500, etc.), se salta esa región y se sigue con las demás en
+ * vez de perder la corrida completa — el error queda registrado en
+ * `erroresPorRegion` para que quede visible en el resumen que ve el usuario.
+ */
 async function listarPublicadasEnVentana({ ventanaMs = 6 * 3600_000, estados = ['publicada'], regiones = [] } = {}) {
+  const listaRegiones = (regiones && regiones.length) ? regiones : TODAS_LAS_REGIONES
   const items = []
-  let pagina = 1
-  let totalPaginas = 1
-  do {
-    const qp = new URLSearchParams()
-    qp.set('ttl_cambio_ms', String(ventanaMs))
-    qp.set('estado', (estados?.length ? estados : ['publicada']).join(','))
-    qp.set('tamano_pagina', '50')
-    qp.set('numero_pagina', String(pagina))
-    for (const r of regiones || []) qp.append('region', String(r))
-    const payload = await llamar('/v2/compra-agil', qp, 'listarPublicadasEnVentana')
-    for (const it of payload?.items || []) {
-      if (it.codigo) items.push({ codigo: it.codigo, nombre: it.nombre || '', estado: it.estado?.codigo || it.estado || null })
+  const codigosVistos = new Set()
+  const erroresPorRegion = []
+
+  for (const region of listaRegiones) {
+    try {
+      let pagina = 1
+      let totalPaginas = 1
+      do {
+        const qp = new URLSearchParams()
+        qp.set('ttl_cambio_ms', String(ventanaMs))
+        qp.set('estado', (estados?.length ? estados : ['publicada']).join(','))
+        qp.set('tamano_pagina', '50')
+        qp.set('numero_pagina', String(pagina))
+        qp.append('region', String(region))
+        const payload = await llamar('/v2/compra-agil', qp, `listarPublicadasEnVentana(región=${region})`)
+        for (const it of payload?.items || []) {
+          if (it.codigo && !codigosVistos.has(it.codigo)) {
+            codigosVistos.add(it.codigo)
+            items.push({ codigo: it.codigo, nombre: it.nombre || '', estado: it.estado?.codigo || it.estado || null })
+          }
+        }
+        totalPaginas = payload?.paginacion?.total_paginas || 1
+        pagina++
+      } while (pagina <= totalPaginas)
+    } catch (e) {
+      erroresPorRegion.push(`${REGIONES[region] || `región ${region}`}: ${e.message}`)
     }
-    totalPaginas = payload?.paginacion?.total_paginas || 1
-    pagina++
-  } while (pagina <= totalPaginas)
-  return items
+  }
+  return { items, erroresPorRegion }
 }
 
 // ── Descarga de documentos adjuntos (2026-09-09) ────────────────────────────
