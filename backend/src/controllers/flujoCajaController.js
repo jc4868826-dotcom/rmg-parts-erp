@@ -253,6 +253,18 @@ const reconciliar090926 = (req, res) => {
       if (info.changes) borrados.push(id)
     }
 
+    // El usuario volvió a crear un "ajuste fantasma" manual (mismo parche
+    // que ya no hace falta) entre la primera pasada y esta — se limpia
+    // cualquier movimiento manual confirmado cuya descripción contenga
+    // "fantasma", sin depender de un id fijo.
+    const fantasmas = db.prepare(
+      "SELECT id FROM caja_movimientos WHERE origen_tabla = 'manual' AND estado = 'confirmado' AND descripcion LIKE '%fantasma%'"
+    ).all()
+    for (const f of fantasmas) {
+      delStmt.run(f.id)
+      borrados.push(f.id)
+    }
+
     const yaExisteEstampado = db.prepare(
       "SELECT id FROM caja_movimientos WHERE origen_tabla = 'gastos' AND origen_id = 'd28f7610-f203-477d-ace5-504ab8572182'"
     ).get()
