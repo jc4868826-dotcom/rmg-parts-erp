@@ -171,7 +171,9 @@ export default function DashboardPage() {
       pipeline: d.pipeline_activo           ?? 0,
       cots:     d.cotizaciones_pendientes   ?? 0,
       margenPct, margenB, costoMerc, totalGastos, utilNeta, utilPct,
-      saldoFin: d.saldo_proyectado          ?? 0,
+      // Saldo real (confirmado, todos los ingresos/egresos desde el inicio del
+      // sistema hasta hoy) — NO depende del filtro de período del dashboard.
+      saldoFin: d.saldo_actual               ?? 0,
       segs, clientesFiltro, ventasChart, flujoCaja, cxcRows, cxcRiesgo, alertas,
     }
   }, [raw])
@@ -593,11 +595,14 @@ export default function DashboardPage() {
         <div className="flex justify-between items-start mb-4 flex-wrap gap-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider" style={{ color:'var(--rmg-muted)' }}>
-              Saldo proyectado
+              Saldo actual
             </div>
             <div className="font-black text-2xl mt-0.5 precio-clp"
               style={{ fontFamily:'Inter Tight, sans-serif', color:datos.saldoFin>=0?'var(--rmg-teal)':'var(--rmg-red)' }}>
               {formatCLP(datos.saldoFin)}
+            </div>
+            <div className="text-[11px] mt-0.5" style={{ color:'var(--rmg-muted)' }}>
+              Real (confirmado) · desde el inicio del sistema hasta hoy · no cambia con el filtro de período
             </div>
           </div>
           <div className="flex gap-4 text-xs items-center" style={{ color:'var(--rmg-muted)' }}>

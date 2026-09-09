@@ -107,6 +107,23 @@ const getResumen = (req, res) => {
     const saldoPeriodo   = saldoInicial + totalIngresosConf - totalGastosConf
     const saldoProyectado = saldoPeriodo + ingresosProy - egresosProy
 
+    // ── Saldo actual REAL (independiente del filtro de período) ──────────
+    // El dashboard permite filtrar por 'hoy'/'semana'/'mes'/'mes_anterior'/
+    // rango personalizado, y ese filtro cambiaba dateTo — por lo tanto el
+    // "saldo" mostrado se recalculaba distinto según qué período estuviera
+    // seleccionado, y además mezclaba movimientos 'proyectado' (no reales).
+    // El saldo de caja actual debe ser SIEMPRE lo mismo sin importar el
+    // filtro: todos los ingresos confirmados menos todos los egresos
+    // confirmados, desde el inicio del sistema hasta HOY (no hasta dateTo).
+    // Misma fórmula que flujoCajaController.calcSaldoAlCorte(hoy) — fuente
+    // única de verdad: caja_movimientos con estado='confirmado'.
+    const hoyStr = new Date().toISOString().split('T')[0]
+    const saldoActualReal = db.prepare(`
+      SELECT COALESCE(SUM(CASE tipo WHEN 'ingreso' THEN monto ELSE -monto END),0) as saldo
+      FROM caja_movimientos
+      WHERE estado = 'confirmado' AND fecha_pago <= ?
+    `).get(hoyStr).saldo
+
     // ── Margen bruto (venta_items: costo capturado al momento de la venta) ───────
     const margenQuery = db.prepare(`
       SELECT COALESCE(SUM(vi.subtotal),0) as venta_neto,
@@ -183,6 +200,7 @@ const getResumen = (req, res) => {
       ingresos_proyectados: ingresosProy,
       egresos_proyectados:  egresosProy,
       saldo_proyectado: saldoProyectado,
+      saldo_actual: saldoActualReal,
       ventas_por_segmento: segs,
       ventas_semana: ventasSemana,
       clientes_list: clientesList,
