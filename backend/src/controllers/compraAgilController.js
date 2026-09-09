@@ -65,11 +65,15 @@ const listar = (req, res) => {
 }
 
 // ── Paso 1: importar por código publicado (ej. "2428-1262-COT26") ──────────
-// ⚠️ Depende de la API interna de Mercado Público, bloqueada por WAF desde
-// el servidor real de RMG (confirmado 2026-09) — HOY este endpoint falla
-// para cualquier código real. Se deja funcionando por si ChileCompra
-// habilita su nueva API oficial de Compra Ágil más adelante. Mientras tanto,
-// usar POST /api/compra-agil/importar-manual (ver abajo).
+// 2026-09-08 (noche) — YA NO depende de la API interna bloqueada por WAF:
+// importarCompraAgil usa la API OFICIAL de Compra Ágil v2 (compraAgilApiClient.js,
+// api2.mercadopublico.cl). Este endpoint SÍ funciona hoy para cualquier
+// código real — lo usa el detector automático y (2026-09-09) el botón
+// "Volver a traer desde ChileCompra" de la ficha de una Compra Ágil en el
+// frontend (para reintentar la descarga de adjuntos de un código puntual sin
+// esperar al próximo barrido nacional). POST /api/compra-agil/importar-manual
+// sigue siendo el fallback cuando la API oficial no tiene o no puede leer el
+// código (cuota agotada, código no encontrado, etc.).
 const importar = async (req, res) => {
   try {
     const { codigo } = req.body

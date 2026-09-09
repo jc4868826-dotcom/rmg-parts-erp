@@ -675,6 +675,21 @@ function DetalleModal({ id, onClose }) {
     limpiarHistorialMut.mutate()
   }
 
+  // 2026-09-09 — caso real: 654478-64-COT26 (Subsecretaría de Prevención del
+  // Delito) tenía un PDF real de adjunto en el portal, pero como se importó
+  // ANTES de que compraAgilAnalisis guardara los documentos descargados como
+  // anexo real (ver backend), "Leer ficha pública y calcular score" no tenía
+  // nada que leer. "Compra Ágil ahora" tampoco lo re-procesa porque el
+  // detector solo trae códigos NUEVOS (este ya existe en la base). Este botón
+  // vuelve a pedirle el detalle a la API oficial de Compra Ágil para ESTE
+  // código puntual — con la descarga de adjuntos ya corregida, esta vez sí
+  // queda guardado el PDF como anexo real.
+  const reimportarApiMut = useMutation({
+    mutationFn: () => api.post('/compra-agil/importar', { codigo: op.codigo_externo }).then(r => r.data),
+    onSuccess: () => { invalidar(); toast.success('Vuelto a traer desde ChileCompra — revisa "Anexos de la licitación" y reintenta el análisis.') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al volver a traer desde ChileCompra'),
+  })
+
   // Corregir un ítem cuyo match salió mal — pedido real: "si el match de
   // excel salió mal, debemos agregar observaciones para que lo vuelva a
   // calcular". Un solo campo de texto: "SKU:<codigo>" fija el producto
@@ -1085,6 +1100,10 @@ function DetalleModal({ id, onClose }) {
               <ActionBtn onClick={handleDescartar} busy={cambiarEstadoMut.isPending} icon={Ban} label="Descartar" color="var(--rmg-red)" bg="rgba(224,90,78,0.08)" />
               <ActionBtn onClick={() => handleVolver('detectada')} busy={cambiarEstadoMut.isPending} icon={Undo2} label="Volver a detectada" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
               <ActionBtn onClick={handleLimpiarHistorial} busy={limpiarHistorialMut.isPending} icon={Eraser} label="Limpiar historial y reintentar" color="var(--rmg-red)" bg="rgba(224,90,78,0.08)" />
+              {op.fuente === 'compra_agil' && (
+                <ActionBtn onClick={() => reimportarApiMut.mutate()} busy={reimportarApiMut.isPending}
+                  icon={Zap} label="Volver a traer desde ChileCompra (incluye adjuntos)" color="var(--rmg-teal)" bg="rgba(45,201,138,0.12)" />
+              )}
             </>
           )}
           {op.estado === 'preparando_postulacion' && (

@@ -197,6 +197,40 @@ async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase
     detalle: `Código ${codigo} · ${detalle.items.length} ítem(s)${detalle.advertencias?.length ? ' · ⚠️ ' + detalle.advertencias.join(' ') : ''}`,
   })
 
+  // 2026-09-09 — persiste como anexo real (documentos_adjuntos) cada PDF/
+  // imagen que enriquecerConDocumentosAdjuntos descargó de la API oficial,
+  // para que "Leer ficha pública y calcular score" (chilecompraController.
+  // analizarOportunidadInterno) los encuentre después — esa función ya lee
+  // cualquier fila de documentos_adjuntos con categoria != 'cruce_auto', así
+  // que basta con insertarlos acá, sin tocar esa lógica. Evita duplicar si ya
+  // se guardó en una corrida anterior (mismo nombre de archivo).
+  if (detalle._anexosDescargados?.length) {
+    let nuevos = 0
+    for (const doc of detalle._anexosDescargados) {
+      const yaExiste = db.prepare(`
+        SELECT id FROM documentos_adjuntos
+        WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ? AND nombre_archivo = ?
+      `).get(id, doc.nombre)
+      if (yaExiste) continue
+      db.prepare(`
+        INSERT INTO documentos_adjuntos
+          (id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, categoria)
+        VALUES (?,?,?,?,?,?,?,?,?)
+      `).run(
+        uuidv4(), 'oportunidad_chilecompra', id,
+        doc.mediaType === 'application/pdf' ? 'pdf' : 'imagen',
+        doc.nombre, doc.mediaType, doc.base64, user?.id || null, 'anexo_api_compra_agil'
+      )
+      nuevos++
+    }
+    if (nuevos) {
+      logEvento(id, 'anexo_api_descargado', {
+        usuario_id: user?.id, usuario_nombre: user?.email || 'api-automatico',
+        detalle: `${nuevos} documento(s) adjunto(s) descargado(s) automáticamente desde la API de Compra Ágil y guardado(s) como anexo(s) de la postulación.`,
+      })
+    }
+  }
+
   // Cruce con catálogo (heurística, sin IA — barato y reutilizado tal cual de licitaciones).
   try {
     const cruce = cruzarItemsConCatalogo(id)
@@ -256,6 +290,20 @@ async function enriquecerConDocumentosAdjuntos(detalle) {
     console.warn(`⚠️ Compra Ágil ${detalle.codigo_externo}: ${descargados.length} documento(s) descargado(s) pero ninguno es PDF/imagen legible (tipos: ${descargados.map(d => d.mediaType).join(', ')})`)
     return detalle
   }
+
+  // 2026-09-09 (caso real: 654478-64-COT26, Subsecretaría de Prevención del
+  // Delito — SÍ tenía un PDF real de adjunto en el portal) — se guardan los
+  // PDF/imagen descargados como anexos reales de la oportunidad pase lo que
+  // pase con la extracción de ítems de abajo. Antes se usaban una sola vez
+  // acá mismo para intentar sacar ítems y se descartaban — si la IA no
+  // encontraba ítems estructurados (o si el usuario quería reanalizar
+  // después), el PDF ya descargado se perdía para siempre y "Leer ficha
+  // pública y calcular score" no tenía nada que leer, aunque el adjunto
+  // existiera de verdad en Mercado Público. guardarYProcesarOportunidad() los
+  // inserta en documentos_adjuntos una vez que existe el id de la
+  // oportunidad — desde ahí quedan disponibles exactamente igual que un
+  // anexo subido a mano.
+  detalle = { ...detalle, _anexosDescargados: legibles }
 
   try {
     const extraccion = await leerAnexos(legibles)
