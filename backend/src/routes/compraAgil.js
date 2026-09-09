@@ -32,6 +32,13 @@
  *                                                        GET /scraper-estado.
  * GET    /api/compra-agil/scraper-estado                { corriendo, ultimoResumen } — para el polling del frontend
  *                                                        mientras "Buscar ahora" trabaja de fondo.
+ * POST   /api/compra-agil/sincronizar-estado-ahora       dispara YA MISMO la sincronización de estado REAL
+ *                                                        de ChileCompra (adjudicada/cerrada/OC emitida, etc.)
+ *                                                        de lo ya importado — pieza 4 del esquema aprobado
+ *                                                        2026-09-09 (ver services/compraAgilAnalisis.
+ *                                                        sincronizarEstadosReales). También fire-and-forget (202),
+ *                                                        también corre solo cada 2h — ver jobs/compraAgilSyncEstadoCron.js.
+ * GET    /api/compra-agil/sincronizar-estado-estado      { corriendo, ultimoResumen } — polling de la sincronización de estado real.
  *
  * No se duplica nada de /api/chilecompra/:id (analizar, checklist, extraer-fichas-tecnicas,
  * limpiar-historial, items/:itemId/observacion, documentos) — esas rutas ya funcionan igual
@@ -47,6 +54,8 @@ router.get('/datos-abiertos/estado', authenticate, c.datosAbiertosEstado)
 router.post('/datos-abiertos/sincronizar', authenticate, c.datosAbiertosSincronizar)
 router.post('/scrapear-ahora', authenticate, c.scrapearAhora)
 router.get('/scraper-estado', authenticate, c.scraperEstado)
+router.post('/sincronizar-estado-ahora', authenticate, c.sincronizarEstadoAhora)
+router.get('/sincronizar-estado-estado', authenticate, c.sincronizarEstadoEstado)
 router.get('/', authenticate, c.listar)
 router.post('/importar', authenticate, c.importar)
 router.post('/importar-manual', authenticate, c.importarManual)

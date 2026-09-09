@@ -2858,6 +2858,37 @@ function runMigrations() {
       console.error('❌ Migración compra_agil_v2_logistico_datos_abiertos falló:', e.message)
     }
   }
+
+  // Migration compra_agil_v3_sync_estado_real — 2026-09-09.
+  // Pedido real del usuario: "no veo como recibir información del estado desde
+  // la api...si se adjudicó etc." — hasta ahora `estado` en esta tabla es
+  // SOLO el pipeline de gestión interno de RMG (detectada → analizando → ...,
+  // ver chilecompraController.TRANSICIONES), que RMG mueve a mano. Nunca se
+  // volvía a preguntar a la API qué pasó DESPUÉS con la publicación real en
+  // el portal (si se cerró, quedó desierta, o ya se le adjudicó a alguien).
+  // Estas columnas nuevas guardan ESE estado, por separado, sin tocar ni
+  // confundirse con el pipeline interno:
+  //   - estado_real_chilecompra: el valor tal cual lo entrega la API
+  //     (publicada / cerrada / desierta / cancelada / proveedor_seleccionado).
+  //   - orden_compra_codigo: código real de la Orden de Compra una vez
+  //     emitida (según el campo `orden_compra` del detalle de la API).
+  //   - estado_real_actualizado_at: cuándo se sincronizó por última vez.
+  // Ver services/compraAgilAnalisis.sincronizarEstadosReales() y
+  // jobs/compraAgilSyncEstadoCron.js.
+  const mCompraAgilV3 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('compra_agil_v3_sync_estado_real')
+  if (!mCompraAgilV3) {
+    try {
+      const opCols = db.prepare('PRAGMA table_info(oportunidades_chilecompra)').all().map(c => c.name)
+      if (!opCols.includes('estado_real_chilecompra')) db.exec('ALTER TABLE oportunidades_chilecompra ADD COLUMN estado_real_chilecompra TEXT')
+      if (!opCols.includes('orden_compra_codigo')) db.exec('ALTER TABLE oportunidades_chilecompra ADD COLUMN orden_compra_codigo TEXT')
+      if (!opCols.includes('estado_real_actualizado_at')) db.exec('ALTER TABLE oportunidades_chilecompra ADD COLUMN estado_real_actualizado_at TEXT')
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('compra_agil_v3_sync_estado_real')
+      console.log('✅ Migración compra_agil_v3_sync_estado_real — columnas de estado real (ChileCompra) añadidas')
+    } catch (e) {
+      console.error('❌ Migración compra_agil_v3_sync_estado_real falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

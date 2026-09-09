@@ -8,7 +8,8 @@
  * "publicada" es SIEMPRE una confirmación manual — el sistema nunca envía
  * una oferta por sí solo, solo prepara y el humano confirma que ya la subió.
  */
-import { useState, Fragment } from 'react'
+import { useState, useEffect, Fragment } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha, formatRelativo, formatPct } from '@utils/format'
@@ -28,7 +29,9 @@ const REGIONES = [
   'Aysén del General Carlos Ibáñez del Campo', 'Magallanes y de la Antártica Chilena',
 ]
 
-const ESTADOS = [
+// Exportadas (2026-09-09, pieza 3) para que CompraAgilPage.jsx pueda mostrar
+// una franja de conteo por estado sin duplicar esta lista.
+export const ESTADOS = [
   { k: 'detectada',               label: 'Detectada',              color: 'var(--rmg-blue)', bg: 'rgba(56,182,255,0.1)',   icon: FileSearch },
   { k: 'analizando',              label: 'Analizando',             color: 'var(--rmg-gold)', bg: 'rgba(244,162,60,0.12)',  icon: RefreshCw },
   { k: 'preparando_postulacion',  label: 'Preparando postulación', color: '#a78bfa',         bg: 'rgba(167,139,250,0.12)', icon: ClipboardCheck },
@@ -37,7 +40,7 @@ const ESTADOS = [
   { k: 'no_adjudicada',           label: 'No adjudicada',          color: 'var(--rmg-muted)', bg: 'rgba(15,35,60,0.05)',   icon: XCircle },
   { k: 'descartada',              label: 'Descartada',             color: 'var(--rmg-red)',  bg: 'rgba(224,90,78,0.1)',    icon: Ban },
 ]
-const ESTADO_MAP = Object.fromEntries(ESTADOS.map(e => [e.k, e]))
+export const ESTADO_MAP = Object.fromEntries(ESTADOS.map(e => [e.k, e]))
 const KANBAN_ESTADOS = ['detectada', 'analizando', 'preparando_postulacion', 'publicada']
 
 const scoreColor = (s) => s == null ? 'var(--rmg-muted)' : s >= 70 ? 'var(--rmg-teal)' : s >= 40 ? 'var(--rmg-gold)' : 'var(--rmg-red)'
@@ -76,6 +79,14 @@ export default function ChileCompraPage() {
   const qc = useQueryClient()
   const [filtros, setFiltros] = useState({ region: '', dias_vencimiento: '', q: '' })
   const [seleccionId, setSeleccionId] = useState(null)
+  // 2026-09-09 — deep link ?abrir=<id> (pieza 3 del esquema aprobado): permite
+  // que CompraAgilPage enlace directo al modal de gestión/pipeline de una
+  // oportunidad puntual sin duplicar la UI de cambio de estado acá.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const abrir = searchParams.get('abrir')
+    if (abrir) setSeleccionId(abrir)
+  }, [searchParams])
   const [rango, setRango] = useState('30dias')
   const [rangoCustom, setRangoCustom] = useState({ desde: isoLocal(new Date()), hasta: isoLocal(new Date()) })
 
@@ -249,7 +260,14 @@ export default function ChileCompraPage() {
       <ResultadosCerrados oportunidades={oportunidades} onSelect={setSeleccionId} />
 
       {seleccionId && (
-        <DetalleModal id={seleccionId} onClose={() => setSeleccionId(null)} />
+        <DetalleModal id={seleccionId} onClose={() => {
+          setSeleccionId(null)
+          if (searchParams.get('abrir')) {
+            const next = new URLSearchParams(searchParams)
+            next.delete('abrir')
+            setSearchParams(next, { replace: true })
+          }
+        }} />
       )}
     </div>
   )

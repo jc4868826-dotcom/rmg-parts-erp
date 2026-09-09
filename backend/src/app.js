@@ -141,6 +141,7 @@ initDB()
     require('./jobs/chilecompraCron').iniciarCron();
     require('./jobs/compraAgilDatosAbiertosCron').iniciarCron();
     require('./jobs/compraAgilApiPollerCron').iniciarCron(); // detección automática Compra Ágil (API oficial v2)
+    require('./jobs/compraAgilSyncEstadoCron').iniciarCron(); // estado real ChileCompra (adjudicada/OC) de lo ya importado
     app.listen(PORT, () => {
       console.log(`
   ╔══════════════════════════════════════╗

@@ -29,7 +29,17 @@ const { compararFichaTecnica, leerAnexos, leerFichaPublica } = require('./chilec
 let _corriendo = false
 let _ultimoResumen = null
 const USER_AUTOMATICO = { email: 'api-automatico' }
-const VENTANA_DEFAULT_MS = Number(process.env.COMPRA_AGIL_API_VENTANA_MS || 6 * 3600_000) // 6h de margen
+
+// 2026-09-09 — alcance inicial ACOTADO a propósito ("empezar chico y
+// amplificar después", pedido explícito del usuario tras dos incidentes de
+// timeout/500 con ventanas y regiones amplias): por defecto, solo Región
+// Metropolitana (código 13) y solo lo publicado ayer/hoy (24h). Se amplía
+// SIN redeploy cambiando las variables de entorno en Render — un eje a la
+// vez (primero ventana, después regiones) — o desde el botón "Buscar ahora"
+// de la UI, que puede mandar sus propios valores por corrida.
+const VENTANA_DEFAULT_MS = Number(process.env.COMPRA_AGIL_API_VENTANA_MS || 24 * 3600_000) // 24h (ayer/hoy)
+const REGIONES_DEFAULT = (process.env.COMPRA_AGIL_API_REGIONES || '13').split(',').map(s => s.trim()).filter(Boolean).map(Number)
+const ESTADOS_DEFAULT = (process.env.COMPRA_AGIL_API_ESTADOS || 'publicada').split(',').map(s => s.trim()).filter(Boolean)
 
 function estado() {
   return { corriendo: _corriendo, ultimoResumen: _ultimoResumen }
@@ -179,6 +189,64 @@ async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase
 }
 
 /**
+ * 2026-09-09 — pedido real del usuario: "no veo que lea los adjuntos y
+ * encuentre lo que se pide, por ende no veo que haga match con nuestro
+ * catálogo". El detalle estructurado de la API (`productos_solicitados[]`)
+ * muchas veces es solo una línea genérica — el requerimiento técnico real
+ * vive en los PDF que la propia API referencia en `documentos[]`. Esta
+ * función los descarga (compraAgilApiClient.descargarDocumentoAdjunto) y los
+ * lee con la MISMA IA que ya lee anexos de licitaciones (leerAnexos) — si
+ * encuentra ítems ahí, REEMPLAZAN a la línea genérica de la API (el anexo
+ * manda). Si no hay documentos, si ninguno se pudo descargar, o si la IA no
+ * encuentra ítems, se sigue con lo que ya trajo la API — nunca revienta el
+ * import por esto, y cada motivo de fallo queda en el log (console.warn) en
+ * vez de fallar en silencio, porque el shape exacto de `documentos[]` no
+ * está confirmado contra un caso real todavía (ver aviso en
+ * compraAgilApiClient.js).
+ */
+async function enriquecerConDocumentosAdjuntos(detalle) {
+  if (!detalle.documentos?.length) return detalle
+
+  const descargados = []
+  const problemas = []
+  for (const doc of detalle.documentos) {
+    const r = await api.descargarDocumentoAdjunto(doc)
+    if (r.ok) descargados.push(r.documento)
+    else problemas.push(r.motivo)
+  }
+
+  if (!descargados.length) {
+    console.warn(`⚠️ Compra Ágil ${detalle.codigo_externo}: ${detalle.documentos.length} documento(s) declarado(s) pero no se pudo descargar ninguno — ${problemas[0] || 'sin detalle'}`)
+    return detalle
+  }
+
+  const legibles = descargados.filter(d => d.mediaType === 'application/pdf' || d.mediaType?.startsWith('image/'))
+  if (!legibles.length) {
+    console.warn(`⚠️ Compra Ágil ${detalle.codigo_externo}: ${descargados.length} documento(s) descargado(s) pero ninguno es PDF/imagen legible (tipos: ${descargados.map(d => d.mediaType).join(', ')})`)
+    return detalle
+  }
+
+  try {
+    const extraccion = await leerAnexos(legibles)
+    if (extraccion?.items?.length) {
+      return {
+        ...detalle,
+        items: extraccion.items,
+        advertencias: [
+          ...(detalle.advertencias || []),
+          `Ítems extraídos del/los anexo(s) adjunto(s) (${legibles.length} documento(s)) — no de la línea genérica de la API.`,
+          ...(extraccion.extraccion_posiblemente_incompleta ? ['⚠️ El modelo no está seguro de haber capturado el 100% de los ítems del anexo — revisar el PDF original antes de cotizar.'] : []),
+        ],
+      }
+    }
+    console.warn(`⚠️ Compra Ágil ${detalle.codigo_externo}: se leyeron ${legibles.length} anexo(s) pero la IA no encontró ítems — se usa la línea genérica de la API`)
+  } catch (e) {
+    console.warn(`⚠️ Compra Ágil ${detalle.codigo_externo}: falló la lectura IA de los anexos adjuntos — ${e.message}`)
+  }
+  return detalle
+}
+
+/**
  * Paso 1 — Ingesta. Trae la publicación de Compra Ágil por su código externo
  * (ej. "1057539-228-COT26") desde la API OFICIAL de Compra Ágil
  * (compraAgilApiClient.js, reescrito 2026-09-08 noche contra
@@ -188,7 +256,8 @@ async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase
  * con el mismo código (upsert por UNIQUE(fuente, codigo_externo)).
  */
 async function importarCompraAgil(codigo, user, tipoEventoBase = 'compra_agil') {
-  const detalle = await api.buscarCompraAgil(codigo)
+  let detalle = await api.buscarCompraAgil(codigo)
+  detalle = await enriquecerConDocumentosAdjuntos(detalle)
   return guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase)
 }
 
@@ -225,7 +294,7 @@ function normalizar(txt) {
  */
 async function detectarYImportarAutomatico({
   ventanaMs = VENTANA_DEFAULT_MS, user = USER_AUTOMATICO,
-  estados = ['publicada'], regiones = [],
+  estados = ESTADOS_DEFAULT, regiones = REGIONES_DEFAULT,
 } = {}) {
   if (_corriendo) {
     return { yaEnCurso: true, ...(_ultimoResumen || {}) }
@@ -455,7 +524,108 @@ function sugerirPrecio(oportunidadId) {
   })
 }
 
+// ── Sincronización de estado REAL desde ChileCompra (2026-09-09) ───────────
+// Pedido real del usuario: "no veo como recibir información del estado desde
+// la api...si se adjudicó etc. no se a cuales postulo, cuales descarto,
+// cuales estoy en proceso". Esto es DISTINTO del pipeline de gestión interno
+// de RMG (columna `estado`, ver chilecompraController.TRANSICIONES — RMG lo
+// mueve a mano: detectada → analizando → ... → publicada → adjudicada). Acá
+// se trata del estado que le pertenece a ChileCompra y cambia solo en su
+// portal (publicada → cerrada / desierta / cancelada / proveedor_seleccionado
+// → eventualmente con una Orden de Compra emitida). El sistema importaba una
+// vez y nunca volvía a preguntar qué pasó después — esto cierra ese hueco.
+let _corriendoSync = false
+let _ultimoResumenSync = null
+// Terminal para efectos de esta sincronización: una vez que ChileCompra la
+// cierra/anula, ya no puede volver a cambiar — se deja de re-consultar para
+// no gastar cuota. "proveedor_seleccionado" NO se marca terminal porque
+// después de eso normalmente se emite la Orden de Compra (orden_compra_codigo
+// pasa de null a tener valor) — se sigue mirando hasta que la haya, o hasta
+// que pase un máximo de intentos razonable (ver LIMITE_INTENTOS_SYNC abajo).
+const ESTADOS_TERMINALES_CHILECOMPRA = ['cerrada', 'desierta', 'cancelada']
+
+function estadoSync() {
+  return { corriendo: _corriendoSync, ultimoResumen: _ultimoResumenSync }
+}
+
+async function sincronizarEstadosReales({ user = USER_AUTOMATICO } = {}) {
+  if (_corriendoSync) {
+    return { yaEnCurso: true, ...(_ultimoResumenSync || {}) }
+  }
+  _corriendoSync = true
+
+  const resumen = {
+    revisadas: 0, actualizadas: 0, cambiosDetectados: [], errores: [],
+    iniciado: new Date().toISOString(),
+  }
+  try {
+    // Solo las que todavía pueden cambiar: sin estado real guardado, o con uno
+    // que no es terminal, Y que tampoco ya tienen Orden de Compra registrada
+    // (una vez que hay OC, el desenlace ya se conoce — no hace falta seguir
+    // preguntando).
+    const activas = db.prepare(`
+      SELECT id, codigo_externo, estado_real_chilecompra, orden_compra_codigo
+      FROM oportunidades_chilecompra
+      WHERE fuente = 'compra_agil'
+        AND orden_compra_codigo IS NULL
+        AND (estado_real_chilecompra IS NULL OR estado_real_chilecompra NOT IN (${ESTADOS_TERMINALES_CHILECOMPRA.map(() => '?').join(',')}))
+    `).all(...ESTADOS_TERMINALES_CHILECOMPRA)
+
+    for (const op of activas) {
+      resumen.revisadas++
+      try {
+        const detalle = await api.buscarCompraAgil(op.codigo_externo)
+        const estadoNuevo = detalle.estado_codigo || null
+        const ocNueva = detalle.orden_compra_codigo || null
+        const cambioEstado = estadoNuevo !== op.estado_real_chilecompra
+        const cambioOc = ocNueva !== op.orden_compra_codigo
+        if (cambioEstado || cambioOc) {
+          db.prepare(`
+            UPDATE oportunidades_chilecompra
+            SET estado_real_chilecompra = ?, orden_compra_codigo = ?, estado_real_actualizado_at = datetime('now')
+            WHERE id = ?
+          `).run(estadoNuevo, ocNueva, op.id)
+
+          const detalleEvento = `Estado real en ChileCompra: "${op.estado_real_chilecompra || 'sin dato'}" → "${estadoNuevo || 'sin dato'}"` +
+            (cambioOc ? ` · Orden de Compra: ${ocNueva || 'sin emitir'}` : '')
+          logEvento(op.id, 'estado_real_actualizado', {
+            usuario_id: user?.id, usuario_nombre: user?.email || 'sync-automático', detalle: detalleEvento,
+          })
+          resumen.actualizadas++
+          resumen.cambiosDetectados.push({ id: op.id, codigo: op.codigo_externo, estadoAnterior: op.estado_real_chilecompra, estadoNuevo, ordenCompra: ocNueva })
+        } else {
+          // Igual deja registro de que se revisó, aunque no haya cambiado —
+          // así "última vez revisado" siempre es confiable.
+          db.prepare(`UPDATE oportunidades_chilecompra SET estado_real_actualizado_at = datetime('now') WHERE id = ?`).run(op.id)
+        }
+      } catch (e) {
+        resumen.errores.push(`Código ${op.codigo_externo}: ${e.message}`)
+      }
+    }
+  } catch (e) {
+    resumen.errores.push(`Sincronización: ${e.message}`)
+  } finally {
+    _corriendoSync = false
+  }
+
+  resumen.finalizado = new Date().toISOString()
+  console.log(
+    `ℹ️ Compra Ágil — sincronización de estado real: ${resumen.revisadas} revisada(s), ` +
+    `${resumen.actualizadas} actualizada(s), ${resumen.errores.length} error(es)`
+  )
+  if (resumen.cambiosDetectados.length) {
+    for (const c of resumen.cambiosDetectados) {
+      console.log(`  ↳ ${c.codigo}: "${c.estadoAnterior || 'sin dato'}" → "${c.estadoNuevo || 'sin dato'}"${c.ordenCompra ? ` · OC ${c.ordenCompra}` : ''}`)
+    }
+  }
+  _ultimoResumenSync = resumen
+  return resumen
+}
+
 module.exports = {
   importarCompraAgil, importarCompraAgilManual, generarFundamentoCotizacion, sugerirPrecio, calcularYGuardarScores,
-  detectarYImportarAutomatico, estado,
+  detectarYImportarAutomatico, estado, sincronizarEstadosReales, estadoSync,
+  // Exportada también para tests offline (ver /tmp/test_compraagil_documentos.js) — no es
+  // parte de la API pública del módulo, pero no hay razón para escondarla del todo.
+  enriquecerConDocumentosAdjuntos,
 }

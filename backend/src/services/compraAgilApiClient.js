@@ -143,6 +143,22 @@ function mapearDetalle(p, codigoSolicitado) {
     items,
     numero_cotizaciones_recibidas: p.resumen?.total_ofertas_recibidas ?? null,
     estado_codigo: p.estado?.codigo || null,
+    // 2026-09-09 — para sincronizarEstadosReales() (compraAgilAnalisis.js):
+    // código real de la Orden de Compra una vez emitida. El nombre exacto del
+    // campo dentro de `orden_compra` no está confirmado contra un caso real
+    // todavía (ningún código detectado hasta ahora llegó a ese estado) — se
+    // prueban las variantes más probables del PDF oficial; si ninguna calza,
+    // sincronizarEstadosReales() lo deja en null y NO revienta, pero
+    // conviene revisar `debugUltimaRespuesta.orden_compra` en detalle_raw_json
+    // la primera vez que una oportunidad real llegue a "proveedor_seleccionado".
+    orden_compra_codigo: p.orden_compra?.codigo_orden_compra || p.orden_compra?.id_oc || p.orden_compra?.id_orden_compra || null,
+    // Documentos/anexos que la propia API entrega para esta publicación — ver
+    // enriquecerConDocumentosAdjuntos() más abajo. Igual que orden_compra, el
+    // shape exacto de cada entrada no está confirmado contra un caso real con
+    // adjuntos (ver aviso ahí) — se deja el arreglo crudo disponible acá para
+    // que compraAgilAnalisis pueda intentar leerlos sin tener que volver a
+    // pedir el detalle.
+    documentos: Array.isArray(p.documentos) ? p.documentos : [],
     advertencias: [],
     debugUltimaRespuesta: p,
   }
@@ -238,4 +254,47 @@ async function listarPublicadasEnVentana({ ventanaMs = 6 * 3600_000, estados = [
   return items
 }
 
-module.exports = { buscarCompraAgil, listarCodigosPublicados, listarPublicadasEnVentana, REGIONES }
+// ── Descarga de documentos adjuntos (2026-09-09) ────────────────────────────
+// Pedido real del usuario: "no veo que lea los adjuntos y encuentre lo que se
+// pide" — el detalle de la API a veces solo trae una línea genérica en
+// `productos_solicitados[]`, y el requerimiento real vive en un PDF que la
+// propia API referencia en `documentos[]` (ver mapearDetalle). El shape
+// exacto de cada entrada de `documentos[]` NO está confirmado contra un caso
+// real todavía (hasta ahora ninguna Compra Ágil detectada traía adjuntos) —
+// se prueban los nombres de campo más probables (url/urlDescarga/link, etc.)
+// y, si ninguno calza, se devuelve el motivo exacto en vez de fallar en
+// silencio, para poder ajustar esto en 5 minutos apenas aparezca un caso real
+// (revisar el log de advertencia que deja compraAgilAnalisis.js).
+const CAMPOS_URL_PROBABLES = ['url', 'urlDescarga', 'url_descarga', 'link', 'uri', 'urlDocumento', 'url_documento']
+const CAMPOS_NOMBRE_PROBABLES = ['nombre', 'nombreArchivo', 'nombre_archivo', 'name', 'titulo']
+
+async function descargarDocumentoAdjunto(doc) {
+  const campoUrl = CAMPOS_URL_PROBABLES.find(c => typeof doc?.[c] === 'string' && doc[c].startsWith('http'))
+  if (!campoUrl) {
+    return { ok: false, motivo: `sin campo de URL reconocible (claves recibidas: ${Object.keys(doc || {}).join(', ') || 'ninguna'})` }
+  }
+  const campoNombre = CAMPOS_NOMBRE_PROBABLES.find(c => typeof doc?.[c] === 'string')
+  const nombre = campoNombre ? doc[campoNombre] : 'documento'
+  const url = doc[campoUrl]
+  try {
+    const resp = await axios.get(url, {
+      responseType: 'arraybuffer',
+      headers: TICKET ? { ticket: TICKET } : undefined,
+      timeout: 30_000,
+      validateStatus: () => true,
+    })
+    if (resp.status >= 400) {
+      return { ok: false, motivo: `HTTP ${resp.status} al descargar ${url}` }
+    }
+    const tipoRespuesta = String(resp.headers?.['content-type'] || '').split(';')[0].trim()
+    const mediaType = tipoRespuesta || (nombre.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream')
+    return { ok: true, documento: { base64: Buffer.from(resp.data).toString('base64'), mediaType, nombre } }
+  } catch (err) {
+    return { ok: false, motivo: `error de red descargando ${url} — ${err.message}` }
+  }
+}
+
+module.exports = {
+  buscarCompraAgil, listarCodigosPublicados, listarPublicadasEnVentana, REGIONES,
+  descargarDocumentoAdjunto,
+}

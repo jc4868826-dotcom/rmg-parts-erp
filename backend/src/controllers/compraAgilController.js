@@ -13,6 +13,7 @@ const { db } = require('../../config/database')
 const {
   importarCompraAgil, importarCompraAgilManual, generarFundamentoCotizacion, sugerirPrecio,
   detectarYImportarAutomatico, estado: estadoDetector,
+  sincronizarEstadosReales, estadoSync: estadoSyncDetector,
 } = require('../services/compraAgilAnalisis')
 const { benchmarkPorSolicitante, benchmarkPorMercado } = require('../services/compraAgilBenchmark')
 const datosAbiertos = require('../services/compraAgilDatosAbiertos')
@@ -25,9 +26,20 @@ const regionesDisponibles = (req, res) => {
 
 function withDetails(op) {
   if (!op) return null
-  const items = db.prepare(
+  const itemsRaw = db.prepare(
     'SELECT * FROM oportunidad_chilecompra_items WHERE oportunidad_id = ? ORDER BY rowid'
   ).all(op.id)
+  // 2026-09-09 (pieza 2, mitad UI) — "no esta la parte de fichas técnicas,
+  // recuerda el trabajo manual que hemos realizado": antes el frontend no
+  // tenía forma de saber si un ítem con match de catálogo tenía además una
+  // ficha técnica ya adjunta (catalogo_fichas_tecnicas, ver
+  // fichasTecnicasVistonyService.adjuntarFichasAOportunidad) o no.
+  const items = itemsRaw.map(item => ({
+    ...item,
+    tiene_ficha_tecnica: item.sku_match
+      ? !!db.prepare('SELECT 1 FROM catalogo_fichas_tecnicas WHERE producto_sku = ? LIMIT 1').get(item.sku_match)
+      : false,
+  }))
   const historial = db.prepare(
     'SELECT * FROM oportunidad_chilecompra_historial WHERE oportunidad_id = ? ORDER BY fecha_evento ASC'
   ).all(op.id)
@@ -191,7 +203,26 @@ const scraperEstado = (req, res) => {
   res.json(estadoDetector())
 }
 
+// ── Sincronización de estado REAL desde ChileCompra (2026-09-09, pieza 4) ──
+// Mismo patrón fire-and-forget + polling que scrapearAhora/scraperEstado —
+// botón manual "Actualizar estado real" en la UI, más el cron de fondo
+// (compraAgilSyncEstadoCron.js) que llama a lo mismo sin pasar por HTTP.
+const sincronizarEstadoAhora = (req, res) => {
+  const estadoActual = estadoSyncDetector()
+  if (estadoActual.corriendo) {
+    return res.status(202).json({ iniciado: false, mensaje: 'Ya hay una sincronización de estado en curso — espera a que termine.' })
+  }
+  sincronizarEstadosReales({ user: req.user })
+    .catch(e => console.error('❌ Compra Ágil "Actualizar estado real" falló:', e.message))
+  res.status(202).json({ iniciado: true, mensaje: 'Sincronización de estado iniciada.' })
+}
+
+const sincronizarEstadoEstado = (req, res) => {
+  res.json(estadoSyncDetector())
+}
+
 module.exports = {
   listar, importar, importarManual, getDetalle, benchmarkSolicitante, benchmarkMercado, fundamento, precioSugerido,
   datosAbiertosEstado, datosAbiertosSincronizar, scrapearAhora, scraperEstado, regionesDisponibles,
+  sincronizarEstadoAhora, sincronizarEstadoEstado,
 }

@@ -41,7 +41,11 @@ const NAV_SECTIONS = [
     label: 'Canal Estatal',
     items: [
       { to: '/chilecompra',  icon: Landmark,        label: 'ChileCompra',     badge: 'chilecompra' },
-      { to: '/chilecompra/compra-agil', icon: Zap,   label: '↳ Compra Ágil',  badge: 'nuevo', indent: true },
+      // 2026-09-09 — esta página existía pero nunca tuvo entrada en el sidebar
+      // ni ruta en App.jsx: era invisible en la práctica salvo escribiendo la
+      // URL a mano. Corregido junto con el resto del esquema de Compra Ágil
+      // aprobado por el usuario.
+      { to: '/compra-agil',  icon: Zap,             label: 'Compra Ágil',     badge: null },
     ],
   },
   {
@@ -204,7 +208,7 @@ export default function Layout() {
                 </div>
               )}
               <div className="space-y-0.5">
-                {section.items.filter(item => !item.adminOnly || user?.rol === 'admin').map(({ to, icon: Icon, label, badge, indent }) => {
+                {section.items.filter(item => !item.adminOnly || user?.rol === 'admin').map(({ to, icon: Icon, label, badge }) => {
                   const badgeValue = badge === 'prospeccion'
                     ? (prospeccionCount !== null ? String(prospeccionCount) : null)
                     : badge === 'oc'
@@ -229,10 +233,8 @@ export default function Layout() {
                       background: 'rgba(21,104,184,0.1)',
                       borderLeft: '2px solid var(--rmg-blue)',
                       color: 'var(--rmg-blt)',
-                      paddingLeft: indent && sidebarOpen ? 28 : undefined,
                     } : {
                       color: 'var(--rmg-muted)',
-                      paddingLeft: indent && sidebarOpen ? 28 : undefined,
                     }}
                   >
                     <Icon size={16} className="flex-shrink-0" />

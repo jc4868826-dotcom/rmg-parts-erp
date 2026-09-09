@@ -43,7 +43,7 @@ import CampanasPage from '@pages/CampanasPage'
 import BackupsPage   from '@pages/BackupsPage'
 import AsesorProductos from '@pages/AsesorProductos'
 import ChileCompraPage from '@pages/ChileCompraPage'
-import CompraAgilPage from '@pages/CompraAgilPage'
+import CompraAgilPage  from '@pages/CompraAgilPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -122,7 +122,12 @@ export default function App() {
               <Route path="backups"           element={<BackupsPage />} />
               <Route path="asesor-productos" element={<AsesorProductos />} />
               <Route path="chilecompra"       element={<ChileCompraPage />} />
-              <Route path="chilecompra/compra-agil" element={<CompraAgilPage />} />
+              {/* 2026-09-09 — CompraAgilPage.jsx existía pero NUNCA estuvo montada
+                  acá ni en el sidebar (ver Layout.jsx): explica en parte el "no veo
+                  cómo verlo" del usuario — el flujo de Compra Ágil solo era
+                  alcanzable escribiendo la URL a mano, si es que se llegaba a
+                  desplegar. Corregido junto con el resto del esquema aprobado. */}
+              <Route path="compra-agil"       element={<CompraAgilPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

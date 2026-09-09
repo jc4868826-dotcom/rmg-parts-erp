@@ -12,15 +12,28 @@
  * entrada rápida para el caso Compra Ágil específicamente.
  */
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatFecha } from '@utils/format'
+import { ESTADOS as ESTADOS_PIPELINE } from './ChileCompraPage'
 import {
   Zap, Package, TrendingUp, Building2, Globe2, Sparkles,
   ExternalLink, CheckCircle2, XCircle, HelpCircle, Loader2, ChevronDown, RefreshCw,
-  ClipboardPaste, Paperclip, X, AlertTriangle, Radar,
+  ClipboardPaste, Paperclip, X, AlertTriangle, Radar, KanbanSquare, FileCheck2, Trophy,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+
+// 2026-09-09 — mismo criterio que compraAgilAnalisis.ESTADOS_TERMINALES_CHILECOMPRA
+// en el backend: una vez que ChileCompra cierra/anula, ese estado ya no cambia.
+const ESTADO_REAL_LABEL = {
+  publicada: 'Publicada', cerrada: 'Cerrada', desierta: 'Desierta',
+  cancelada: 'Cancelada', proveedor_seleccionado: 'Proveedor seleccionado',
+}
+const ESTADO_REAL_COLOR = {
+  publicada: 'var(--rmg-teal)', cerrada: 'var(--rmg-muted)', desierta: 'var(--rmg-red)',
+  cancelada: 'var(--rmg-red)', proveedor_seleccionado: 'var(--rmg-gold)',
+}
 
 // Lee un File del navegador como base64 puro (sin el prefijo "data:...;base64,")
 // — mismo formato que espera chilecompraDocReader.leerAnexos en el backend.
@@ -61,8 +74,14 @@ export default function CompraAgilPage() {
   // solo quiere apretar "Buscar ahora" con los valores de siempre (6h, todas
   // las regiones, estado publicada).
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
-  const [rangoFecha, setRangoFecha] = useState('7d')
-  const [regionesSel, setRegionesSel] = useState([]) // [] = todas
+  // 2026-09-09 — alcance inicial ACOTADO, pedido explícito del usuario en el
+  // esquema aprobado ("debe partir por región metropolitana parámetro inicial
+  // ayer/hoy...eso es más pequeño...luego se puede amplificar"): mismo default
+  // que ahora usa el backend (VENTANA_DEFAULT_MS/REGIONES_DEFAULT en
+  // compraAgilAnalisis.js) — antes el botón "Buscar ahora" mandaba 7 días/
+  // todas las regiones por su cuenta, sin calzar con lo que el cron ya hacía.
+  const [rangoFecha, setRangoFecha] = useState('1d')
+  const [regionesSel, setRegionesSel] = useState([13]) // Metropolitana por defecto — [] = todas
   const [ultimosParametros, setUltimosParametros] = useState(null)
 
   const { data: regionesDisponibles = [] } = useQuery({
@@ -131,6 +150,52 @@ export default function CompraAgilPage() {
       toast.error(`${resumen.errores.length} error(es) durante la búsqueda: ${resumen.errores[0]}`, { duration: 12000 })
     }
   }, [scraperEstado, buscando, qc])
+
+  // ── Sincronización de estado REAL desde ChileCompra (2026-09-09, pieza 4) ──
+  // Mismo patrón fire-and-forget + polling que la detección automática de
+  // arriba. Corre sola cada 2h (compraAgilSyncEstadoCron.js); este botón la
+  // dispara ya mismo. Pedido explícito del usuario: "no veo como recibir
+  // información del estado desde la api...si se adjudicó etc."
+  const [sincronizandoEstado, setSincronizandoEstado] = useState(false)
+  const ultimoResumenSyncVisto = useRef(null)
+
+  const { data: syncEstadoData } = useQuery({
+    queryKey: ['compra-agil', 'sincronizar-estado-estado'],
+    queryFn: () => api.get('/compra-agil/sincronizar-estado-estado').then(r => r.data),
+    refetchInterval: sincronizandoEstado ? 4000 : false,
+  })
+
+  useEffect(() => {
+    if (!syncEstadoData) return
+    if (syncEstadoData.corriendo) { setSincronizandoEstado(true); return }
+    if (!sincronizandoEstado) return
+    setSincronizandoEstado(false)
+    const resumen = syncEstadoData.ultimoResumen
+    if (!resumen || resumen === ultimoResumenSyncVisto.current) return
+    ultimoResumenSyncVisto.current = resumen
+    qc.invalidateQueries({ queryKey: ['compra-agil'] })
+    if (resumen.cambiosDetectados?.length) {
+      toast.success(`${resumen.cambiosDetectados.length} oportunidad(es) cambiaron de estado en ChileCompra.`, { duration: 8000 })
+    } else {
+      toast(`Sin cambios de estado (${resumen.revisadas ?? 0} revisada(s)).`, { icon: '🔄' })
+    }
+    if (resumen.errores?.length) {
+      toast.error(`${resumen.errores.length} error(es) sincronizando estado: ${resumen.errores[0]}`, { duration: 10000 })
+    }
+  }, [syncEstadoData, sincronizandoEstado, qc])
+
+  const sincronizarEstadoMut = useMutation({
+    mutationFn: () => api.post('/compra-agil/sincronizar-estado-ahora').then(r => r.data),
+    onSuccess: (r) => {
+      if (r.iniciado === false) {
+        toast(r.mensaje || 'Ya hay una sincronización en curso.', { icon: '⏳' })
+      } else {
+        toast('Actualizando estado real desde ChileCompra…', { icon: '🔄' })
+      }
+      setSincronizandoEstado(true)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || e.message),
+  })
 
   const scrapearMut = useMutation({
     mutationFn: () => {
@@ -202,15 +267,52 @@ export default function CompraAgilPage() {
 
   return (
     <div className="p-6 space-y-6" style={{ color: 'var(--rmg-text)' }}>
-      <header className="flex items-center gap-3">
-        <Zap size={28} style={{ color: 'var(--rmg-gold)' }} />
-        <div>
-          <h1 className="text-2xl font-bold">Compra Ágil</h1>
-          <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
-            Importa una publicación por su código, cruza con el catálogo RMG, compara fichas técnicas y funda el precio — el mismo flujo de siempre, ahora en un clic.
-          </p>
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Zap size={28} style={{ color: 'var(--rmg-gold)' }} />
+          <div>
+            <h1 className="text-2xl font-bold">Compra Ágil</h1>
+            <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
+              Importa una publicación por su código, cruza con el catálogo RMG, compara fichas técnicas y funda el precio — el mismo flujo de siempre, ahora en un clic.
+            </p>
+          </div>
         </div>
+        {/* 2026-09-09 (pieza 4) — botón manual para forzar la sincronización de
+            estado real ChileCompra (adjudicada/cerrada/OC) ya mismo, sin
+            esperar el cron cada 2h. */}
+        <button
+          disabled={sincronizarEstadoMut.isPending || sincronizandoEstado}
+          onClick={() => sincronizarEstadoMut.mutate()}
+          className="text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+          style={{ border: '1px solid rgba(15,35,60,0.15)' }}
+        >
+          {(sincronizarEstadoMut.isPending || sincronizandoEstado)
+            ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          Actualizar estado real (ChileCompra)
+        </button>
       </header>
+
+      {/* 2026-09-09 (pieza 3) — franja de conteo por estado interno de gestión
+          RMG (mismo pipeline que /chilecompra) + acceso directo al Kanban
+          completo. Antes esto era invisible desde acá: "tampoco aparece
+          pipeline y como cambiar de estado una solicitud". */}
+      <div className="rounded-xl p-3 flex items-center gap-2 flex-wrap" style={{ background: 'var(--rmg-card)', border: '1px solid rgba(15,35,60,0.08)' }}>
+        <span className="text-xs font-semibold flex items-center gap-1.5 shrink-0" style={{ color: 'var(--rmg-muted)' }}>
+          <KanbanSquare size={14} /> Pipeline de gestión:
+        </span>
+        {ESTADOS_PIPELINE.map(e => {
+          const n = lista.filter(op => op.estado === e.k).length
+          if (!n) return null
+          return (
+            <span key={e.k} className="text-xs px-2 py-1 rounded-lg" style={{ background: e.bg, color: e.color }}>
+              {e.label} <strong>{n}</strong>
+            </span>
+          )
+        })}
+        <Link to="/chilecompra" className="text-xs ml-auto flex items-center gap-1 shrink-0" style={{ color: 'var(--rmg-teal)' }}>
+          Ver Kanban completo / cambiar estado <ExternalLink size={11} />
+        </Link>
+      </div>
 
       {/* Detección 100% automática (2026-09-08 noche) — API oficial de Compra
           Ágil, sin navegador, que busca e importa cada oportunidad sola, sin
@@ -406,6 +508,24 @@ export default function CompraAgilPage() {
                 {op.region || '—'}{op.fecha_publicacion ? ` · Publicada ${formatFecha ? formatFecha(op.fecha_publicacion) : op.fecha_publicacion}` : ''}
                 {op.presupuesto_estimado ? ` · ${formatCLP(op.presupuesto_estimado)}` : ''}
               </div>
+              {/* 2026-09-09 (pieza 4) — estado REAL de ChileCompra, distinto del
+                  estado de gestión interno de arriba: "no se a cuales postulo,
+                  cuales descarto... si se adjudicó etc." */}
+              {op.estado_real_chilecompra && (
+                <div className="text-xs mt-1 flex items-center gap-1">
+                  <span className="px-1.5 py-0.5 rounded" style={{
+                    background: 'rgba(15,35,60,0.05)',
+                    color: ESTADO_REAL_COLOR[op.estado_real_chilecompra] || 'var(--rmg-muted)',
+                  }}>
+                    ChileCompra: {ESTADO_REAL_LABEL[op.estado_real_chilecompra] || op.estado_real_chilecompra}
+                  </span>
+                  {op.orden_compra_codigo && (
+                    <span className="flex items-center gap-0.5" style={{ color: 'var(--rmg-teal)' }}>
+                      <Trophy size={11} /> OC {op.orden_compra_codigo}
+                    </span>
+                  )}
+                </div>
+              )}
             </button>
           ))}
         </div>
@@ -435,6 +555,28 @@ export default function CompraAgilPage() {
                       {' · '}Cierre {formatFecha ? formatFecha(detalle.fecha_cierre) : detalle.fecha_cierre}
                       {detalle.presupuesto_estimado ? ` · Presupuesto ref. ${formatCLP(detalle.presupuesto_estimado)}` : ''}
                     </p>
+                    {/* 2026-09-09 (pieza 4) — estado real ChileCompra + Orden de
+                        Compra, cuando ya se conoce (pieza 3) — link directo al
+                        Kanban para cambiar el estado de gestión interno. */}
+                    <div className="flex items-center gap-2 flex-wrap mt-2">
+                      {detalle.estado_real_chilecompra && (
+                        <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{
+                          background: 'rgba(15,35,60,0.05)',
+                          color: ESTADO_REAL_COLOR[detalle.estado_real_chilecompra] || 'var(--rmg-muted)',
+                        }}>
+                          Estado real ChileCompra: {ESTADO_REAL_LABEL[detalle.estado_real_chilecompra] || detalle.estado_real_chilecompra}
+                          {detalle.estado_real_actualizado_at ? ` (rev. ${formatFecha ? formatFecha(detalle.estado_real_actualizado_at) : detalle.estado_real_actualizado_at})` : ''}
+                        </span>
+                      )}
+                      {detalle.orden_compra_codigo && (
+                        <span className="text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1" style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
+                          <Trophy size={12} /> Orden de Compra {detalle.orden_compra_codigo}
+                        </span>
+                      )}
+                      <Link to={`/chilecompra?abrir=${detalle.id}`} className="text-xs flex items-center gap-1" style={{ color: 'var(--rmg-teal)' }}>
+                        <KanbanSquare size={12} /> Cambiar estado de gestión / ver pipeline
+                      </Link>
+                    </div>
                   </div>
                   {detalle.url_portal && (
                     <a href={detalle.url_portal} target="_blank" rel="noreferrer" className="text-xs flex items-center gap-1" style={{ color: 'var(--rmg-teal)' }}>
@@ -459,6 +601,20 @@ export default function CompraAgilPage() {
                   </button>
                 </div>
 
+                {/* 2026-09-09 (pieza 2) — avisos de la lectura de anexos/fichas
+                    (enriquecerConDocumentosAdjuntos en el backend): de dónde
+                    salieron realmente los ítems (línea genérica API vs. anexo
+                    leído por IA) y cualquier advertencia de incertidumbre. */}
+                {!!detalle.advertencias?.length && (
+                  <div className="mb-3 space-y-1">
+                    {detalle.advertencias.map((a, i) => (
+                      <div key={i} className="text-xs px-3 py-2 rounded-lg flex items-start gap-1.5" style={{ background: 'rgba(244,162,60,0.1)', color: 'var(--rmg-gold)' }}>
+                        <AlertTriangle size={13} style={{ marginTop: 1 }} className="shrink-0" /> <span>{a}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {detalle.items?.map(item => {
                   const precio = preciosSugeridos?.find(p => p.itemId === item.id)
                   let cumplimiento = null
@@ -481,6 +637,13 @@ export default function CompraAgilPage() {
                             <>
                               <div className="font-mono font-medium">{item.sku_match}</div>
                               <div style={{ color: 'var(--rmg-muted)' }}>Match {Math.round((item.match_confianza || 0) * 100)}%</div>
+                              {/* 2026-09-09 (pieza 2) — "no esta la parte de fichas
+                                  técnicas": ahora se ve si ya hay una adjunta o si
+                                  falta (adjuntarFichasAOportunidad la intenta sola
+                                  al importar; puede fallar por marca no-Vistony). */}
+                              <div className="flex items-center gap-1 justify-end mt-0.5" style={{ color: item.tiene_ficha_tecnica ? 'var(--rmg-teal)' : 'var(--rmg-muted)' }}>
+                                <FileCheck2 size={11} /> {item.tiene_ficha_tecnica ? 'Ficha técnica adjunta' : 'Sin ficha técnica'}
+                              </div>
                             </>
                           ) : (
                             <span style={{ color: 'var(--rmg-red)' }}>Sin match en catálogo</span>
