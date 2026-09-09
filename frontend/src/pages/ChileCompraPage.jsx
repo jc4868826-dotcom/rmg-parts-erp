@@ -18,7 +18,8 @@ import {
   Landmark, Search, RefreshCw, X, AlertTriangle, CheckCircle2,
   XCircle, Clock, FileSearch, ClipboardCheck, Send, Trophy, Ban,
   MapPin, Calendar, Package, TrendingUp, ShieldCheck, ExternalLink,
-  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack, Eraser, Zap, Loader2
+  History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack, Eraser, Zap, Loader2,
+  Building2, Globe2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -415,6 +416,12 @@ function DetalleModal({ id, onClose }) {
   // keyed por item.id, solo mientras el usuario edita antes de guardar.
   const [notaEdit, setNotaEdit] = useState({})
   const [itemAbierto, setItemAbierto] = useState(null)
+  // 2026-09-09 — "y la parte de benchmark??? se perdió?": vivía solo en la
+  // página separada "/compra-agil" (ya sacada del sidebar); se trae acá para
+  // que quede en el único menú que el usuario usa. Los endpoints no dependen
+  // de la fuente (licitación o Compra Ágil) — funcionan igual para ambas.
+  const [keywordBenchmark, setKeywordBenchmark] = useState('')
+  const [panelBenchmark, setPanelBenchmark] = useState(null) // 'solicitante' | 'mercado' | null
 
   const { data: op, isLoading } = useQuery({
     queryKey: ['chilecompra-detalle', id],
@@ -487,6 +494,24 @@ function DetalleModal({ id, onClose }) {
     onSuccess: () => { invalidar(); toast.success('Corrección guardada — cruce recalculado') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al guardar la corrección'),
   })
+
+  const { data: benchmarkSolicitante, isFetching: cargandoBenchSol, refetch: refetchBenchSol } = useQuery({
+    queryKey: ['chilecompra', id, 'benchmark-solicitante', keywordBenchmark],
+    queryFn: () => api.get(`/compra-agil/${id}/benchmark-solicitante`, { params: { keyword: keywordBenchmark } }).then(r => r.data),
+    enabled: false,
+  })
+  const { data: benchmarkMercado, isFetching: cargandoBenchMer, refetch: refetchBenchMer } = useQuery({
+    queryKey: ['chilecompra', 'benchmark-mercado', keywordBenchmark],
+    queryFn: () => api.get('/compra-agil/benchmark-mercado', { params: { keyword: keywordBenchmark } }).then(r => r.data),
+    enabled: false,
+  })
+
+  const dispararBenchmark = (tipo) => {
+    if (!keywordBenchmark.trim()) return toast.error('Escribe una palabra clave (ej. "aceite motor 5w30")')
+    setPanelBenchmark(tipo)
+    if (tipo === 'solicitante') refetchBenchSol()
+    else refetchBenchMer()
+  }
 
   const handleDescartar = () => {
     const motivo = window.prompt('Motivo del descarte (obligatorio):')
@@ -730,6 +755,46 @@ function DetalleModal({ id, onClose }) {
             </div>
           )}
 
+          {/* Benchmark de precios — de vuelta acá (ver nota arriba) */}
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
+              Benchmark de precios
+            </div>
+            <div className="rmg-card p-3 space-y-2">
+              <input
+                value={keywordBenchmark}
+                onChange={e => setKeywordBenchmark(e.target.value)}
+                placeholder='Palabra clave (ej. "aceite motor 5w30")'
+                className="w-full px-3 py-2 rounded-lg text-sm border"
+                style={{ borderColor: 'var(--rmg-border)' }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => dispararBenchmark('solicitante')}
+                  className="flex-1 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 border"
+                  style={{ borderColor: 'var(--rmg-border)' }}
+                >
+                  {cargandoBenchSol ? <Loader2 size={14} className="animate-spin" /> : <Building2 size={14} />}
+                  ¿Este organismo ya lo compró?
+                </button>
+                <button
+                  onClick={() => dispararBenchmark('mercado')}
+                  className="flex-1 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 border"
+                  style={{ borderColor: 'var(--rmg-border)' }}
+                >
+                  {cargandoBenchMer ? <Loader2 size={14} className="animate-spin" /> : <Globe2 size={14} />}
+                  Precio de mercado
+                </button>
+              </div>
+              {panelBenchmark && (
+                <BenchmarkResultado
+                  resultado={panelBenchmark === 'solicitante' ? benchmarkSolicitante : benchmarkMercado}
+                  tipo={panelBenchmark}
+                />
+              )}
+            </div>
+          </div>
+
           {/* Checklist */}
           {(verChecklist || op.estado === 'preparando_postulacion') && checklistData?.checklist && (
             <div>
@@ -905,5 +970,41 @@ function ActionBtn({ onClick, busy, icon: Icon, label, color, bg }) {
       style={{ background: bg, color }}>
       <Icon size={13} className={busy ? 'animate-spin' : ''} /> {label}
     </button>
+  )
+}
+
+// 2026-09-09 — traído de la página separada "/compra-agil" (ver nota en
+// DetalleModal): mismos dos botones de benchmark, mismo componente de
+// resultado, sin cambios de lógica — solo cambia dónde vive.
+function BenchmarkResultado({ resultado, tipo }) {
+  if (!resultado) return null
+  if (resultado.advertencia) {
+    return <div className="text-xs p-3 rounded-lg" style={{ background: 'rgba(224,90,78,0.08)', color: 'var(--rmg-red)' }}>{resultado.advertencia}</div>
+  }
+  const ordenes = resultado.ordenes || []
+  const est = resultado.estadisticas || {}
+  return (
+    <div className="text-xs space-y-2">
+      {est.n > 0 ? (
+        <div className="p-2 rounded-lg" style={{ background: 'rgba(45,201,138,0.08)' }}>
+          {est.n} orden(es) últimos 6 meses · min {formatCLP(est.min)} · promedio {formatCLP(est.promedio)} · max {formatCLP(est.max)}
+          {resultado.desdeCache ? ' · (cache)' : ''}
+        </div>
+      ) : (
+        <div className="p-2 rounded-lg" style={{ background: 'rgba(15,35,60,0.04)' }}>Sin resultados para esa palabra clave en los últimos 6 meses.</div>
+      )}
+      {ordenes.slice(0, 8).map((o, i) => (
+        <div key={i} className="flex items-center justify-between px-2 py-1.5" style={{ borderTop: '1px solid rgba(15,35,60,0.06)' }}>
+          <div className="truncate flex-1">
+            <span className="font-medium">{o.descripcion}</span>
+            {tipo === 'mercado' && <span style={{ color: 'var(--rmg-muted)' }}> — {o.organismo_nombre}</span>}
+          </div>
+          <div className="shrink-0 ml-2 text-right">
+            {o.precio_unitario ? formatCLP(o.precio_unitario) : '—'}
+            {o.url_portal && <a href={o.url_portal} target="_blank" rel="noreferrer" className="ml-1" style={{ color: 'var(--rmg-teal)' }}><ExternalLink size={11} className="inline" /></a>}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
