@@ -45,20 +45,36 @@ const REGIONES = {
   15: 'Arica y Parinacota', 16: 'Ñuble',
 }
 
-async function llamar(path, params, origen) {
+/**
+ * ⚠️ 2026-09-08/09 (incidente #3): al sacar el parámetro `q` (fix del
+ * incidente #2), el listado SIN palabra clave trae TODAS las Compra Ágil
+ * "publicada" del país en la ventana pedida — una consulta bastante más
+ * pesada del lado de ChileCompra que una búsqueda acotada por texto, y en
+ * producción tardó más de 20s (timeout) al menos una vez. No es un error
+ * de aplicación (no es 4xx/5xx con mensaje) — es un timeout de red, así que
+ * SÍ vale la pena reintentar (a diferencia de un 500/429 con mensaje claro,
+ * que es determinístico y reintentar solo gastaría cuota para nada). Se
+ * sube el timeout base y se reintenta una vez con más margen antes de darse
+ * por vencido.
+ */
+async function llamar(path, params, origen, intento = 1) {
   if (!TICKET) {
     throw new Error(`${origen}: falta la variable de entorno COMPRA_AGIL_API_TICKET (ticket de la API oficial de Compra Ágil).`)
   }
+  const timeoutMs = 30_000 * intento // 30s el primer intento, 60s el reintento
   let resp
   try {
     resp = await axios.get(`${BASE_URL}${path}`, {
       params,
       headers: { ticket: TICKET },
-      timeout: 20_000,
+      timeout: timeoutMs,
       validateStatus: () => true,
     })
   } catch (err) {
-    throw new Error(`${origen}: no se pudo contactar ${BASE_URL}${path} — ${err.message}`)
+    if (intento < 2) {
+      return llamar(path, params, origen, intento + 1) // reintento único, timeout mayor
+    }
+    throw new Error(`${origen}: no se pudo contactar ${BASE_URL}${path} tras ${intento} intento(s) — ${err.message}`)
   }
 
   if (resp.status === 429) {
