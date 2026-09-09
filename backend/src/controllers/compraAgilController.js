@@ -16,6 +16,12 @@ const {
 } = require('../services/compraAgilAnalisis')
 const { benchmarkPorSolicitante, benchmarkPorMercado } = require('../services/compraAgilBenchmark')
 const datosAbiertos = require('../services/compraAgilDatosAbiertos')
+const { REGIONES } = require('../services/compraAgilApiClient')
+
+// ── Regiones disponibles para el filtro de "Buscar ahora" (2026-09-09) ─────
+const regionesDisponibles = (req, res) => {
+  res.json(Object.entries(REGIONES).map(([codigo, nombre]) => ({ codigo: Number(codigo), nombre })))
+}
 
 function withDetails(op) {
   if (!op) return null
@@ -164,12 +170,19 @@ const datosAbiertosSincronizar = async (req, res) => {
 // API normal (segundos, no minutos) — se deja el mismo patrón
 // fire-and-forget + polling que ya tenía el scraper por prolijidad (cero
 // cambios de contrato con el frontend), aunque ya no hace falta por lentitud.
+// 2026-09-09 — antes esto siempre corría con los mismos parámetros fijos en
+// el código (estado=publicada, ventana=6h, sin filtro de región) sin que el
+// usuario pudiera verlos ni cambiarlos. Ahora "Buscar ahora" puede mandar
+// {ventanaMs, estados, regiones} desde la UI (ver CompraAgilPage.jsx) — si
+// no manda nada, detectarYImportarAutomatico sigue usando los valores por
+// defecto de siempre (igual que el cron, que nunca manda body).
 const scrapearAhora = (req, res) => {
   const estadoActual = estadoDetector()
   if (estadoActual.corriendo) {
     return res.status(202).json({ iniciado: false, mensaje: 'Ya hay una búsqueda en curso — espera a que termine.' })
   }
-  detectarYImportarAutomatico({ user: req.user })
+  const { ventanaMs, estados, regiones } = req.body || {}
+  detectarYImportarAutomatico({ user: req.user, ventanaMs, estados, regiones })
     .catch(e => console.error('❌ Compra Ágil "Buscar ahora" falló:', e.message))
   res.status(202).json({ iniciado: true, mensaje: 'Búsqueda iniciada.' })
 }
@@ -180,5 +193,5 @@ const scraperEstado = (req, res) => {
 
 module.exports = {
   listar, importar, importarManual, getDetalle, benchmarkSolicitante, benchmarkMercado, fundamento, precioSugerido,
-  datosAbiertosEstado, datosAbiertosSincronizar, scrapearAhora, scraperEstado,
+  datosAbiertosEstado, datosAbiertosSincronizar, scrapearAhora, scraperEstado, regionesDisponibles,
 }

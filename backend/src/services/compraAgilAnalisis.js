@@ -223,7 +223,10 @@ function normalizar(txt) {
  * compraAgilApiClient.listarPublicadasEnVentana(). El fix (esta versión)
  * evita el parámetro `q` por completo.
  */
-async function detectarYImportarAutomatico({ ventanaMs = VENTANA_DEFAULT_MS, user = USER_AUTOMATICO } = {}) {
+async function detectarYImportarAutomatico({
+  ventanaMs = VENTANA_DEFAULT_MS, user = USER_AUTOMATICO,
+  estados = ['publicada'], regiones = [],
+} = {}) {
   if (_corriendo) {
     return { yaEnCurso: true, ...(_ultimoResumen || {}) }
   }
@@ -232,6 +235,11 @@ async function detectarYImportarAutomatico({ ventanaMs = VENTANA_DEFAULT_MS, use
   const resumen = {
     keywordsRevisadas: 0, codigosVistos: 0, nuevas: 0,
     importadas: [], errores: [], iniciado: new Date().toISOString(),
+    // 2026-09-09 — transparencia pedida por el usuario: "que esta buscando...
+    // que estado? entre que fechas? regiones?" — antes esto era invisible,
+    // fijo en el código (solo "publicada", ventana 6h, sin filtro de región).
+    // Ahora queda en el propio resumen que ve la UI (y el log del cron).
+    parametrosBusqueda: { ventanaMs, estados, regiones },
   }
   try {
     const { KEYWORDS } = require('../jobs/chilecompraCron')
@@ -240,7 +248,7 @@ async function detectarYImportarAutomatico({ ventanaMs = VENTANA_DEFAULT_MS, use
     const codigosVistos = new Set()
 
     try {
-      const publicadas = await api.listarPublicadasEnVentana({ ventanaMs })
+      const publicadas = await api.listarPublicadasEnVentana({ ventanaMs, estados, regiones })
       for (const it of publicadas) {
         const nombreNorm = normalizar(it.nombre)
         if (keywordsNorm.some(k => nombreNorm.includes(k))) {
@@ -276,10 +284,12 @@ async function detectarYImportarAutomatico({ ventanaMs = VENTANA_DEFAULT_MS, use
   }
 
   resumen.finalizado = new Date().toISOString()
+  const horas = Math.round(resumen.parametrosBusqueda.ventanaMs / 3600_000)
   console.log(
-    `ℹ️ Compra Ágil API — ${resumen.keywordsRevisadas} keyword(s), ` +
-    `${resumen.codigosVistos} código(s) vistos, ${resumen.nuevas} nueva(s), ` +
-    `${resumen.importadas.length} importada(s), ${resumen.errores.length} error(es)`
+    `ℹ️ Compra Ágil API — estado=[${resumen.parametrosBusqueda.estados.join(',')}] ` +
+    `ventana=${horas}h región=[${resumen.parametrosBusqueda.regiones.join(',') || 'todas'}] — ` +
+    `${resumen.keywordsRevisadas} keyword(s), ${resumen.codigosVistos} código(s) vistos, ` +
+    `${resumen.nuevas} nueva(s), ${resumen.importadas.length} importada(s), ${resumen.errores.length} error(es)`
   )
   _ultimoResumen = resumen
   return resumen

@@ -204,20 +204,33 @@ async function listarCodigosPublicados({ q, ventanaMs = 6 * 3600_000 } = {}) {
  * el filtrado por palabra clave se hace acá mismo, en memoria, sobre
  * `nombre`. Esto además consume mucha menos cuota diaria del ticket (1-2
  * llamadas en vez de 12+ por corrida, cada 15 min).
+ *
+ * 2026-09-09 — parámetros configurables (pedido explícito del usuario:
+ * "que estado de publicación? entre que fechas ayer/7/15/30 días? regiones?"
+ * — quiere el mismo nivel de control que ya existe en Licitaciones). Antes
+ * `estado` y `region` estaban fijos en el código (solo "publicada", sin
+ * filtro de región) — ahora se pueden pasar desde el botón "Buscar ahora"
+ * de la UI (ver CompraAgilPage.jsx) o desde el cron (que sigue usando los
+ * valores por defecto). `region` es un filtro REPETIBLE en la API oficial
+ * (?region=5&region=13, no una lista separada por comas como `estado`) —
+ * por eso se arma a mano con URLSearchParams en vez de pasar un objeto
+ * plano a axios (que serializaría un array como region[]=5, que la API no
+ * entiende).
  */
-async function listarPublicadasEnVentana({ ventanaMs = 6 * 3600_000 } = {}) {
+async function listarPublicadasEnVentana({ ventanaMs = 6 * 3600_000, estados = ['publicada'], regiones = [] } = {}) {
   const items = []
   let pagina = 1
   let totalPaginas = 1
   do {
-    const payload = await llamar('/v2/compra-agil', {
-      ttl_cambio_ms: ventanaMs,
-      estado: 'publicada',
-      tamano_pagina: 50,
-      numero_pagina: pagina,
-    }, 'listarPublicadasEnVentana')
+    const qp = new URLSearchParams()
+    qp.set('ttl_cambio_ms', String(ventanaMs))
+    qp.set('estado', (estados?.length ? estados : ['publicada']).join(','))
+    qp.set('tamano_pagina', '50')
+    qp.set('numero_pagina', String(pagina))
+    for (const r of regiones || []) qp.append('region', String(r))
+    const payload = await llamar('/v2/compra-agil', qp, 'listarPublicadasEnVentana')
     for (const it of payload?.items || []) {
-      if (it.codigo) items.push({ codigo: it.codigo, nombre: it.nombre || '' })
+      if (it.codigo) items.push({ codigo: it.codigo, nombre: it.nombre || '', estado: it.estado?.codigo || it.estado || null })
     }
     totalPaginas = payload?.paginacion?.total_paginas || 1
     pagina++
@@ -225,4 +238,4 @@ async function listarPublicadasEnVentana({ ventanaMs = 6 * 3600_000 } = {}) {
   return items
 }
 
-module.exports = { buscarCompraAgil, listarCodigosPublicados, listarPublicadasEnVentana }
+module.exports = { buscarCompraAgil, listarCodigosPublicados, listarPublicadasEnVentana, REGIONES }

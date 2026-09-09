@@ -39,11 +39,41 @@ const ESTADO_ICONO = {
   no_confirmado: { icon: HelpCircle, color: 'var(--rmg-gold)' },
 }
 
+// 2026-09-09 — filtros de búsqueda que el usuario pidió explícitamente
+// ("entre que fechas ayer/7/15/30 días? regiones?"), mismo criterio que ya
+// existe para Licitaciones. RANGOS son horas (para armar ventanaMs); "todo"
+// no existe — 30 días es el techo razonable dado que Compra Ágil se cierra
+// rápido y datos más viejos ya no sirven para postular.
+const RANGOS_FECHA = [
+  { id: '1d', etiqueta: 'Ayer/hoy', horas: 24 },
+  { id: '7d', etiqueta: '7 días', horas: 7 * 24 },
+  { id: '15d', etiqueta: '15 días', horas: 15 * 24 },
+  { id: '30d', etiqueta: '30 días', horas: 30 * 24 },
+]
+
 export default function CompraAgilPage() {
   const qc = useQueryClient()
   const [seleccionId, setSeleccionId] = useState(null)
   const [keyword, setKeyword] = useState('')
   const [panelBenchmark, setPanelBenchmark] = useState(null) // 'solicitante' | 'mercado' | null
+
+  // Filtros del detector manual — colapsado por defecto, no molesta a quien
+  // solo quiere apretar "Buscar ahora" con los valores de siempre (6h, todas
+  // las regiones, estado publicada).
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
+  const [rangoFecha, setRangoFecha] = useState('7d')
+  const [regionesSel, setRegionesSel] = useState([]) // [] = todas
+  const [ultimosParametros, setUltimosParametros] = useState(null)
+
+  const { data: regionesDisponibles = [] } = useQuery({
+    queryKey: ['compra-agil', 'regiones'],
+    queryFn: () => api.get('/compra-agil/regiones').then(r => r.data),
+    staleTime: Infinity, // lista fija (16 regiones de Chile), no cambia en runtime
+  })
+
+  const toggleRegion = (codigo) => {
+    setRegionesSel(prev => prev.includes(codigo) ? prev.filter(c => c !== codigo) : [...prev, codigo])
+  }
 
   // Importación manual (2026-09) — la API que usa /importar está bloqueada
   // por Mercado Público (WAF) desde el servidor real, así que este es el
@@ -88,6 +118,9 @@ export default function CompraAgilPage() {
     const resumen = scraperEstado.ultimoResumen
     if (!resumen || resumen === ultimoResumenVisto.current) return
     ultimoResumenVisto.current = resumen
+    // 2026-09-09 — guarda qué se buscó realmente (estado/ventana/regiones) para
+    // mostrarlo debajo del botón; antes esto era invisible.
+    if (resumen.parametrosBusqueda) setUltimosParametros(resumen.parametrosBusqueda)
     qc.invalidateQueries({ queryKey: ['compra-agil'] })
     if (resumen.importadas?.length) {
       toast.success(`${resumen.importadas.length} oportunidad(es) nueva(s) detectada(s) e importada(s) automáticamente.`)
@@ -100,7 +133,13 @@ export default function CompraAgilPage() {
   }, [scraperEstado, buscando, qc])
 
   const scrapearMut = useMutation({
-    mutationFn: () => api.post('/compra-agil/scrapear-ahora', {}).then(r => r.data),
+    mutationFn: () => {
+      const horas = RANGOS_FECHA.find(r => r.id === rangoFecha)?.horas || 24 * 7
+      return api.post('/compra-agil/scrapear-ahora', {
+        ventanaMs: horas * 3600_000,
+        regiones: regionesSel,
+      }).then(r => r.data)
+    },
     onSuccess: (r) => {
       if (r.iniciado === false) {
         toast(r.mensaje || 'Ya hay una búsqueda en curso.', { icon: '⏳' })
@@ -199,6 +238,79 @@ export default function CompraAgilPage() {
             {buscando ? 'Buscando…' : 'Buscar ahora'}
           </button>
         </div>
+
+        {/* 2026-09-09 — filtros pedidos explícitamente: "que estado? entre que
+            fechas ayer/7/15/30 días? regiones?". Colapsado por defecto — el
+            botón de arriba sigue funcionando solo con "Buscar ahora" usando
+            7 días / todas las regiones si nadie toca esto. */}
+        <button
+          onClick={() => setMostrarFiltros(v => !v)}
+          className="text-xs flex items-center gap-1"
+          style={{ color: 'var(--rmg-muted)' }}
+        >
+          Filtros de búsqueda (fecha, región)
+          <ChevronDown size={13} style={{ transform: mostrarFiltros ? 'rotate(180deg)' : 'none' }} />
+        </button>
+
+        {mostrarFiltros && (
+          <div className="pt-2 space-y-3" style={{ borderTop: '1px solid rgba(15,35,60,0.06)' }}>
+            <div>
+              <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--rmg-muted)' }}>Publicadas en los últimos…</div>
+              <div className="flex flex-wrap gap-1.5">
+                {RANGOS_FECHA.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => setRangoFecha(r.id)}
+                    className="text-xs px-3 py-1.5 rounded-lg"
+                    style={{
+                      border: '1px solid rgba(15,35,60,0.15)',
+                      background: rangoFecha === r.id ? 'var(--rmg-teal)' : 'transparent',
+                      color: rangoFecha === r.id ? '#fff' : 'inherit',
+                    }}
+                  >
+                    {r.etiqueta}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
+                Regiones {regionesSel.length ? `(${regionesSel.length} seleccionada(s))` : '(todas)'}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {regionesDisponibles.map(r => (
+                  <button
+                    key={r.codigo}
+                    onClick={() => toggleRegion(r.codigo)}
+                    className="text-xs px-2.5 py-1 rounded-lg"
+                    style={{
+                      border: '1px solid rgba(15,35,60,0.15)',
+                      background: regionesSel.includes(r.codigo) ? 'var(--rmg-teal)' : 'transparent',
+                      color: regionesSel.includes(r.codigo) ? '#fff' : 'inherit',
+                    }}
+                  >
+                    {r.nombre}
+                  </button>
+                ))}
+              </div>
+              {!!regionesSel.length && (
+                <button onClick={() => setRegionesSel([])} className="text-xs mt-1.5 underline" style={{ color: 'var(--rmg-muted)' }}>
+                  Quitar filtro de región (volver a "todas")
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Transparencia: qué buscó realmente la última corrida (propia o del
+            cron) — antes era invisible, fijo en el código. */}
+        {ultimosParametros && (
+          <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+            Última búsqueda: estado <strong>{ultimosParametros.estados?.join(', ') || 'publicada'}</strong> ·
+            últimas <strong>{Math.round(ultimosParametros.ventanaMs / 3600_000)}h</strong> ·
+            región <strong>{ultimosParametros.regiones?.length ? ultimosParametros.regiones.join(', ') : 'todas'}</strong>
+          </p>
+        )}
       </div>
 
       {/* Fallback manual — solo para casos puntuales fuera de las palabras clave
@@ -287,6 +399,13 @@ export default function CompraAgilPage() {
               <div className="font-medium truncate">{op.nombre || op.codigo_externo}</div>
               <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{op.organismo_nombre || '—'}</div>
               <div className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>{op.codigo_externo} · {op.estado}</div>
+              {/* 2026-09-09 — antes la lista no mostraba fecha de publicación,
+                  región ni presupuesto: había que abrir cada una para saber si
+                  vale la pena mirarla. */}
+              <div className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                {op.region || '—'}{op.fecha_publicacion ? ` · Publicada ${formatFecha ? formatFecha(op.fecha_publicacion) : op.fecha_publicacion}` : ''}
+                {op.presupuesto_estimado ? ` · ${formatCLP(op.presupuesto_estimado)}` : ''}
+              </div>
             </button>
           ))}
         </div>
@@ -311,7 +430,9 @@ export default function CompraAgilPage() {
                       {detalle.organismo_nombre} · {detalle.comuna}{detalle.region ? `, ${detalle.region}` : ''}
                     </p>
                     <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>
-                      Código {detalle.codigo_externo} · Cierre {formatFecha ? formatFecha(detalle.fecha_cierre) : detalle.fecha_cierre}
+                      Código {detalle.codigo_externo} · Estado <strong>{detalle.estado}</strong>
+                      {detalle.fecha_publicacion ? ` · Publicada ${formatFecha ? formatFecha(detalle.fecha_publicacion) : detalle.fecha_publicacion}` : ''}
+                      {' · '}Cierre {formatFecha ? formatFecha(detalle.fecha_cierre) : detalle.fecha_cierre}
                       {detalle.presupuesto_estimado ? ` · Presupuesto ref. ${formatCLP(detalle.presupuesto_estimado)}` : ''}
                     </p>
                   </div>
@@ -347,17 +468,22 @@ export default function CompraAgilPage() {
                     <div key={item.id} className="py-3" style={{ borderTop: '1px solid rgba(15,35,60,0.06)' }}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
-                          <div className="text-sm font-medium">{item.descripcion_solicitada}</div>
+                          <div className="text-[10px] uppercase font-semibold tracking-wide" style={{ color: 'var(--rmg-muted)' }}>Nos piden</div>
+                          <div className="text-sm font-medium">
+                            {item.descripcion_solicitada}
+                            {item.cantidad ? ` · ${item.cantidad} ${item.unidad || ''}` : ''}
+                          </div>
                           <div className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>{item.especificacion_tecnica}</div>
                         </div>
                         <div className="text-right text-xs shrink-0">
+                          <div className="text-[10px] uppercase font-semibold tracking-wide" style={{ color: 'var(--rmg-muted)' }}>Ofrecemos</div>
                           {item.sku_match ? (
                             <>
                               <div className="font-mono font-medium">{item.sku_match}</div>
                               <div style={{ color: 'var(--rmg-muted)' }}>Match {Math.round((item.match_confianza || 0) * 100)}%</div>
                             </>
                           ) : (
-                            <span style={{ color: 'var(--rmg-red)' }}>Sin match</span>
+                            <span style={{ color: 'var(--rmg-red)' }}>Sin match en catálogo</span>
                           )}
                         </div>
                       </div>

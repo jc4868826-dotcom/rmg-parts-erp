@@ -41,6 +41,7 @@ const router = require('express').Router()
 const c = require('../controllers/compraAgilController')
 const { authenticate } = require('../middleware/auth')
 
+router.get('/regiones', authenticate, c.regionesDisponibles)
 router.get('/benchmark-mercado', authenticate, c.benchmarkMercado)
 router.get('/datos-abiertos/estado', authenticate, c.datosAbiertosEstado)
 router.post('/datos-abiertos/sincronizar', authenticate, c.datosAbiertosSincronizar)
