@@ -135,8 +135,13 @@ function mapearDetalle(p, codigoSolicitado) {
 /**
  * Lista códigos de Compra Ágil en estado "publicada" (abiertas, recibiendo
  * cotizaciones) que coincidan con `q` y hayan tenido cambios dentro de
- * `ventanaMs` — pagina automáticamente hasta traer todo. Es la base del
- * detector automático (ver compraAgilAnalisis.detectarYImportarAutomatico).
+ * `ventanaMs` — pagina automáticamente hasta traer todo.
+ *
+ * ⚠️ 2026-09-08 (noche, incidente #2): NO se usa desde detectarYImportarAutomatico
+ * desde este mismo commit — ver listarPublicadasEnVentana() más abajo y el
+ * aviso ahí. Se deja la función porque sigue siendo válida para una búsqueda
+ * puntual (ej. una futura pantalla de "buscar por palabra" a pedido del
+ * usuario), solo que el detector automático ya no la llama en un loop.
  */
 async function listarCodigosPublicados({ q, ventanaMs = 6 * 3600_000 } = {}) {
   const codigos = new Set()
@@ -159,4 +164,49 @@ async function listarCodigosPublicados({ q, ventanaMs = 6 * 3600_000 } = {}) {
   return [...codigos]
 }
 
-module.exports = { buscarCompraAgil, listarCodigosPublicados }
+/**
+ * Lista TODAS las Compra Ágil "publicada" con cambios dentro de `ventanaMs`
+ * — SIN filtro `q` — y pagina hasta traer todo. Cada ítem trae al menos
+ * {codigo, nombre}.
+ *
+ * ⚠️ 2026-09-08 (noche, incidente #2 — "sigue el error al buscar"): el
+ * detector automático hacía 12 llamadas separadas (una por palabra clave del
+ * rubro RMG) usando `q=<palabra>`. En producción, EXACTAMENTE 5 de esas 12
+ * palabras — las más genéricas/comunes: "lubricante", "aceite", "grasa",
+ * "refrigerante", "anticongelante" — devolvían HTTP 500 "Servicio no
+ * disponible" en TODAS las corridas (confirmado en los logs de Render:
+ * mismo resultado en 8+ corridas separadas, minutos aparte, nunca
+ * transitorio). Palabras más específicas ("hidraulico", "bateria",
+ * "adblue") sí funcionaban. La hipótesis más consistente con ese patrón es
+ * que el buscador de texto libre (`q`) de esta API beta de mayo 2026 no
+ * soporta bien palabras genéricas que matchean demasiados resultados a nivel
+ * nacional (timeout/500 interno de ChileCompra), independiente de la ventana
+ * de tiempo pedida.
+ *
+ * Fix: en vez de 12 búsquedas por palabra, se pide UNA sola vez (paginada)
+ * el listado completo de "publicada" cambiadas en la ventana — sin `q` — y
+ * el filtrado por palabra clave se hace acá mismo, en memoria, sobre
+ * `nombre`. Esto además consume mucha menos cuota diaria del ticket (1-2
+ * llamadas en vez de 12+ por corrida, cada 15 min).
+ */
+async function listarPublicadasEnVentana({ ventanaMs = 6 * 3600_000 } = {}) {
+  const items = []
+  let pagina = 1
+  let totalPaginas = 1
+  do {
+    const payload = await llamar('/v2/compra-agil', {
+      ttl_cambio_ms: ventanaMs,
+      estado: 'publicada',
+      tamano_pagina: 50,
+      numero_pagina: pagina,
+    }, 'listarPublicadasEnVentana')
+    for (const it of payload?.items || []) {
+      if (it.codigo) items.push({ codigo: it.codigo, nombre: it.nombre || '' })
+    }
+    totalPaginas = payload?.paginacion?.total_paginas || 1
+    pagina++
+  } while (pagina <= totalPaginas)
+  return items
+}
+
+module.exports = { buscarCompraAgil, listarCodigosPublicados, listarPublicadasEnVentana }

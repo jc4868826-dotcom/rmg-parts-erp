@@ -193,14 +193,35 @@ async function importarCompraAgil(codigo, user, tipoEventoBase = 'compra_agil') 
 }
 
 /**
+ * Quita tildes/diacríticos para comparar palabras clave vs. nombres de la API
+ * sin depender de que ambos lados estén acentuados igual (ej. keyword
+ * "liquido de frenos" sin tilde vs. nombre real "Líquido de frenos DOT4").
+ */
+function normalizar(txt) {
+  return (txt || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+/**
  * Detector automático — reemplaza a compraAgilScraper.detectarYImportarNuevas
  * (navegador headless, deshabilitado desde 2026-09-08 por saturar la memoria
- * de Render). Por cada palabra clave del rubro RMG (misma lista que
- * chilecompraCron.js), consulta la API oficial de Compra Ágil filtrando
- * estado=publicada + ventana de cambios recientes, junta los códigos nuevos
- * (que no existan aún como oportunidad) y los importa con el pipeline de
- * siempre (cruce, scores, fichas técnicas) — cero navegador, cero pasos
- * manuales, cero riesgo de memoria.
+ * de Render). Trae TODAS las Compra Ágil "publicada" con cambios recientes
+ * (una sola consulta paginada, ver listarPublicadasEnVentana) y filtra en
+ * memoria por las palabras clave del rubro RMG (misma lista que
+ * chilecompraCron.js) contra el nombre de cada publicación — cero navegador,
+ * cero pasos manuales, cero riesgo de memoria.
+ *
+ * ⚠️ 2026-09-08 (noche, incidente #2): ANTES esto hacía 12 búsquedas
+ * separadas (`q=<palabra clave>`) contra la API. En producción, 5 de esas 12
+ * palabras — las más genéricas ("lubricante", "aceite", "grasa",
+ * "refrigerante", "anticongelante") — devolvían HTTP 500 en el 100% de las
+ * corridas (confirmado en los logs de Render, mismo resultado en 8+
+ * corridas separadas), mientras que palabras más específicas sí funcionaban
+ * — el detector quedaba ciego a esas 5 categorías (justo las más
+ * importantes del rubro) en cada pasada. Ver el aviso completo en
+ * compraAgilApiClient.listarPublicadasEnVentana(). El fix (esta versión)
+ * evita el parámetro `q` por completo.
  */
 async function detectarYImportarAutomatico({ ventanaMs = VENTANA_DEFAULT_MS, user = USER_AUTOMATICO } = {}) {
   if (_corriendo) {
@@ -214,17 +235,20 @@ async function detectarYImportarAutomatico({ ventanaMs = VENTANA_DEFAULT_MS, use
   }
   try {
     const { KEYWORDS } = require('../jobs/chilecompraCron')
+    resumen.keywordsRevisadas = KEYWORDS.length
+    const keywordsNorm = KEYWORDS.map(normalizar)
     const codigosVistos = new Set()
 
-    for (const keyword of KEYWORDS) {
-      resumen.keywordsRevisadas++
-      try {
-        const codigos = await api.listarCodigosPublicados({ q: keyword, ventanaMs })
-        codigos.forEach(c => codigosVistos.add(c))
-      } catch (e) {
-        resumen.errores.push(`Búsqueda "${keyword}": ${e.message}`)
-        if (/cuota diaria/i.test(e.message)) break // sin seguir gastando cuota si ya se agotó
+    try {
+      const publicadas = await api.listarPublicadasEnVentana({ ventanaMs })
+      for (const it of publicadas) {
+        const nombreNorm = normalizar(it.nombre)
+        if (keywordsNorm.some(k => nombreNorm.includes(k))) {
+          codigosVistos.add(it.codigo)
+        }
       }
+    } catch (e) {
+      resumen.errores.push(`Listado publicada: ${e.message}`)
     }
     resumen.codigosVistos = codigosVistos.size
 
