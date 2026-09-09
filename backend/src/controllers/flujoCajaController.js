@@ -210,6 +210,27 @@ const getResumen = (_req, res) => {
   }
 }
 
+// Diagnóstico temporal — lista las filas crudas de caja_movimientos (la
+// tabla que alimenta saldo_actual/saldo_al_corte) para poder reconciliarla
+// a mano contra la reconstrucción en vivo de buildMovimientos(). Solo
+// lectura, sin efectos secundarios. Quitar una vez cerrado el diagnóstico
+// del descuadre "Saldo actual" reportado el 09-sep-2026.
+const getRaw = (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT id, tipo, categoria, descripcion, monto, fecha_registro, fecha_pago,
+             estado, origen_tabla, origen_id, cuenta_bancaria
+      FROM caja_movimientos
+      ORDER BY fecha_pago, id
+    `).all()
+    const totalConfirmado = rows.filter(r => r.estado === 'confirmado')
+      .reduce((s, r) => s + (r.tipo === 'ingreso' ? r.monto : -r.monto), 0)
+    res.json({ count: rows.length, total_confirmado_recalculado: totalConfirmado, rows })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const crearManual = (req, res) => {
   try {
     const { tipo, categoria, descripcion, monto, fecha_pago, estado, cuenta_bancaria } = req.body
@@ -262,4 +283,4 @@ const eliminar = (req, res) => {
   }
 }
 
-module.exports = { getMovimientos, getResumen, crearManual, actualizar, eliminar }
+module.exports = { getMovimientos, getResumen, getRaw, crearManual, actualizar, eliminar }
