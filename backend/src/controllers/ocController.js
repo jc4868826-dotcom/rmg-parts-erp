@@ -296,15 +296,37 @@ const patchEstadoOC = (req, res) => {
       db.prepare(`UPDATE ordenes_compra SET ${cols.join(', ')} WHERE id = ?`).run(...vals)
 
       // Al autorizar el pago se registra el egreso y se cierra la CxP asociada.
+      //
+      // OJO: si la OC ya tiene su factura registrada (registrarFactura() más
+      // arriba), ESA inserción ya generó el egreso real en caja_movimientos
+      // (origen_tabla='facturas_proveedor'). Insertar OTRO egreso acá —como
+      // se hacía antes— duplicaba el mismo pago dos veces (encontrado el
+      // 09-sep-2026 en producción: OC-2026-0001 y OC-2026-0006 quedaron
+      // contadas por $207.024 y $84.478 cada una DOS veces). Ahora: si existe
+      // una factura de esta OC con egreso en caja_movimientos, solo se
+      // confirma esa fila (por si seguía 'proyectada'); si no existe
+      // (OC pagada sin pasar por factura), se insta como antes.
       if (nuevo_estado === 'pagada') {
         try {
           const cuentaFinal = cuenta_bancaria || oc.cuenta_bancaria || null
-          const descripcion = [`OC ${oc.numero} · ${oc.proveedor}`, forma_pago ? `(${forma_pago})` : null]
-            .filter(Boolean).join(' ')
-          db.prepare(`INSERT INTO caja_movimientos
-            (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
-            VALUES ('egreso','Compra proveedor',?,?,?,?,'confirmado','ordenes_compra',?,?)`)
-            .run(descripcion, oc.total, hoy, hoy, oc.id, cuentaFinal)
+          const facturaExistente = db.prepare(`
+            SELECT cm.id FROM caja_movimientos cm
+            JOIN facturas_proveedor fp ON fp.id = cm.origen_id AND cm.origen_tabla = 'facturas_proveedor'
+            WHERE fp.oc_id = ?
+          `).get(oc.id)
+          if (facturaExistente) {
+            db.prepare(`
+              UPDATE caja_movimientos SET estado = 'confirmado', fecha_pago = ?, cuenta_bancaria = COALESCE(cuenta_bancaria, ?)
+              WHERE id = ?
+            `).run(hoy, cuentaFinal, facturaExistente.id)
+          } else {
+            const descripcion = [`OC ${oc.numero} · ${oc.proveedor}`, forma_pago ? `(${forma_pago})` : null]
+              .filter(Boolean).join(' ')
+            db.prepare(`INSERT INTO caja_movimientos
+              (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
+              VALUES ('egreso','Compra proveedor',?,?,?,?,'confirmado','ordenes_compra',?,?)`)
+              .run(descripcion, oc.total, hoy, hoy, oc.id, cuentaFinal)
+          }
         } catch (_) {}
         try {
           db.prepare("UPDATE facturas_cxp SET estado = 'pagada', fecha_pago = ? WHERE oc_id = ?").run(hoy, oc.id)

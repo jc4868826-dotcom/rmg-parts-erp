@@ -231,6 +231,52 @@ const getRaw = (req, res) => {
   }
 }
 
+// Corrección puntual, ejecutada una sola vez el 09-sep-2026 — reconciliación
+// manual de caja_movimientos contra el banco real, confirmada línea por
+// línea con el usuario (ver hilo "corrige el saldo actual del flujo de
+// caja"). Borra las filas que el usuario confirmó como erróneas/duplicadas
+// (2 notas de venta y 2 ventas que nunca se depositaron, el set completo
+// duplicado de la venta MSTM, el ajuste manual "fantasma", y las OCs de
+// Vistony y Christian Hughes que quedaron contadas dos veces — una vez por
+// su factura y otra por la OC misma, bug ahora corregido en
+// ocController.js) y agrega el único movimiento real que faltaba (el gasto
+// "estampado chaquetas", pagado el 03-ago pero nunca sincronizado a caja).
+// Idempotente: si ya se corrió, las filas a borrar ya no existen (no falla)
+// y no vuelve a insertar el gasto si ya tiene su movimiento.
+const IDS_A_BORRAR_RECONCILIACION_090926 = [19, 20, 21, 22, 23, 28, 32, 33, 34, 36, 38, 44]
+const reconciliar090926 = (req, res) => {
+  try {
+    const borrados = []
+    const delStmt = db.prepare('DELETE FROM caja_movimientos WHERE id = ?')
+    for (const id of IDS_A_BORRAR_RECONCILIACION_090926) {
+      const info = delStmt.run(id)
+      if (info.changes) borrados.push(id)
+    }
+
+    const yaExisteEstampado = db.prepare(
+      "SELECT id FROM caja_movimientos WHERE origen_tabla = 'gastos' AND origen_id = 'd28f7610-f203-477d-ace5-504ab8572182'"
+    ).get()
+    let agregado = false
+    if (!yaExisteEstampado) {
+      db.prepare(`
+        INSERT INTO caja_movimientos
+          (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id, cuenta_bancaria)
+        VALUES ('egreso','otros','estampado chaquetas',16800,?,?,'confirmado','gastos','d28f7610-f203-477d-ace5-504ab8572182',NULL)
+      `).run(hoy(), '2026-08-03')
+      agregado = true
+    }
+
+    const total = db.prepare(`
+      SELECT COALESCE(SUM(CASE tipo WHEN 'ingreso' THEN monto ELSE -monto END),0) as s
+      FROM caja_movimientos WHERE estado = 'confirmado'
+    `).get().s
+
+    res.json({ ok: true, filas_borradas: borrados, gasto_estampado_agregado: agregado, saldo_actual_recalculado: total })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const crearManual = (req, res) => {
   try {
     const { tipo, categoria, descripcion, monto, fecha_pago, estado, cuenta_bancaria } = req.body
@@ -283,4 +329,4 @@ const eliminar = (req, res) => {
   }
 }
 
-module.exports = { getMovimientos, getResumen, getRaw, crearManual, actualizar, eliminar }
+module.exports = { getMovimientos, getResumen, getRaw, reconciliar090926, crearManual, actualizar, eliminar }
