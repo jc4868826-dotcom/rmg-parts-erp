@@ -97,6 +97,43 @@ function buildMovimientos(filtroDesde, filtroHasta) {
     `).all(filtroDesde, filtroHasta))
   } catch (_) {}
 
+  // 6. Facturas de proveedor (OC → registrarFactura() en ocController.js).
+  // Estas filas YA viven completas en caja_movimientos (no hay que
+  // reconstruirlas desde otra tabla, igual que los movimientos manuales) —
+  // antes esta sección no existía y por eso los pagos a proveedor vía
+  // factura de OC (ej. Christian Hughes, Vistony) eran invisibles en esta
+  // tabla aunque sí estaban restando del saldo real. Encontrado el
+  // 09-sep-2026 al reconciliar el saldo contra el banco.
+  try {
+    movs.push(...db.prepare(`
+      SELECT id AS origen_id, id,
+        'facturas_proveedor' AS origen_tabla, 'Factura proveedor' AS origen_label,
+        tipo, categoria, descripcion, monto, fecha_pago, estado, cuenta_bancaria
+      FROM caja_movimientos
+      WHERE origen_tabla='facturas_proveedor' AND fecha_pago >= ? AND fecha_pago <= ?
+    `).all(filtroDesde, filtroHasta))
+  } catch (_) {}
+
+  // Todas las filas de arriba salvo 'manual'/'facturas_proveedor' se
+  // RECONSTRUYEN en vivo desde ventas/gastos/compras/ordenes_compra — su
+  // `id` es el id de esa tabla origen, no el id real en caja_movimientos.
+  // Para poder editar/eliminar cualquier línea desde el Flujo de Caja
+  // (no solo las manuales) hace falta el id real; se resuelve aquí en un
+  // solo query en vez de uno por fila.
+  try {
+    const cajaIds = db.prepare(`
+      SELECT id, origen_tabla, origen_id FROM caja_movimientos WHERE origen_tabla NOT IN ('manual','facturas_proveedor')
+    `).all()
+    const mapa = new Map(cajaIds.map(c => [`${c.origen_tabla}::${String(c.origen_id)}`, c.id]))
+    for (const m of movs) {
+      if (m.origen_tabla === 'manual' || m.origen_tabla === 'facturas_proveedor') {
+        m.caja_movimiento_id = m.id
+      } else {
+        m.caja_movimiento_id = mapa.get(`${m.origen_tabla}::${String(m.origen_id)}`) || null
+      }
+    }
+  } catch (_) {}
+
   movs.sort((a, b) => (a.fecha_pago || '').localeCompare(b.fecha_pago || ''))
   return movs
 }
@@ -327,13 +364,23 @@ const actualizar = (req, res) => {
   }
 }
 
+// Antes solo se podían borrar movimientos manuales — pensado para que un
+// registro real (venta, gasto, OC) nunca se pudiera borrar por error desde
+// acá. Pero eso mismo obligó a corregir a mano por código un descuadre de
+// caja (09-sep-2026: pagos duplicados de OC, un "ajuste fantasma" repetido)
+// que el usuario debería poder arreglar él mismo. Ahora se puede borrar
+// cualquier fila — la ruta ya exige rol gerente/administrador (ver
+// routes/flujoCaja.js) — con una salvedad: borrar una fila que viene de una
+// venta/gasto/OC/compra SOLO borra su movimiento de caja (deja de contar en
+// el saldo); NO revierte el estado "Pagado"/"pagado" de esa venta/gasto/OC
+// en su tabla de origen. Si el usuario borra por error el pago real de una
+// venta, la venta queda marcada pagada pero sin su ingreso en caja —
+// tendría que volver a registrar el pago desde Ventas para que se
+// reinserte correctamente.
 const eliminar = (req, res) => {
   try {
     const m = db.prepare('SELECT * FROM caja_movimientos WHERE id = ?').get(req.params.id)
     if (!m) return res.status(404).json({ error: 'Movimiento no encontrado' })
-    if (m.origen_tabla !== 'manual') {
-      return res.status(400).json({ error: 'Solo se pueden eliminar movimientos manuales' })
-    }
     db.prepare('DELETE FROM caja_movimientos WHERE id = ?').run(req.params.id)
     res.json({ ok: true })
   } catch (err) {

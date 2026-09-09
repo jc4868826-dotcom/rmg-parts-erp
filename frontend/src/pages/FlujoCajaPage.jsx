@@ -110,8 +110,22 @@ export default function FlujoCajaPage() {
   const eliminarMut = useMutation({
     mutationFn: (id) => api.delete(`/flujo-caja/${id}`).then(r => r.data),
     onSuccess: () => { invalidate(); toast.success('Eliminado') },
-    onError: () => toast.error('Solo se eliminan movimientos manuales'),
+    onError: (e) => toast.error(e.response?.data?.error || 'No se pudo eliminar'),
   })
+
+  // Editar/eliminar ya no está limitado a movimientos manuales — cualquier
+  // fila (venta, gasto, compra, OC) se puede corregir o borrar desde acá si
+  // el número no calza con el banco. Ojo: borrar el movimiento de caja de
+  // una venta/gasto/OC NO revierte su estado "Pagado"/"pagado" en su
+  // pantalla de origen, solo deja de contar en el saldo de caja.
+  const handleEliminar = (m) => {
+    if (!window.confirm(
+      m.origen_tabla === 'manual'
+        ? '¿Eliminar este movimiento manual?'
+        : `¿Eliminar este movimiento de caja (${m.origen_label} · ${m.descripcion})? Esto NO revierte el estado de pago en ${m.origen_label} — solo deja de contar en el saldo de caja.`
+    )) return
+    eliminarMut.mutate(m.caja_movimiento_id)
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -380,8 +394,13 @@ export default function FlujoCajaPage() {
       {editando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
           <div className="rmg-card p-6 w-full max-w-lg animate-fade-in">
-            <h2 className="font-bold mb-4">Editar movimiento</h2>
-            <form onSubmit={handleEditSubmit} className="grid grid-cols-2 gap-3">
+            <h2 className="font-bold mb-1">Editar movimiento</h2>
+            {editando.origen_tabla !== 'manual' && (
+              <p className="text-xs mb-4" style={{ color: 'var(--rmg-gold)' }}>
+                Esto solo corrige el movimiento de caja ({editando.origen_label}) — no cambia el estado de pago en {editando.origen_label}.
+              </p>
+            )}
+            <form onSubmit={handleEditSubmit} className="grid grid-cols-2 gap-3" style={{ marginTop: editando.origen_tabla === 'manual' ? '1rem' : 0 }}>
               <div>
                 <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Tipo</label>
                 <select className="rmg-input" value={editando.tipo} onChange={e => setEditando(p => ({ ...p, tipo: e.target.value }))}>
@@ -507,12 +526,12 @@ export default function FlujoCajaPage() {
                                     : { background: 'rgba(56,182,255,0.08)', color: 'var(--rmg-blt)' }}>
                                   {m.estado === 'confirmado' ? '✓' : '○'}
                                 </span>
-                                {m.origen_tabla === 'manual' && (
+                                {m.caja_movimiento_id != null && (
                                   <>
-                                    <button onClick={() => setEditando({ ...m })} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
+                                    <button onClick={() => setEditando({ ...m, id: m.caja_movimiento_id })} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
                                       <Pencil size={11}/>
                                     </button>
-                                    <button onClick={() => eliminarMut.mutate(m.id)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}>
+                                    <button onClick={() => handleEliminar(m)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}>
                                       <Trash2 size={11}/>
                                     </button>
                                   </>
@@ -596,12 +615,12 @@ export default function FlujoCajaPage() {
                           {formatCLP(m.saldo_acum)}
                         </td>
                         <td className="px-4 py-2.5">
-                          {m.origen_tabla === 'manual' && (
+                          {m.caja_movimiento_id != null && (
                             <div className="flex gap-1">
-                              <button onClick={() => setEditando({ ...m })} className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
+                              <button onClick={() => setEditando({ ...m, id: m.caja_movimiento_id })} className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
                                 <Pencil size={12}/>
                               </button>
-                              <button onClick={() => eliminarMut.mutate(m.id)} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}>
+                              <button onClick={() => handleEliminar(m)} className="p-1.5 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}>
                                 <Trash2 size={12}/>
                               </button>
                             </div>
