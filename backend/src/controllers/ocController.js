@@ -674,12 +674,23 @@ const getImpactoEliminacion = (req, res) => {
       'SELECT id, numero_oc, numero_factura, estado FROM compras WHERE oc_id = ?'
     ).get(oc.id)
 
+    // Factura de proveedor registrada para esta OC (registrarFactura()) y su
+    // egreso en caja_movimientos — ver nota en deleteOC() más abajo: si no se
+    // limpian acá, quedan huérfanas en el Flujo de Caja para siempre (bug
+    // encontrado el 11-sep-2026 con una OC de Vistony ya eliminada).
+    const facturaVinculada = db.prepare(
+      'SELECT id, numero_factura, monto_total FROM facturas_proveedor WHERE oc_id = ?'
+    ).get(oc.id)
+
     const advertencias = []
     if (movimientosStock.length > 0) {
       advertencias.push(`Se revertirá el stock de ${movimientosStock.length} producto(s) que ingresaron con esta OC.`)
     }
     if (compraVinculada) {
       advertencias.push(`Existe una compra vinculada${compraVinculada.numero_factura ? ` (Factura: ${compraVinculada.numero_factura})` : ''}. La compra NO se eliminará, quedará desvinculada.`)
+    }
+    if (facturaVinculada) {
+      advertencias.push(`Existe una factura de proveedor registrada (N° ${facturaVinculada.numero_factura}, $${facturaVinculada.monto_total}). Se eliminará junto con su egreso en el Flujo de Caja.`)
     }
     const estadosConStock = ['recibida_parcial', 'recibida_total', 'facturada', 'pago_autorizado', 'pagada']
     if (estadosConStock.includes(oc.estado)) {
@@ -694,6 +705,8 @@ const getImpactoEliminacion = (req, res) => {
       })),
       tiene_compra_vinculada: !!compraVinculada,
       compra_id: compraVinculada?.id || null,
+      tiene_factura_vinculada: !!facturaVinculada,
+      factura_id: facturaVinculada?.id || null,
       puede_eliminar: true,
       advertencias,
     })
@@ -716,9 +729,24 @@ const deleteOC = (req, res) => {
 
     const compraVinculada = db.prepare('SELECT id FROM compras WHERE oc_id = ?').get(oc.id)
 
+    // OJO 2026-09-11: hasta ahora deleteOC() borraba la OC (con CASCADE sobre
+    // oc_items/recepciones/historial) pero dejaba huérfanas su factura de
+    // proveedor (facturas_proveedor) y el egreso que esa factura ya había
+    // escrito en caja_movimientos — ese egreso seguía apareciendo para
+    // siempre en el Flujo de Caja como si fuera de una OC viva (encontrado
+    // con una factura de Vistony de una OC ya eliminada). Ahora se limpian
+    // las tres tablas relacionadas a la factura junto con la OC.
+    const facturasVinculadas = db.prepare('SELECT id FROM facturas_proveedor WHERE oc_id = ?').all(oc.id)
+
     const stockRevertido = []
 
     const ejecutar = db.transaction(() => {
+      for (const fact of facturasVinculadas) {
+        try { db.prepare("DELETE FROM caja_movimientos WHERE origen_tabla = 'facturas_proveedor' AND origen_id = ?").run(fact.id) } catch (_) {}
+      }
+      try { db.prepare('DELETE FROM facturas_cxp WHERE oc_id = ?').run(oc.id) } catch (_) {}
+      try { db.prepare('DELETE FROM facturas_proveedor WHERE oc_id = ?').run(oc.id) } catch (_) {}
+
       for (const mov of movimientosEntrada) {
         const prod = db.prepare(
           'SELECT codigo_sku, MAX(COALESCE(stock_actual,0)) AS stock_actual FROM lista_precios WHERE codigo_sku = ? GROUP BY codigo_sku'
@@ -750,9 +778,11 @@ const deleteOC = (req, res) => {
 
     res.json({
       success: true,
-      mensaje: `OC ${oc.numero} eliminada. Stock revertido en ${stockRevertido.length} producto(s).`,
+      mensaje: `OC ${oc.numero} eliminada. Stock revertido en ${stockRevertido.length} producto(s).`
+        + (facturasVinculadas.length ? ` ${facturasVinculadas.length} factura(s) de proveedor y su egreso en Flujo de Caja también se eliminaron.` : ''),
       stock_revertido: stockRevertido,
       compra_desvinculada: !!compraVinculada,
+      facturas_eliminadas: facturasVinculadas.length,
     })
   } catch (err) {
     res.status(500).json({ error: err.message })

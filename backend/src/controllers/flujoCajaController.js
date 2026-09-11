@@ -152,6 +152,54 @@ function calcSaldoAlCorte(fechaCorte) {
   }
 }
 
+// "Saldo al [fecha fin del filtro]" — 2026-09-11: antes usaba calcSaldoAlCorte
+// también para esta tarjeta, que SOLO suma confirmado. Si fechaCorte es una
+// fecha futura (el usuario puso un rango que llega, por ejemplo, a fin de
+// mes) y no hay ningún movimiento confirmado con fecha futura (lo normal:
+// lo confirmado ya ocurrió), el resultado salía IDÉNTICO al "Saldo Actual
+// (HOY)" — no se estaba proyectando nada, aunque la tarjeta se llame "Saldo
+// al <fecha>". Para una fecha en el futuro, esta función ahora sí proyecta:
+// parte del saldo real de hoy y le suma todo lo que hoy está "proyectado"
+// (ventas no pagadas, facturas de compra no pagadas, gastos/manuales
+// proyectados) con fecha de pago dentro del rango — así la tarjeta cambia
+// de verdad según lo que hay pendiente de cobrar/pagar. Para una fecha
+// pasada o de hoy, se mantiene el saldo real histórico (solo confirmado).
+function calcSaldoProyectadoAlCorte(fechaCorte, today) {
+  if (fechaCorte <= today) return calcSaldoAlCorte(fechaCorte)
+
+  const base = calcSaldoAlCorte(today)
+  let proyectado = 0
+
+  // Ventas no pagadas (se reconstruyen en vivo, nunca quedan en
+  // caja_movimientos hasta que se pagan) — misma fórmula de fecha efectiva
+  // por crédito que usa buildMovimientos().
+  try {
+    const vDate = `CASE forma_pago
+      WHEN 'Crédito 30 días' THEN date(fecha,'+30 days')
+      WHEN 'Crédito 60 días' THEN date(fecha,'+60 days')
+      WHEN 'Crédito 90 días' THEN date(fecha,'+90 days')
+      ELSE fecha END`
+    const r = db.prepare(`
+      SELECT COALESCE(SUM(total + ROUND(total * 0.19)),0) as s
+      FROM ventas WHERE estado != 'Pagado' AND (${vDate}) <= ?
+    `).get(fechaCorte)
+    proyectado += r.s
+  } catch (_) {}
+
+  // Todo lo demás que hoy está proyectado ya vive en caja_movimientos
+  // (gastos no pagados, facturas de compra no pagadas, manuales
+  // proyectados) — no hace falta reconstruirlo aparte.
+  try {
+    const r = db.prepare(`
+      SELECT COALESCE(SUM(CASE tipo WHEN 'ingreso' THEN monto ELSE -monto END),0) as s
+      FROM caja_movimientos WHERE estado = 'proyectado' AND fecha_pago <= ?
+    `).get(fechaCorte)
+    proyectado += r.s
+  } catch (_) {}
+
+  return base + proyectado
+}
+
 const getMovimientos = (req, res) => {
   try {
     const today = hoy()
@@ -184,7 +232,7 @@ const getMovimientos = (req, res) => {
     const ec = sum(m => m.tipo === 'egreso'  && m.estado === 'confirmado')
     const ep = sum(m => m.tipo === 'egreso'  && m.estado === 'proyectado')
 
-    const saldo_al_corte = calcSaldoAlCorte(filtroHasta)
+    const saldo_al_corte = calcSaldoProyectadoAlCorte(filtroHasta, today)
     const saldo_actual   = calcSaldoAlCorte(today)
 
     return res.json({
