@@ -67,7 +67,19 @@ function buildMovimientos(filtroDesde, filtroHasta) {
     `).all(filtroDesde, filtroHasta))
   } catch (_) {}
 
-  // 4. OC pendientes de pago (pagada=0, estados activos)
+  // 4. OC pendientes de pago (estados activos, aún no pagadas)
+  //
+  // OJO 2026-09-11: este filtro excluía 'Rechazada'/'Pagada' con mayúscula,
+  // pero la migración oc_estados_snake_case_v1 (database.js) normalizó TODOS
+  // los estados de ordenes_compra a snake_case en minúscula hace tiempo
+  // ('Pagada' -> 'pagada'). Como el valor real nunca coincidía con la
+  // exclusión, cualquier OC ya pagada (ej. Christian Hughes) quedaba
+  // "proyectada" para siempre en el Flujo de Caja, aunque su pago real ya
+  // apareciera correcto por el lado de la factura (sección 6 más abajo).
+  // También se deja de depender de la columna `pagada` (INTEGER DEFAULT 0):
+  // ocController.js nunca la actualiza a 1 al marcar una OC como pagada,
+  // así que filtrar por ella no aportaba nada — el estado snake_case es la
+  // única fuente de verdad real.
   try {
     const occols = db.prepare('PRAGMA table_info(ordenes_compra)').all().map(c => c.name)
     const ocDate = occols.includes('fecha_vencimiento') ? 'COALESCE(fecha_vencimiento,fecha_emision)' : 'fecha_emision'
@@ -81,7 +93,7 @@ function buildMovimientos(filtroDesde, filtroHasta) {
         'proyectado' AS estado,
         NULL AS cuenta_bancaria
       FROM ordenes_compra
-      WHERE pagada=0 AND estado NOT IN ('anulada','Rechazada','Pagada')
+      WHERE LOWER(estado) NOT IN ('anulada','rechazada','pagada')
         AND ${ocDate} >= ? AND ${ocDate} <= ?
     `).all(filtroDesde, filtroHasta))
   } catch (_) {}
