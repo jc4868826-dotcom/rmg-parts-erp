@@ -49,23 +49,17 @@ function buildMovimientos(filtroDesde, filtroHasta) {
     `).all(filtroDesde, filtroHasta))
   } catch (_) {}
 
-  // 3. Compras ERP
-  try {
-    const ccols = db.prepare('PRAGMA table_info(compras)').all().map(c => c.name)
-    const cDate = ccols.includes('fecha_vencimiento') ? 'COALESCE(fecha_vencimiento,fecha)' : 'fecha'
-    const cFac  = ccols.includes('numero_factura') ? "COALESCE(' · Fac.'||numero_factura,'')" : "''"
-    movs.push(...db.prepare(`
-      SELECT id AS origen_id, id,
-        'compras' AS origen_tabla, 'Compra' AS origen_label,
-        'egreso' AS tipo, 'Compra' AS categoria,
-        COALESCE(proveedor,'Proveedor') || ${cFac} AS descripcion,
-        total AS monto,
-        ${cDate} AS fecha_pago,
-        CASE WHEN estado IN ('Pagada','Pagado') THEN 'confirmado' ELSE 'proyectado' END AS estado,
-        NULL AS cuenta_bancaria
-      FROM compras WHERE ${cDate} >= ? AND ${cDate} <= ?
-    `).all(filtroDesde, filtroHasta))
-  } catch (_) {}
+  // 3. Compras ERP — RETIRADO 2026-09-11.
+  //
+  // La tabla `compras`/`compra_items` es el módulo viejo de compras que
+  // comprasController.js ya documenta como no usado (su pantalla,
+  // ComprasErpPage, se retiró — ver comentario al inicio de ese archivo).
+  // Nada en el código actual puede marcar sus filas como pagadas, así que
+  // cualquier registro que quedó ahí (ej. "Christian Hughes" $69.990, visto
+  // el 11-sep-2026) se mostraba como "proyectado" en el Flujo de Caja para
+  // siempre — sin relación con el pago real de esa misma compra, que hoy
+  // vive correctamente en `ordenes_compra` → factura de proveedor (sección
+  // 6 más abajo). Se deja de leer esta tabla; no se borran sus datos.
 
   // 4. OC pendientes de pago (estados activos, aún no pagadas)
   //
