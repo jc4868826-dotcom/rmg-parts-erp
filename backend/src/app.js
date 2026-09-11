@@ -113,6 +113,7 @@ app.use('/api/usuarios',            require('./routes/usuarios'));    // Usuario
 // /var/data/rmg_parts.db (ver interruptor chilecompra_enabled en app_settings).
 // app.use('/api/chilecompra',      require('./routes/chilecompra')); // Asistente de oportunidades ChileCompra
 app.use('/api/compra-agil',         require('./routes/compraAgil'));  // Submenú Compra Ágil (importar código, benchmarks, fundamento IA)
+app.use('/api/evaluador',           require('./routes/evaluador'));   // Submenú Evaluador (ingresar código puntual → busca solo esa solicitud)
 app.use('/api/utilitarios',         require('./routes/utilitarios')); // Librería de fichas técnicas (scrape Vistony)
 
 // ─── Health check ───────────────────────────────────────────

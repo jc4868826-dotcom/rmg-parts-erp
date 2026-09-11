@@ -49,6 +49,14 @@ const NAV_SECTIONS = [
       // local. La ruta /compra-agil sigue existiendo (App.jsx) por si hace
       // falta para depurar, pero ya no se enlaza desde el sidebar — todo el
       // flujo de Compra Ágil vive ahora acá, con el filtro de tipo de abajo.
+      //
+      // 2026-09-11 — "Evaluador": pedido explícito del usuario, pestaña bajo
+      // ChileCompra donde el humano ingresa a mano el código de UNA solicitud
+      // puntual (no barre todo el sitio como las de arriba). Vive en su
+      // propia ruta /api/evaluador (independiente del router /api/chilecompra,
+      // que está apagado de emergencia — ver app.js) para no depender de que
+      // ese módulo esté reactivado.
+      { to: '/evaluador',    icon: Search,          label: '↳ Evaluador',    badge: 'evaluador' },
     ],
   },
   {
@@ -162,6 +170,18 @@ export default function Layout() {
   })
   const chcBadgeCount = Array.isArray(chcDetectadas) ? chcDetectadas.length : null
 
+  // Evaluador — solicitudes recién ingresadas por el humano, aún sin
+  // revisar. A diferencia del badge de ChileCompra de arriba, ESTE sí
+  // funciona hoy: pega contra /api/evaluador, que está montado (no depende
+  // del router /api/chilecompra, apagado de emergencia — ver app.js).
+  const { data: evalDetectadas } = useQuery({
+    queryKey: ['evaluador-detectadas-badge'],
+    queryFn: () => api.get('/evaluador', { params: { estado: 'detectada' } }).then(r => r.data),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const evalBadgeCount = Array.isArray(evalDetectadas) ? evalDetectadas.length : null
+
   const handleLogout = async () => {
     await logout()
     navigate('/login')
@@ -222,6 +242,8 @@ export default function Layout() {
                     ? (cxcBadgeCount > 0 ? String(cxcBadgeCount) : null)
                     : badge === 'chilecompra'
                     ? (chcBadgeCount > 0 ? String(chcBadgeCount) : null)
+                    : badge === 'evaluador'
+                    ? (evalBadgeCount > 0 ? String(evalBadgeCount) : null)
                     : badge
                   return (
                   <NavLink

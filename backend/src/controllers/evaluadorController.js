@@ -1,0 +1,144 @@
+/**
+ * RMG Parts — Controlador Evaluador (2026-09-11)
+ *
+ * Pedido del usuario: una pestaña bajo ChileCompra donde el humano ingresa a
+ * mano el código de una solicitud puntual (Compra Ágil, formato
+ * "1493-495-COT26") y RECIÉN AHÍ el sistema va a buscar la data a Mercado
+ * Público — nunca barre todo el sitio. Reutiliza EXACTAMENTE la misma tabla
+ * (oportunidades_chilecompra, fuente='evaluador'), el mismo pipeline de
+ * ingesta (services/compraAgilAnalisis — ya generalizado con un parámetro
+ * `fuente`) y el mismo Kanban/estados que ChileCompra y Compra Ágil.
+ *
+ * IMPORTANTE (2026-09-11) — este módulo NO depende de /api/chilecompra: ese
+ * router está apagado de emergencia en app.js por un OOM en Render (ver nota
+ * ahí). Por eso este controlador REQUIERE directamente las funciones de
+ * chilecompraController.js (getOportunidad, cambiarEstado, actualizarObservacionItem,
+ * extraerFichasTecnicas, getChecklistPostulacion) y las monta acá, bajo
+ * /api/evaluador — son handlers agnósticos de fuente, ninguno chequea el
+ * interruptor chilecompra_enabled, así que funcionan aunque ese módulo siga
+ * apagado. Si en algún momento se reactiva /api/chilecompra, nada de esto
+ * cambia — ambos caminos seguirían funcionando en paralelo.
+ *
+ * Dos casos al ingresar un código en "Buscar":
+ *  1. Código NUEVO (no existe con fuente='evaluador') → ingesta completa:
+ *     trae la publicación de la API oficial de Compra Ágil, lee los adjuntos
+ *     reales de la solicitud con IA, extrae los ítems, hace el cruce con el
+ *     catálogo RMG y adjunta las fichas técnicas — todo en un solo paso
+ *     (importarCompraAgil, ya genérico por fuente).
+ *  2. Código YA ingresado → NO se vuelve a leer nada ni a re-cruzar: solo se
+ *     consulta el estado real en ChileCompra (adjudicada/OC emitida/etc.),
+ *     igual que el botón "Actualizar estado real" de Compra Ágil pero
+ *     acotado a este único código (sincronizarEstadoDeUnaOportunidad).
+ *
+ * El campo libre + "Volver a generar" (corregir un ítem mal emparejado) y el
+ * botón "Extraer fichas" NUNCA vuelven a Mercado Público — reutilizan tal
+ * cual actualizarObservacionItem / extraerFichasTecnicas de chilecompraController
+ * (cruce heurístico contra catálogo local, sin llamada externa).
+ */
+const { db } = require('../../config/database')
+const {
+  importarCompraAgil, sincronizarEstadoDeUnaOportunidad,
+} = require('../services/compraAgilAnalisis')
+const cc = require('../controllers/chilecompraController')
+
+const FUENTE = 'evaluador'
+
+function withDetails(op) {
+  if (!op) return null
+  const items = db.prepare(
+    'SELECT * FROM oportunidad_chilecompra_items WHERE oportunidad_id = ? ORDER BY rowid'
+  ).all(op.id)
+  const historial = db.prepare(
+    'SELECT * FROM oportunidad_chilecompra_historial WHERE oportunidad_id = ? ORDER BY fecha_evento ASC'
+  ).all(op.id)
+  return { ...op, items, historial }
+}
+
+// Formato real de un código de Compra Ágil, ej. "1493-495-COT26" —
+// validación suave, solo para dar un error entendible antes de llamar a la
+// API (la API igual es la validación final de si el código existe).
+const FORMATO_CODIGO = /^\d+-\d+-COT\d+$/i
+
+// ── Listado (solo fuente = evaluador) ───────────────────────────────────────
+const listar = (req, res) => {
+  try {
+    const { estado, q } = req.query
+    let sql = `SELECT * FROM oportunidades_chilecompra WHERE fuente = ?`
+    const params = [FUENTE]
+    if (estado) { sql += ' AND estado = ?'; params.push(estado) }
+    if (q) {
+      sql += ' AND (LOWER(nombre) LIKE LOWER(?) OR LOWER(organismo_nombre) LIKE LOWER(?) OR LOWER(codigo_externo) LIKE LOWER(?))'
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`)
+    }
+    sql += ' ORDER BY created_at DESC'
+    res.json(db.prepare(sql).all(...params))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const getDetalle = (req, res) => {
+  try {
+    const op = db.prepare(`SELECT * FROM oportunidades_chilecompra WHERE id = ? AND fuente = ?`).get(req.params.id, FUENTE)
+    if (!op) return res.status(404).json({ error: 'No encontrada' })
+    res.json(withDetails(op))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// ── Botón "Buscar" — el único punto de entrada a Mercado Público ───────────
+const buscar = async (req, res) => {
+  try {
+    const codigoRaw = (req.body?.codigo || '').trim()
+    if (!codigoRaw) return res.status(400).json({ error: 'Falta el código de la solicitud (ej. 1493-495-COT26)' })
+    if (!FORMATO_CODIGO.test(codigoRaw)) {
+      return res.status(400).json({ error: `"${codigoRaw}" no parece un código de Compra Ágil válido (formato esperado: 1493-495-COT26)` })
+    }
+
+    const existente = db.prepare(
+      `SELECT * FROM oportunidades_chilecompra WHERE fuente = ? AND codigo_externo = ?`
+    ).get(FUENTE, codigoRaw)
+
+    if (existente) {
+      // Ya ingresada — SOLO se revisa el cambio de estado real en
+      // ChileCompra, no se vuelve a leer nada ni a re-cruzar (pedido
+      // explícito: "no busca a toda la data, solo busca los id nuevos o los
+      // que ya estan ingresados para ver su cambio de estado").
+      try {
+        await sincronizarEstadoDeUnaOportunidad(existente, req.user)
+      } catch (e) {
+        // No bloquea — igual se devuelve la ficha tal como está.
+        return res.json({ ...withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(existente.id)),
+          advertencia: `No se pudo revisar el estado real en ChileCompra: ${e.message}` })
+      }
+      return res.json(withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(existente.id)))
+    }
+
+    // Código nuevo — ingesta completa (API oficial + lectura de adjuntos +
+    // cruce con catálogo + fichas técnicas), igual que Compra Ágil.
+    const op = await importarCompraAgil(codigoRaw, req.user, 'evaluador', FUENTE)
+    res.json(withDetails(op))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = {
+  listar,
+  getDetalle,
+  buscar,
+  // Reutilizados tal cual de chilecompraController — agnósticos de fuente,
+  // ninguno depende de que /api/chilecompra esté montado ni del interruptor
+  // chilecompra_enabled (ver nota arriba). analizarOportunidad SÍ está
+  // gateado por moduloHabilitado() en chilecompraController — se deja igual
+  // a propósito (mismo criterio: si alguien apaga el módulo pesado, también
+  // se apaga acá la re-lectura de anexos, aunque la ingesta inicial y el
+  // resto de los botones de Evaluador sigan funcionando).
+  cambiarEstado: cc.cambiarEstado,
+  actualizarObservacionItem: cc.actualizarObservacionItem,
+  extraerFichasTecnicas: cc.extraerFichasTecnicas,
+  getChecklistPostulacion: cc.getChecklistPostulacion,
+  analizarOportunidad: cc.analizarOportunidad,
+  limpiarHistorial: cc.limpiarHistorial,
+}

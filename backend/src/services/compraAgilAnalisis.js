@@ -142,10 +142,10 @@ function calcularYGuardarScores(oportunidadId, cruce) {
  * que importarCompraAgilManual (2026-09, ver más abajo) reutilice EXACTAMENTE
  * la misma lógica de guardado, sin duplicar nada.
  */
-async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase) {
+async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase, fuente = 'compra_agil') {
   const existente = db.prepare(
-    `SELECT id FROM oportunidades_chilecompra WHERE fuente = 'compra_agil' AND codigo_externo = ?`
-  ).get(codigo)
+    `SELECT id FROM oportunidades_chilecompra WHERE fuente = ? AND codigo_externo = ?`
+  ).get(fuente, codigo)
 
   const id = existente?.id || uuidv4()
 
@@ -173,7 +173,7 @@ async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase
            presupuesto_estimado, url_portal, estado, detectada_por, detalle_raw_json)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).run(
-        id, 'compra_agil', codigo, detalle.nombre, detalle.descripcion,
+        id, fuente, codigo, detalle.nombre, detalle.descripcion,
         detalle.organismo_nombre, detalle.organismo_rut, detalle.region, detalle.comuna,
         detalle.direccion_entrega, detalle.fecha_publicacion, detalle.fecha_cierre,
         detalle.presupuesto_estimado, detalle.url_portal, 'detectada', user?.email || 'manual',
@@ -334,10 +334,10 @@ async function enriquecerConDocumentosAdjuntos(detalle) {
  * con catálogo + adjunta fichas técnicas. Es seguro llamarla varias veces
  * con el mismo código (upsert por UNIQUE(fuente, codigo_externo)).
  */
-async function importarCompraAgil(codigo, user, tipoEventoBase = 'compra_agil') {
+async function importarCompraAgil(codigo, user, tipoEventoBase = 'compra_agil', fuente = 'compra_agil') {
   let detalle = await api.buscarCompraAgil(codigo)
   detalle = await enriquecerConDocumentosAdjuntos(detalle)
-  return guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase)
+  return guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase, fuente)
 }
 
 /**
@@ -646,7 +646,38 @@ function estadoSync() {
   return { corriendo: _corriendoSync, ultimoResumen: _ultimoResumenSync }
 }
 
-async function sincronizarEstadosReales({ user = USER_AUTOMATICO } = {}) {
+// 2026-09-11 (Evaluador) — extraído del cuerpo del for de abajo para que
+// tanto el barrido masivo (sincronizarEstadosReales, solo fuente='compra_agil')
+// como la consulta puntual de UN código (Evaluador — "busca solo el id que se
+// ingresó, no toda la data") reutilicen exactamente la misma lógica de
+// comparación/guardado, sin duplicarla.
+async function sincronizarEstadoDeUnaOportunidad(op, user = USER_AUTOMATICO) {
+  const detalle = await api.buscarCompraAgil(op.codigo_externo)
+  const estadoNuevo = detalle.estado_codigo || null
+  const ocNueva = detalle.orden_compra_codigo || null
+  const cambioEstado = estadoNuevo !== op.estado_real_chilecompra
+  const cambioOc = ocNueva !== op.orden_compra_codigo
+  if (cambioEstado || cambioOc) {
+    db.prepare(`
+      UPDATE oportunidades_chilecompra
+      SET estado_real_chilecompra = ?, orden_compra_codigo = ?, estado_real_actualizado_at = datetime('now')
+      WHERE id = ?
+    `).run(estadoNuevo, ocNueva, op.id)
+
+    const detalleEvento = `Estado real en ChileCompra: "${op.estado_real_chilecompra || 'sin dato'}" → "${estadoNuevo || 'sin dato'}"` +
+      (cambioOc ? ` · Orden de Compra: ${ocNueva || 'sin emitir'}` : '')
+    logEvento(op.id, 'estado_real_actualizado', {
+      usuario_id: user?.id, usuario_nombre: user?.email || 'sync-automático', detalle: detalleEvento,
+    })
+  } else {
+    // Igual deja registro de que se revisó, aunque no haya cambiado — así
+    // "última vez revisado" siempre es confiable.
+    db.prepare(`UPDATE oportunidades_chilecompra SET estado_real_actualizado_at = datetime('now') WHERE id = ?`).run(op.id)
+  }
+  return { cambio: !!(cambioEstado || cambioOc), estadoAnterior: op.estado_real_chilecompra, estadoNuevo, ordenCompra: ocNueva }
+}
+
+async function sincronizarEstadosReales({ user = USER_AUTOMATICO, fuente = 'compra_agil' } = {}) {
   if (_corriendoSync) {
     return { yaEnCurso: true, ...(_ultimoResumenSync || {}) }
   }
@@ -668,37 +699,18 @@ async function sincronizarEstadosReales({ user = USER_AUTOMATICO } = {}) {
     const activas = db.prepare(`
       SELECT id, codigo_externo, estado_real_chilecompra, orden_compra_codigo
       FROM oportunidades_chilecompra
-      WHERE fuente = 'compra_agil'
+      WHERE fuente = ?
         AND orden_compra_codigo IS NULL
         AND (estado_real_chilecompra IS NULL OR estado_real_chilecompra NOT IN (${ESTADOS_TERMINALES_CHILECOMPRA.map(() => '?').join(',')}))
-    `).all(...ESTADOS_TERMINALES_CHILECOMPRA)
+    `).all(fuente, ...ESTADOS_TERMINALES_CHILECOMPRA)
 
     for (const op of activas) {
       resumen.revisadas++
       try {
-        const detalle = await api.buscarCompraAgil(op.codigo_externo)
-        const estadoNuevo = detalle.estado_codigo || null
-        const ocNueva = detalle.orden_compra_codigo || null
-        const cambioEstado = estadoNuevo !== op.estado_real_chilecompra
-        const cambioOc = ocNueva !== op.orden_compra_codigo
-        if (cambioEstado || cambioOc) {
-          db.prepare(`
-            UPDATE oportunidades_chilecompra
-            SET estado_real_chilecompra = ?, orden_compra_codigo = ?, estado_real_actualizado_at = datetime('now')
-            WHERE id = ?
-          `).run(estadoNuevo, ocNueva, op.id)
-
-          const detalleEvento = `Estado real en ChileCompra: "${op.estado_real_chilecompra || 'sin dato'}" → "${estadoNuevo || 'sin dato'}"` +
-            (cambioOc ? ` · Orden de Compra: ${ocNueva || 'sin emitir'}` : '')
-          logEvento(op.id, 'estado_real_actualizado', {
-            usuario_id: user?.id, usuario_nombre: user?.email || 'sync-automático', detalle: detalleEvento,
-          })
+        const r = await sincronizarEstadoDeUnaOportunidad(op, user)
+        if (r.cambio) {
           resumen.actualizadas++
-          resumen.cambiosDetectados.push({ id: op.id, codigo: op.codigo_externo, estadoAnterior: op.estado_real_chilecompra, estadoNuevo, ordenCompra: ocNueva })
-        } else {
-          // Igual deja registro de que se revisó, aunque no haya cambiado —
-          // así "última vez revisado" siempre es confiable.
-          db.prepare(`UPDATE oportunidades_chilecompra SET estado_real_actualizado_at = datetime('now') WHERE id = ?`).run(op.id)
+          resumen.cambiosDetectados.push({ id: op.id, codigo: op.codigo_externo, estadoAnterior: r.estadoAnterior, estadoNuevo: r.estadoNuevo, ordenCompra: r.ordenCompra })
         }
       } catch (e) {
         resumen.errores.push(`Código ${op.codigo_externo}: ${e.message}`)
@@ -726,7 +738,7 @@ async function sincronizarEstadosReales({ user = USER_AUTOMATICO } = {}) {
 
 module.exports = {
   importarCompraAgil, importarCompraAgilManual, generarFundamentoCotizacion, sugerirPrecio, calcularYGuardarScores,
-  detectarYImportarAutomatico, estado, sincronizarEstadosReales, estadoSync,
+  detectarYImportarAutomatico, estado, sincronizarEstadosReales, sincronizarEstadoDeUnaOportunidad, estadoSync,
   // Exportada también para tests offline (ver /tmp/test_compraagil_documentos.js) — no es
   // parte de la API pública del módulo, pero no hay razón para escondarla del todo.
   enriquecerConDocumentosAdjuntos,

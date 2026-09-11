@@ -749,7 +749,16 @@ function ResultadosCerrados({ oportunidades, onSelect }) {
 }
 
 // ── Modal de detalle ─────────────────────────────────────────────────────────
-function DetalleModal({ id, onClose }) {
+// Exportado (2026-09-11, Evaluador) — mismo patrón que ESTADOS más arriba:
+// EvaluadorPage.jsx reutiliza este modal tal cual (ítems + corrección manual
+// + extraer fichas + botones de estado) sin duplicar ~500 líneas de JSX. El
+// modal ya es agnóstico de fuente (fetchea /chilecompra/:id, que funciona
+// igual para licitacion/compra_agil/evaluador) salvo el botón "Volver a
+// traer desde ChileCompra" que solo se muestra si fuente === 'compra_agil'.
+// 2026-09-11 (Evaluador) — basePath permite montar este mismo modal contra
+// /api/evaluador/:id/* en vez de /api/chilecompra/:id/* (que está apagado de
+// emergencia — ver app.js), sin tocar nada del resto del componente.
+export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
   const qc = useQueryClient()
   const [verChecklist, setVerChecklist] = useState(false)
   // Texto en edición por ítem para la corrección manual ("match salió mal") —
@@ -765,12 +774,12 @@ function DetalleModal({ id, onClose }) {
 
   const { data: op, isLoading } = useQuery({
     queryKey: ['chilecompra-detalle', id],
-    queryFn: () => api.get(`/chilecompra/${id}`).then(r => r.data),
+    queryFn: () => api.get(`/${basePath}/${id}`).then(r => r.data),
   })
 
   const { data: checklistData } = useQuery({
     queryKey: ['chilecompra-checklist', id],
-    queryFn: () => api.get(`/chilecompra/${id}/checklist`).then(r => r.data),
+    queryFn: () => api.get(`/${basePath}/${id}/checklist`).then(r => r.data),
     enabled: verChecklist || op?.estado === 'preparando_postulacion',
   })
 
@@ -780,7 +789,7 @@ function DetalleModal({ id, onClose }) {
   }
 
   const cambiarEstadoMut = useMutation({
-    mutationFn: (body) => api.patch(`/chilecompra/${id}/estado`, body).then(r => r.data),
+    mutationFn: (body) => api.patch(`/${basePath}/${id}/estado`, body).then(r => r.data),
     onSuccess: (data) => {
       invalidar()
       if (data?.advertencia) toast.error(data.advertencia, { duration: 7000 })
@@ -790,13 +799,13 @@ function DetalleModal({ id, onClose }) {
   })
 
   const analizarMut = useMutation({
-    mutationFn: () => api.post(`/chilecompra/${id}/analizar`).then(r => r.data),
+    mutationFn: () => api.post(`/${basePath}/${id}/analizar`).then(r => r.data),
     onSuccess: () => { invalidar(); toast.success('Anexos leídos y oportunidad re-analizada') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al analizar la ficha pública. Puedes subir anexos manualmente e intentar de nuevo.'),
   })
 
   const extraerFichasMut = useMutation({
-    mutationFn: () => api.post(`/chilecompra/${id}/extraer-fichas-tecnicas`).then(r => r.data),
+    mutationFn: () => api.post(`/${basePath}/${id}/extraer-fichas-tecnicas`).then(r => r.data),
     onSuccess: (data) => {
       invalidar()
       if (data?.sinFicha?.length) {
@@ -813,7 +822,7 @@ function DetalleModal({ id, onClose }) {
   // viejos y confusos ("evitando mareos"). Borra ítems/historial/scores/
   // Excel derivados; los anexos subidos NO se tocan (ver backend).
   const limpiarHistorialMut = useMutation({
-    mutationFn: () => api.post(`/chilecompra/${id}/limpiar-historial`).then(r => r.data),
+    mutationFn: () => api.post(`/${basePath}/${id}/limpiar-historial`).then(r => r.data),
     onSuccess: () => { invalidar(); toast.success('Historial limpio — los anexos subidos se conservan. Vuelve a analizar cuando quieras.') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al limpiar el historial'),
   })
@@ -845,7 +854,7 @@ function DetalleModal({ id, onClose }) {
   // automático. Recalcula el cruce completo al guardar (ver backend).
   const corregirItemMut = useMutation({
     mutationFn: ({ itemId, correccion_usuario }) =>
-      api.put(`/chilecompra/${id}/items/${itemId}/observacion`, { correccion_usuario }).then(r => r.data),
+      api.put(`/${basePath}/${id}/items/${itemId}/observacion`, { correccion_usuario }).then(r => r.data),
     onSuccess: () => { invalidar(); toast.success('Corrección guardada — cruce recalculado') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al guardar la corrección'),
   })
