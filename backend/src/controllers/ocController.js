@@ -490,13 +490,19 @@ const registrarFactura = (req, res) => {
       db.prepare("UPDATE ordenes_compra SET estado = 'facturada', numero_factura = ?, fecha_factura = ?, updated_at = datetime('now') WHERE id = ?")
         .run(numero_factura, fecha_factura, oc.id)
 
-      const esReal = fecha_vencimiento_pago <= hoy
+      // Regla del Flujo de Caja (2026-09-11): "confirmado" significa
+      // literalmente pagada — no una fecha de vencimiento que ya pasó. Antes
+      // esta fila nacía 'confirmado' si el vencimiento ya era hoy o antes
+      // (esReal = fecha_vencimiento_pago <= hoy), lo que podía mostrar una
+      // factura como pagada sin estarlo. Ahora siempre nace 'proyectado'; el
+      // único lugar que la pasa a 'confirmado' es marcar la OC como 'pagada'
+      // más abajo (línea ~318), que es el pago real.
       try {
         db.prepare(`INSERT INTO caja_movimientos
           (tipo, categoria, descripcion, monto, fecha_registro, fecha_pago, estado, origen_tabla, origen_id)
           VALUES (?,?,?,?,?,?,?,?,?)`)
           .run('egreso', 'Compra proveedor', `Fac. N° ${numero_factura} · ${provNombre}`,
-            Number(monto_total), hoy, fecha_vencimiento_pago, esReal ? 'confirmado' : 'proyectado',
+            Number(monto_total), hoy, fecha_vencimiento_pago, 'proyectado',
             'facturas_proveedor', factId)
       } catch (_) {}
 

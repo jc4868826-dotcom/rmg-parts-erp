@@ -61,36 +61,16 @@ function buildMovimientos(filtroDesde, filtroHasta) {
   // vive correctamente en `ordenes_compra` → factura de proveedor (sección
   // 6 más abajo). Se deja de leer esta tabla; no se borran sus datos.
 
-  // 4. OC pendientes de pago (estados activos, aún no pagadas)
+  // 4. Órdenes de Compra — RETIRADO 2026-09-11 a pedido de JC.
   //
-  // OJO 2026-09-11: este filtro excluía 'Rechazada'/'Pagada' con mayúscula,
-  // pero la migración oc_estados_snake_case_v1 (database.js) normalizó TODOS
-  // los estados de ordenes_compra a snake_case en minúscula hace tiempo
-  // ('Pagada' -> 'pagada'). Como el valor real nunca coincidía con la
-  // exclusión, cualquier OC ya pagada (ej. Christian Hughes) quedaba
-  // "proyectada" para siempre en el Flujo de Caja, aunque su pago real ya
-  // apareciera correcto por el lado de la factura (sección 6 más abajo).
-  // También se deja de depender de la columna `pagada` (INTEGER DEFAULT 0):
-  // ocController.js nunca la actualiza a 1 al marcar una OC como pagada,
-  // así que filtrar por ella no aportaba nada — el estado snake_case es la
-  // única fuente de verdad real.
-  try {
-    const occols = db.prepare('PRAGMA table_info(ordenes_compra)').all().map(c => c.name)
-    const ocDate = occols.includes('fecha_vencimiento') ? 'COALESCE(fecha_vencimiento,fecha_emision)' : 'fecha_emision'
-    movs.push(...db.prepare(`
-      SELECT id AS origen_id, id,
-        'ordenes_compra' AS origen_tabla, 'OC' AS origen_label,
-        'egreso' AS tipo, 'Compra proveedor' AS categoria,
-        'OC '||numero||' · '||COALESCE(proveedor,'') AS descripcion,
-        total AS monto,
-        ${ocDate} AS fecha_pago,
-        'proyectado' AS estado,
-        NULL AS cuenta_bancaria
-      FROM ordenes_compra
-      WHERE LOWER(estado) NOT IN ('anulada','rechazada','pagada')
-        AND ${ocDate} >= ? AND ${ocDate} <= ?
-    `).all(filtroDesde, filtroHasta))
-  } catch (_) {}
+  // Regla nueva del Flujo de Caja: la OC en sí NUNCA se muestra. Solo cuenta
+  // el egreso real de la factura de esa OC (sección 6, tabla
+  // facturas_proveedor vía caja_movimientos) — proyectado mientras la
+  // factura no esté pagada, confirmado cuando sí. Mostrar la OC además de su
+  // factura duplicaba el mismo egreso dos veces (una por sección 4, otra por
+  // sección 6) y con el filtro de estado roto (ver historial del commit
+  // anterior) una OC pagada podía quedar contada para siempre. Con la OC
+  // fuera, egresos = manuales + facturas de compra únicamente.
 
   // 5. Movimientos manuales de caja
   try {
