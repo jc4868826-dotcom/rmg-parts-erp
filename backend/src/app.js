@@ -107,7 +107,11 @@ app.use('/api/oc',                  require('./routes/oc'));          // Órdene
 app.use('/api/backup',              require('./routes/backup'));      // Backup automático y manual
 app.use('/api/asesor',              require('./routes/asesor'));      // Asesor de Productos Vistony
 app.use('/api/usuarios',            require('./routes/usuarios'));    // Usuarios y perfiles (gerente/administrador)
-app.use('/api/chilecompra',         require('./routes/chilecompra')); // Asistente de oportunidades ChileCompra
+// AISLADO 2026-09-11 — módulo apagado de emergencia por OOM en Render (más
+// abajo también se saltó su cron). Reactivar: descomentar esta línea y la de
+// iniciarCron() del cron ChileCompra, después de reducir el tamaño de
+// /var/data/rmg_parts.db (ver interruptor chilecompra_enabled en app_settings).
+// app.use('/api/chilecompra',      require('./routes/chilecompra')); // Asistente de oportunidades ChileCompra
 app.use('/api/compra-agil',         require('./routes/compraAgil'));  // Submenú Compra Ágil (importar código, benchmarks, fundamento IA)
 app.use('/api/utilitarios',         require('./routes/utilitarios')); // Librería de fichas técnicas (scrape Vistony)
 
@@ -138,7 +142,8 @@ app.use((err, req, res, next) => {
 // ─── Start ──────────────────────────────────────────────────
 initDB()
   .then(() => {
-    require('./jobs/chilecompraCron').iniciarCron();
+    // AISLADO 2026-09-11 — ver nota junto al require de routes/chilecompra arriba.
+    // require('./jobs/chilecompraCron').iniciarCron();
     require('./jobs/compraAgilDatosAbiertosCron').iniciarCron();
     require('./jobs/compraAgilApiPollerCron').iniciarCron(); // detección automática Compra Ágil (API oficial v2)
     require('./jobs/compraAgilSyncEstadoCron').iniciarCron(); // estado real ChileCompra (adjudicada/OC) de lo ya importado
