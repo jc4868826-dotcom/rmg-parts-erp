@@ -19,6 +19,39 @@ const chilecompraApi = require('../services/chilecompraApiClient')
 const { generarExcelCruce } = require('../services/chilecompraExcelExport')
 const { adjuntarFichasAOportunidad } = require('../services/fichasTecnicasVistonyService')
 
+// ── Interruptor de módulo (mitigación OOM Render, 2026-09-11) ────────────────
+// Prende/apaga la ingesta (cron + botón manual) y el análisis (lectura de
+// anexos + scoring), que son las operaciones pesadas de este módulo. La
+// lectura del Kanban (getOportunidades/getOportunidad) NO se bloquea — es
+// solo lectura sobre lo que ya está en memoria, no agrega consumo.
+const MODULO_KEY = 'chilecompra_enabled'
+
+function moduloHabilitado() {
+  try {
+    const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(MODULO_KEY)
+    return row ? row.value === 'true' : true
+  } catch (_) {
+    return true
+  }
+}
+
+const getModuloConfig = (req, res) => {
+  res.json({ enabled: moduloHabilitado() })
+}
+
+const setModuloConfig = (req, res) => {
+  try {
+    const enabled = !!req.body?.enabled
+    db.prepare(`
+      INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(MODULO_KEY, enabled ? 'true' : 'false')
+    res.json({ enabled })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 // Además de las transiciones "hacia adelante" del flujo, se permite volver un
 // paso atrás para corregir un click equivocado (p.ej. entrar a "analizando" por
 // error, o descartar algo que en realidad sí sirve) — sin eso, un error de clic
@@ -71,7 +104,7 @@ function withDetails(op) {
 // ── Listado con filtros (fecha, región, días para el cierre, estado, texto) ──
 const getOportunidades = (req, res) => {
   try {
-    const { estado, region, fecha_desde, fecha_hasta, dias_vencimiento, q, fuente } = req.query
+    const { estado, region, fecha_desde, fecha_hasta, dias_vencimiento, relevancia_dias, q, fuente } = req.query
     let sql = 'SELECT * FROM oportunidades_chilecompra WHERE 1=1'
     const params = []
     // 2026-09-09 — pedido explícito del usuario: filtro por tipo (Licitación /
@@ -82,12 +115,48 @@ const getOportunidades = (req, res) => {
     // riesgo de timeout).
     if (fuente)      { sql += ' AND fuente = ?';                params.push(fuente) }
     if (estado)      { sql += ' AND estado = ?';              params.push(estado) }
-    if (region)      { sql += ' AND region = ?';               params.push(region) }
+    // 2026-09-09 — "región" ahora es acumulable (pedido explícito: "filtro
+    // regiones, pero acumulable es decir mas de una"): acepta una región
+    // única (como antes) o una lista separada por comas (?region=Valparaíso,
+    // Metropolitana de Santiago,...) y arma un IN (?,?,...) — sin esto, el
+    // frontend no podía pedir más de una región a la vez.
+    if (region) {
+      const listaRegiones = String(region).split(',').map(s => s.trim()).filter(Boolean)
+      if (listaRegiones.length) {
+        sql += ` AND region IN (${listaRegiones.map(() => '?').join(',')})`
+        params.push(...listaRegiones)
+      }
+    }
     if (fecha_desde) { sql += ' AND fecha_publicacion >= ?';   params.push(fecha_desde) }
     if (fecha_hasta) { sql += ' AND fecha_publicacion <= ?';   params.push(fecha_hasta) }
     if (dias_vencimiento) {
       sql += " AND julianday(fecha_cierre) - julianday('now') <= ?"
       params.push(Number(dias_vencimiento))
+    }
+    // 2026-09-09 — filtro por defecto del dashboard (pedido explícito: "por
+    // defecto solo traiga 7 dias, por vencer, sin embargo que estos sean
+    // filtros, sino nunca veremos las que cerraron o nosotros nos presentamos
+    // y su estado final"). Dos cuidados clave para que esto NO termine
+    // ocultando justo lo que el usuario pidió no perder de vista:
+    //   1. Las de estado TERMINAL (adjudicada, no_adjudicada, descartada)
+    //      quedan SIEMPRE afuera de esta ventana — sin esto, una adjudicada
+    //      hace un mes desaparecería de la lista entera (ni siquiera se vería
+    //      en "Resultados y descartes" del frontend), que es exactamente lo
+    //      que el usuario dijo que no quería.
+    //   2. "por vencer" es estrictamente PRÓXIMO (0 a N días, no negativo) —
+    //      si fuera solo "<= N" cualquier fecha de cierre ya pasada también
+    //      calzaría (un número negativo siempre es <= 7), lo que en la
+    //      práctica anulaba el filtro para todo lo vencido hace tiempo.
+    // Se manda como parámetro aparte (no reutiliza fecha_desde/dias_vencimiento
+    // de arriba) porque esos son AND estrictos — acá se necesita OR.
+    if (relevancia_dias) {
+      const n = Number(relevancia_dias)
+      sql += ` AND (
+        estado IN ('adjudicada', 'no_adjudicada', 'descartada')
+        OR fecha_publicacion >= date('now', ?)
+        OR (fecha_cierre IS NOT NULL AND julianday(fecha_cierre) - julianday('now') BETWEEN 0 AND ?)
+      )`
+      params.push(`-${n} days`, n)
     }
     if (q) {
       // 2026-09-09 (bug real, confirmado): el buscador NUNCA incluyó
@@ -122,6 +191,9 @@ const getOportunidad = (req, res) => {
 // { fecha_desde, fecha_hasta } (rango explícito, formato YYYY-MM-DD) — si no se
 // manda nada, usa CHILECOMPRA_DIAS_HACIA_ATRAS del .env (default: solo hoy).
 const ejecutarAnalisisAhora = async (req, res) => {
+  if (!moduloHabilitado()) {
+    return res.json({ desactivado: true, mensaje: 'Módulo ChileCompra desactivado temporalmente.', revisadas: 0, nuevas: 0, oportunidades: [], errores: [] })
+  }
   const { ejecutarIngesta } = require('../jobs/chilecompraCron')
   try {
     const { dias, fecha_desde, fecha_hasta } = req.body || {}
@@ -403,6 +475,9 @@ function detalleFichasFaltantes(resultado) {
 }
 
 const analizarOportunidad = async (req, res) => {
+  if (!moduloHabilitado()) {
+    return res.status(409).json({ error: 'Módulo ChileCompra desactivado temporalmente. Actívalo con el interruptor de la pestaña para analizar oportunidades.' })
+  }
   try {
     await analizarOportunidadInterno(req.params.id, req.user)
     res.json(withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(req.params.id)))
@@ -594,4 +669,6 @@ module.exports = {
   extraerFichasTecnicas,
   limpiarHistorial,
   actualizarObservacionItem,
+  getModuloConfig,
+  setModuloConfig,
 }

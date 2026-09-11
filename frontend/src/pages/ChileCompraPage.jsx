@@ -47,6 +47,26 @@ const REGIONES = [
   'Aysén del General Carlos Ibáñez del Campo', 'Magallanes y de la Antártica Chilena',
 ]
 
+// 2026-09-09 — botón "Extraer" (rubro RMG). Pedido del usuario: usar las
+// mismas palabras clave que ya están definidas para Licitaciones (ver
+// chilecompraCron.js KEYWORDS), no inventar una lista nueva. IMPORTANTE: esto
+// filtra EN EL NAVEGADOR sobre lo que ya se importó — a propósito NO se manda
+// como parámetro `q` a la API de Compra Ágil, porque ya se probó (incidente
+// #2, ver compraAgilApiClient.js) que varias de estas mismas palabras
+// genéricas ("lubricante", "aceite", "grasa", "refrigerante",
+// "anticongelante") le dan error 500 a esa API. Cero riesgo de romper nada —
+// solo resalta/filtra lo que el sistema ya trajo, igual que un Ctrl+F sobre
+// varias palabras a la vez en vez de una por una en el buscador de texto.
+const KEYWORDS_RUBRO_RMG = [
+  'lubricante', 'aceite', 'hidraulico', 'grasa', 'refrigerante', 'anticongelante',
+  'liquido de frenos', 'bateria', 'acumulador', 'neumatico', 'llanta', 'adblue',
+]
+const normalizarTexto = (txt) => (txt || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const calzaRubroRMG = (o) => {
+  const texto = normalizarTexto(`${o.nombre || ''} ${o.descripcion || ''}`)
+  return KEYWORDS_RUBRO_RMG.some(k => texto.includes(k))
+}
+
 // Exportadas (2026-09-09, pieza 3) para que CompraAgilPage.jsx pueda mostrar
 // una franja de conteo por estado sin duplicar esta lista.
 export const ESTADOS = [
@@ -100,7 +120,20 @@ export default function ChileCompraPage() {
   // sin problemas (lee solo de la base local) — a diferencia de la página
   // separada de Compra Ágil, que dependía de una llamada en vivo a la API y
   // podía demorar/fallar. fuente: '' = todos, 'licitacion' | 'compra_agil'.
-  const [filtros, setFiltros] = useState({ region: '', dias_vencimiento: '', q: '', fuente: '' })
+  //
+  // 2026-09-09 (rediseño de filtros, pedido explícito) — "región" pasa de
+  // string único a arreglo (acumulable — más de una región a la vez). Se
+  // agrega `soloRecientes`: el filtro POR DEFECTO ("solo traiga 7 días, por
+  // vencer") que combina recientes + por vencer en un solo interruptor — ON
+  // al entrar a la página, pero es un filtro que se puede sacar (no un límite
+  // fijo), justo para no perder de vista las que ya cerraron o en las que RMG
+  // ya se postuló. `soloRubroRMG` es el botón "extraer": filtra EN EL
+  // NAVEGADOR (no le pregunta nada nuevo a la API — ver aviso en
+  // KEYWORDS_RUBRO_RMG más abajo) sobre lo que ya se trajo.
+  const [filtros, setFiltros] = useState({ regiones: [], dias_vencimiento: '', q: '', fuente: '' })
+  const [soloRecientes, setSoloRecientes] = useState(true)
+  const [soloRubroRMG, setSoloRubroRMG] = useState(false)
+  const [regionesAbierto, setRegionesAbierto] = useState(false)
   const [seleccionId, setSeleccionId] = useState(null)
   // 2026-09-09 — deep link ?abrir=<id> (pieza 3 del esquema aprobado): permite
   // que CompraAgilPage enlace directo al modal de gestión/pipeline de una
@@ -114,16 +147,40 @@ export default function ChileCompraPage() {
   const [rangoCustom, setRangoCustom] = useState({ desde: isoLocal(new Date()), hasta: isoLocal(new Date()) })
 
   const params = {
-    region: filtros.region || undefined,
+    region: filtros.regiones.length ? filtros.regiones.join(',') : undefined,
     dias_vencimiento: filtros.dias_vencimiento || undefined,
     q: filtros.q || undefined,
     fuente: filtros.fuente || undefined,
+    // Filtro por defecto (ON al entrar): últimos 7 días de publicación O por
+    // vencer en 7 días — se saca solo si el usuario apaga el interruptor
+    // "Recientes y por vencer" o aprieta "Limpiar filtros".
+    relevancia_dias: soloRecientes ? 7 : undefined,
   }
 
   const { data: oportunidades = [], isLoading } = useQuery({
     queryKey: ['chilecompra', params],
     queryFn: () => api.get('/chilecompra', { params }).then(r => r.data),
     staleTime: 60_000,
+  })
+
+  // ── Interruptor de módulo (mitigación OOM Render, 2026-09-11) ──────────────
+  // Apaga la ingesta (cron + botón manual) y el análisis (lectura de anexos +
+  // scoring) — las operaciones pesadas. El Kanban de abajo sigue mostrando lo
+  // que ya está cargado, esté prendido o apagado.
+  const { data: moduloConfig } = useQuery({
+    queryKey: ['chilecompra', 'modulo-config'],
+    queryFn: () => api.get('/chilecompra/config/modulo').then(r => r.data),
+    staleTime: 30_000,
+  })
+  const moduloHabilitado = moduloConfig?.enabled !== false
+
+  const moduloMut = useMutation({
+    mutationFn: (enabled) => api.patch('/chilecompra/config/modulo', { enabled }).then(r => r.data),
+    onSuccess: (data) => {
+      qc.setQueryData(['chilecompra', 'modulo-config'], data)
+      toast.success(data.enabled ? 'Módulo ChileCompra activado' : 'Módulo ChileCompra desactivado')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al cambiar el interruptor'),
   })
 
   const bodyAnalisis = () => {
@@ -263,10 +320,16 @@ export default function ChileCompraPage() {
     onError: (e) => toast.error(e.response?.data?.error || e.message),
   })
 
-  const porEstado = (estado) => oportunidades.filter(o => o.estado === estado)
-  const totalAbierto = oportunidades.filter(o => !['descartada', 'adjudicada', 'no_adjudicada'].includes(o.estado))
-  const totalAdjudicado = oportunidades.filter(o => o.estado === 'adjudicada').reduce((s, o) => s + (o.adjudicado_monto || 0), 0)
-  const urgentes = oportunidades.filter(o => {
+  // 2026-09-09 — botón "Extraer rubro RMG": filtro EN EL NAVEGADOR sobre lo
+  // que la API ya devolvió (ver aviso de KEYWORDS_RUBRO_RMG arriba) — se
+  // aplica acá, antes de repartir por estado, para que afecte tanto al
+  // Kanban como a la sección de cerradas/historial de abajo.
+  const oportunidadesFiltradas = soloRubroRMG ? oportunidades.filter(calzaRubroRMG) : oportunidades
+
+  const porEstado = (estado) => oportunidadesFiltradas.filter(o => o.estado === estado)
+  const totalAbierto = oportunidadesFiltradas.filter(o => !['descartada', 'adjudicada', 'no_adjudicada'].includes(o.estado))
+  const totalAdjudicado = oportunidadesFiltradas.filter(o => o.estado === 'adjudicada').reduce((s, o) => s + (o.adjudicado_monto || 0), 0)
+  const urgentes = oportunidadesFiltradas.filter(o => {
     const d = diasParaCierre(o.fecha_cierre)
     return d != null && d >= 0 && d <= 3 && !['descartada', 'adjudicada', 'no_adjudicada'].includes(o.estado)
   })
@@ -284,6 +347,28 @@ export default function ChileCompraPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => moduloMut.mutate(!moduloHabilitado)}
+            disabled={moduloMut.isPending}
+            title={moduloHabilitado
+              ? 'Módulo activo — clic para apagar (detiene el análisis diario y el botón "Hacer análisis ahora", para bajar el consumo de memoria)'
+              : 'Módulo desactivado — clic para prender de nuevo'}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-60"
+            style={{
+              background: moduloHabilitado ? 'rgba(45,201,138,0.12)' : 'rgba(200,40,40,0.10)',
+              color: moduloHabilitado ? 'var(--rmg-teal)' : '#C0392B',
+            }}>
+            <span
+              className="inline-block rounded-full transition-all"
+              style={{
+                width: 30, height: 16, position: 'relative',
+                background: moduloHabilitado ? 'var(--rmg-teal)' : 'rgba(15,35,60,0.2)',
+              }}>
+              <span className="inline-block rounded-full bg-white transition-all"
+                style={{ width: 12, height: 12, position: 'absolute', top: 2, left: moduloHabilitado ? 16 : 2 }} />
+            </span>
+            {moduloHabilitado ? 'Módulo activo' : 'Módulo apagado'}
+          </button>
           <select value={rango} onChange={e => setRango(e.target.value)}
             className="px-3 py-2.5 rounded-lg text-sm outline-none"
             style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
@@ -302,7 +387,8 @@ export default function ChileCompraPage() {
                 style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }} />
             </>
           )}
-          <button onClick={() => analisisMut.mutate()} disabled={analisisMut.isPending}
+          <button onClick={() => analisisMut.mutate()} disabled={analisisMut.isPending || !moduloHabilitado}
+            title={!moduloHabilitado ? 'Módulo apagado — prende el interruptor para analizar' : undefined}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-60"
             style={{ background: 'var(--rmg-blue)', color: '#fff' }}>
             <RefreshCw size={15} className={analisisMut.isPending ? 'animate-spin' : ''} />
@@ -388,12 +474,42 @@ export default function ChileCompraPage() {
           <option value="licitacion">Licitación</option>
           <option value="compra_agil">Compra Ágil</option>
         </select>
-        <select value={filtros.region} onChange={e => setFiltros(f => ({ ...f, region: e.target.value }))}
-          className="px-3 py-2 rounded-lg text-sm outline-none"
-          style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
-          <option value="">Todas las regiones</option>
-          {REGIONES.map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
+        {/* 2026-09-09 — región pasa a ser acumulable (pedido explícito: "mas
+            de una"). Un <select multiple> nativo es incómodo (hay que
+            Ctrl+clic) — se arma un desplegable propio con casilleros. */}
+        <div className="relative">
+          <button type="button" onClick={() => setRegionesAbierto(v => !v)}
+            className="px-3 py-2 rounded-lg text-sm outline-none flex items-center gap-1.5"
+            style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
+            <MapPin size={13} style={{ color: 'var(--rmg-muted)' }} />
+            {filtros.regiones.length === 0 ? 'Todas las regiones' : `${filtros.regiones.length} región(es)`}
+            <ChevronDown size={13} style={{ color: 'var(--rmg-muted)' }} />
+          </button>
+          {regionesAbierto && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setRegionesAbierto(false)} />
+              <div className="absolute z-20 mt-1 w-64 max-h-72 overflow-y-auto rounded-lg shadow-lg p-2"
+                style={{ background: 'var(--rmg-bg, #fff)', border: '1px solid rgba(15,35,60,0.1)' }}>
+                {filtros.regiones.length > 0 && (
+                  <button type="button" onClick={() => setFiltros(f => ({ ...f, regiones: [] }))}
+                    className="w-full text-left text-xs px-2 py-1.5 rounded font-medium mb-1" style={{ color: 'var(--rmg-blue)' }}>
+                    Limpiar selección de regiones
+                  </button>
+                )}
+                {REGIONES.map(r => (
+                  <label key={r} className="flex items-center gap-2 px-2 py-1.5 rounded text-sm cursor-pointer hover:bg-black/5">
+                    <input type="checkbox" checked={filtros.regiones.includes(r)}
+                      onChange={() => setFiltros(f => ({
+                        ...f,
+                        regiones: f.regiones.includes(r) ? f.regiones.filter(x => x !== r) : [...f.regiones, r],
+                      }))} />
+                    <span>{r}</span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <select value={filtros.dias_vencimiento} onChange={e => setFiltros(f => ({ ...f, dias_vencimiento: e.target.value }))}
           className="px-3 py-2 rounded-lg text-sm outline-none"
           style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
@@ -403,9 +519,37 @@ export default function ChileCompraPage() {
           <option value="7">Cierra en 7 días</option>
           <option value="15">Cierra en 15 días</option>
         </select>
-        {(filtros.region || filtros.dias_vencimiento || filtros.q || filtros.fuente) && (
-          <button onClick={() => setFiltros({ region: '', dias_vencimiento: '', q: '', fuente: '' })}
-            className="text-xs px-2.5 py-2 rounded-lg font-medium" style={{ color: 'var(--rmg-muted)' }}>
+        {/* 2026-09-09 — botón "Extraer" (pedido explícito): filtra EN EL
+            NAVEGADOR, sobre lo ya importado, por las palabras clave del rubro
+            RMG (mismas que Licitaciones) — no le pregunta nada nuevo a la API
+            de Compra Ágil (ver aviso en KEYWORDS_RUBRO_RMG arriba). */}
+        <button type="button" onClick={() => setSoloRubroRMG(v => !v)}
+          title="Filtra (en el navegador, sin llamar a ChileCompra de nuevo) por las mismas palabras clave del rubro RMG que usa Licitaciones"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+          style={soloRubroRMG
+            ? { background: 'var(--rmg-blue)', color: '#fff' }
+            : { background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
+          <FileStack size={14} /> Extraer rubro RMG
+        </button>
+        {/* 2026-09-09 — interruptor del filtro por defecto ("solo 7 días,
+            por vencer"). ON al entrar; apagarlo (o "Limpiar filtros") muestra
+            TODO, incluidas las cerradas/adjudicadas y las más antiguas —
+            pedido explícito para no perder de vista el resultado final de lo
+            ya postulado. */}
+        <button type="button" onClick={() => setSoloRecientes(v => !v)}
+          title="Publicadas en los últimos 7 días O por vencer en los próximos 7 — apágalo para ver todo, incluidas cerradas/adjudicadas y más antiguas"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+          style={soloRecientes
+            ? { background: 'rgba(45,201,138,0.14)', color: 'var(--rmg-teal)' }
+            : { background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-muted)' }}>
+          <Clock size={14} /> Recientes y por vencer (7 días)
+        </button>
+        {(filtros.regiones.length || filtros.dias_vencimiento || filtros.q || filtros.fuente || soloRecientes || soloRubroRMG) && (
+          <button onClick={() => {
+            setFiltros({ regiones: [], dias_vencimiento: '', q: '', fuente: '' })
+            setSoloRecientes(false)
+            setSoloRubroRMG(false)
+          }} className="text-xs px-2.5 py-2 rounded-lg font-medium" style={{ color: 'var(--rmg-muted)' }}>
             Limpiar filtros
           </button>
         )}
@@ -501,8 +645,12 @@ export default function ChileCompraPage() {
         </div>
       )}
 
-      {/* Cerradas: adjudicada / no adjudicada / descartada — resumen colapsado */}
-      <ResultadosCerrados oportunidades={oportunidades} onSelect={setSeleccionId} />
+      {/* Cerradas: adjudicada / no adjudicada / descartada — resumen colapsado.
+          2026-09-09 — usa oportunidadesFiltradas (respeta "Extraer rubro RMG")
+          y ya no depende de "Recientes y por vencer" porque el backend deja
+          pasar los estados terminales siempre, sin importar ese filtro (ver
+          chilecompraController.getOportunidades). */}
+      <ResultadosCerrados oportunidades={oportunidadesFiltradas} onSelect={setSeleccionId} />
 
       {seleccionId && (
         <DetalleModal id={seleccionId} onClose={() => {

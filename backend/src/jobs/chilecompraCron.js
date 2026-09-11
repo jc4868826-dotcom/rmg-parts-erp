@@ -229,13 +229,29 @@ async function ejecutarIngesta({ disparadoPor = 'cron', enviarEmail = false, dia
   }
 }
 
+// Interruptor de módulo (tabla app_settings, ver config/database.js). Se
+// revisa recién al DISPARARSE el cron (no al registrarlo) para que activar
+// el módulo desde la UI surta efecto sin necesidad de reiniciar el server.
+function moduloHabilitado() {
+  try {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key = 'chilecompra_enabled'").get()
+    return row ? row.value === 'true' : true
+  } catch (_) {
+    return true
+  }
+}
+
 function iniciarCron() {
   // 9:00 todos los días, hora de Santiago
   cron.schedule('0 9 * * *', () => {
+    if (!moduloHabilitado()) {
+      console.log('⏸️ Cron ChileCompra 9am saltado — módulo desactivado desde el interruptor')
+      return
+    }
     ejecutarIngesta({ disparadoPor: 'cron', enviarEmail: true })
       .catch(e => console.error('❌ ChileCompra cron 9am falló:', e.message))
   }, { timezone: 'America/Santiago' })
-  console.log('⏰ Cron ChileCompra activado — todos los días 09:00 America/Santiago')
+  console.log('⏰ Cron ChileCompra activado — todos los días 09:00 America/Santiago (respeta interruptor de módulo)')
 }
 
-module.exports = { ejecutarIngesta, iniciarCron, KEYWORDS }
+module.exports = { ejecutarIngesta, iniciarCron, KEYWORDS, moduloHabilitado }

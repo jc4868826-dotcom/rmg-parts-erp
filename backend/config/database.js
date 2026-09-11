@@ -2905,6 +2905,30 @@ function seedData() {
   console.log('✅ Usuarios iniciales creados: admin@rmgautoparts.cl / gerente@rmgautoparts.cl')
 }
 
+// ─── Interruptores de módulo (ej. "chilecompra_enabled") ──────────────────────
+// Tabla genérica clave/valor para prender/apagar módulos que consumen memoria
+// en runtime (sql.js mantiene TODA la DB en RAM — ver nota en initDB). Se crea
+// en try/catch, como el resto de las migraciones de este archivo.
+// Default explícito: chilecompra_enabled arranca en 'false' (apagado) la
+// primera vez que corre esta migración — pedido puntual 2026-09-11 por OOM en
+// Render ("Ran out of memory... while running your code"), mientras se
+// investiga la causa de fondo. Si la fila ya existe (redeploys siguientes),
+// esto NO la toca — respeta lo que el usuario haya dejado con el interruptor.
+function ensureAppSettings() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+      )
+    `)
+    db.prepare(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chilecompra_enabled', 'false')`).run()
+  } catch (e) {
+    console.warn('⚠️ No se pudo asegurar app_settings:', e.message)
+  }
+}
+
 // ─── Init async (sql.js requiere carga WASM) ──────────────────────────────────
 async function initDB() {
   const SQL = await initSqlJs({
@@ -2949,6 +2973,7 @@ async function initDB() {
     } else { throw schemaErr }
   }
   runMigrations()
+  ensureAppSettings()
   seedData()
 
   // Inicializar servicio de backup con acceso a la DB y al constructor SQL

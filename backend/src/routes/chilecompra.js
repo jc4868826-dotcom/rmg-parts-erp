@@ -37,6 +37,8 @@ const { authenticate } = require('../middleware/auth')
 
 router.get('/',                  authenticate, c.getOportunidades)
 router.post('/ejecutar-analisis', authenticate, c.ejecutarAnalisisAhora)
+router.get('/config/modulo',     authenticate, c.getModuloConfig)
+router.patch('/config/modulo',   authenticate, c.setModuloConfig)
 router.get('/:id',               authenticate, c.getOportunidad)
 router.patch('/:id/estado',      authenticate, c.cambiarEstado)
 router.post('/:id/analizar',     authenticate, c.analizarOportunidad)
