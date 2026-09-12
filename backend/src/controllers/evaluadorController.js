@@ -124,21 +124,34 @@ const buscar = async (req, res) => {
   }
 }
 
+// 2026-09-12 — BUG real reportado: el botón "Leer ficha pública y calcular
+// score" (estado 'analizando') usaba cc.analizarOportunidad tal cual, que en
+// chilecompraController SÍ está bloqueado por el interruptor
+// chilecompra_enabled (apagado por defecto, ver nota al principio de este
+// archivo) — devolvía "Módulo ChileCompra desactivado temporalmente" aunque
+// Evaluador es un módulo aparte, sin nada pesado corriendo en segundo plano.
+// Se llama directo a analizarOportunidadInterno (la función real, sin el
+// gate) en vez del handler HTTP gateado.
+const analizarOportunidad = async (req, res) => {
+  try {
+    await cc.analizarOportunidadInterno(req.params.id, req.user)
+    res.json(withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(req.params.id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 module.exports = {
   listar,
   getDetalle,
   buscar,
+  analizarOportunidad,
   // Reutilizados tal cual de chilecompraController — agnósticos de fuente,
   // ninguno depende de que /api/chilecompra esté montado ni del interruptor
-  // chilecompra_enabled (ver nota arriba). analizarOportunidad SÍ está
-  // gateado por moduloHabilitado() en chilecompraController — se deja igual
-  // a propósito (mismo criterio: si alguien apaga el módulo pesado, también
-  // se apaga acá la re-lectura de anexos, aunque la ingesta inicial y el
-  // resto de los botones de Evaluador sigan funcionando).
+  // chilecompra_enabled.
   cambiarEstado: cc.cambiarEstado,
   actualizarObservacionItem: cc.actualizarObservacionItem,
   extraerFichasTecnicas: cc.extraerFichasTecnicas,
   getChecklistPostulacion: cc.getChecklistPostulacion,
-  analizarOportunidad: cc.analizarOportunidad,
   limpiarHistorial: cc.limpiarHistorial,
 }

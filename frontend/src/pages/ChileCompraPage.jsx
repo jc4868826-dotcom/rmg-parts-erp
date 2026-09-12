@@ -1035,7 +1035,19 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
                     {op.items.map(it => (
                       <Fragment key={it.id}>
                         <tr style={{ borderTop: '1px solid rgba(15,35,60,0.04)' }}>
-                          <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>{it.descripcion_solicitada}</td>
+                          <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>
+                            {it.descripcion_solicitada}
+                            {/* 2026-09-12 — BUG real reportado: la especificación técnica completa
+                                (marca de referencia, formato, observaciones — ej. "MOBIL DELVAC 1300
+                                SUPER API CK4 OBS:IGUAL CARACTERISTICA O SUPERIOR (208 LITROS)") SÍ
+                                se guarda y SÍ se usa para el match con catálogo, pero nunca se
+                                mostraba acá — el usuario solo veía la etiqueta genérica corta
+                                ("Aceite de motor") y parecía que el sistema no había leído el
+                                requerimiento real. */}
+                            {it.especificacion_tecnica && it.especificacion_tecnica !== it.descripcion_solicitada && (
+                              <div className="text-[11px] mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{it.especificacion_tecnica}</div>
+                            )}
+                          </td>
                           <td className="px-3 py-2" style={{ color: it.cantidad_ajustada ? 'var(--rmg-red)' : 'var(--rmg-muted)', fontWeight: it.cantidad_ajustada ? 700 : 400 }}>
                             {it.cantidad} {it.unidad || ''}
                             {it.cantidad_ajustada ? <span title={`Cantidad ajustada automáticamente desde ${it.cantidad_solicitada_original} para cubrir el volumen real solicitado — ver Observación en el Excel de cruce.`}> ⚠️</span> : null}
