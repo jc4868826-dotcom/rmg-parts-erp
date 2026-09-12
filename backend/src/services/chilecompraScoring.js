@@ -445,6 +445,56 @@ function esConector(palabra) {
 }
 
 /**
+ * Marcas de la competencia (2026-09) — pedido explícito del usuario: "obvio
+ * siempre pondrán marcas... lo relevante es en que consiste el producto...
+ * ahí está el match". El pliego casi siempre trae una marca de REFERENCIA
+ * (ej. "Aceite Mobil Delvac 1300 15W40"), pero para LUBRICANTES RMG solo
+ * distribuye marca propia (Vistony, y Auster como marca secundaria — ver
+ * lista_precios) — una marca de competencia como Mobil/Shell/Castrol NUNCA
+ * va a aparecer en ese catálogo, así que dejarla dentro de `palabras` solo
+ * INFLA el denominador del score de solapamiento (matches / palabras.length)
+ * sin ninguna posibilidad de sumar en el numerador, castigando
+ * artificialmente ítems que sí traen buena señal técnica real (SAE,
+ * viscosidad, norma API/ACEA). Se filtran ANTES de calcular solapamiento,
+ * igual que los conectores — el producto se identifica por lo que ES (tipo,
+ * viscosidad, norma), nunca por la marca que puso el organismo como
+ * referencia.
+ *
+ * IMPORTANTE — acotado a LUBRICANTES a propósito: a diferencia de
+ * lubricantes, en neumáticos y baterías RMG SÍ revende marcas de terceros
+ * reales (verificado contra lista_precios: KUMHO, DOUBLE STAR, KENDA SD para
+ * neumáticos vía proveedor SalfaSur; YOKO G&B, Platin para baterías vía
+ * SalfaSur/Cristian Hughes) — ahí la marca del pliego SÍ puede ser el propio
+ * producto que RMG vende, no una referencia de competencia a ignorar. Por
+ * eso esta lista NO incluye marcas de neumáticos ni de baterías: filtrar
+ * "kumho" o "yoko" rompería el match en vez de mejorarlo. Si en el futuro se
+ * detecta una marca de neumático/batería que SÍ es pura competencia (RMG no
+ * la vende), se puede agregar, pero verificando primero contra
+ * lista_precios que no sea una marca propia.
+ *
+ * Lista abierta y editable — no pretende ser exhaustiva, solo cubre las
+ * marcas competidoras de lubricantes más comunes en licitaciones chilenas.
+ * Agregar aquí cualquier marca nueva que se vea en un pliego real y esté
+ * distorsionando un match (verificando primero que no sea una marca que RMG
+ * efectivamente vende).
+ */
+const MARCAS_COMPETENCIA = new Set([
+  'mobil', 'delvac', 'mobil1',
+  'shell', 'rimula', 'helix', 'spirax', 'advance',
+  'castrol', 'edge', 'magnatec', 'gtx', 'vecton', 'agri',
+  'chevron', 'havoline', 'delo', 'texaco', 'ursa',
+  'total', 'quartz', 'rubia', 'excellium',
+  'valvoline', 'gulf', 'motul', 'liqui', 'moly',
+  'repsol', 'ypf', 'fuchs', 'titan',
+  'petrobras', 'lubrax', 'copec', 'petronas', 'wolf', 'elf',
+  'amsoil', 'pennzoil', 'quaker', 'bardahl', 'kixx', 'idemitsu',
+])
+
+function esMarcaCompetencia(palabra) {
+  return MARCAS_COMPETENCIA.has(palabra)
+}
+
+/**
  * Solapamiento de palabras (>=4 letras, sin tokens puramente numéricos+
  * unidad) del texto del ítem contra descripcion+producto_generico+marca de
  * cada candidato.
@@ -507,13 +557,23 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
     .toLowerCase()
     .replace(/[^a-z0-9áéíóúñ ]/gi, ' ')
     .split(/\s+/)
-    .filter(w => w.length >= 4 && !esTokenNumericoDeUnidad(w) && !esConector(w)) // descarta conectores (cortos y largos, ej. "para") y tokens de pack-size (ej. "200l")
+    .filter(w => w.length >= 4 && !esTokenNumericoDeUnidad(w) && !esConector(w) && !esMarcaCompetencia(w)) // descarta conectores (ej. "para"), tokens de pack-size (ej. "200l") y marcas de la competencia (ej. "mobil") — el match es por lo que el producto ES, no por la marca de referencia del pliego
 
+  // 2026-09 — pedido explícito y repetido del usuario: "hicimos un archivo de
+  // conocimientos, con lista de precios... ES SOLO VISTONY". El matching
+  // automático de Evaluador/Compra Ágil/ChileCompra SOLO debe considerar
+  // productos Vistony — lista_precios también trae filas de otros
+  // proveedores (SalfaSur: neumáticos KUMHO/DOUBLE STAR/KENDA, baterías YOKO;
+  // Cristian Hughes: baterías Platin; AUSTER como marca secundaria de
+  // lubricantes) que pertenecen a una línea de negocio distinta y NO deben
+  // entrar al pool de candidatos de esta herramienta. Filtro por marca,
+  // no por proveedor, porque es la columna que corresponde 1:1 al producto
+  // ofrecido.
   const candidatos = db.prepare(`
     SELECT codigo_sku, descripcion, categoria, producto_generico, marca, tipo_envase, presentacion, precio_venta_neto,
            costo_unidad_neto, unidades_por_pack, ranking_compra
     FROM lista_precios
-    WHERE codigo_sku IS NOT NULL
+    WHERE codigo_sku IS NOT NULL AND LOWER(marca) = 'vistony'
   `).all()
 
   const { mejor, mejorScore } = mejorPorSolapamiento(palabras, candidatos)
@@ -858,4 +918,5 @@ module.exports = {
   familiaEnvase,
   inferirTipoEnvaseSolicitado,
   volumenTotalSolicitado,
+  esMarcaCompetencia,
 }
