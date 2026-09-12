@@ -761,6 +761,7 @@ function ResultadosCerrados({ oportunidades, onSelect }) {
 export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
   const qc = useQueryClient()
   const [verChecklist, setVerChecklist] = useState(false)
+  const [verCruce, setVerCruce] = useState(false)
   // Texto en edición por ítem para la corrección manual ("match salió mal") —
   // keyed por item.id, solo mientras el usuario edita antes de guardar.
   const [notaEdit, setNotaEdit] = useState({})
@@ -1224,13 +1225,74 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
               </div>
             </div>
             {excelCruce && (
-              <a href={`${api.defaults.baseURL}/documentos/archivo/${excelCruce.id}`} target="_blank" rel="noreferrer"
+              <button type="button" onClick={() => setVerCruce(true)}
                 className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg flex-shrink-0"
                 style={{ background: 'var(--rmg-teal)', color: '#fff' }}>
                 <Eye size={13} /> Visualizar
-              </a>
+              </button>
             )}
           </div>
+
+          {/* 2026-09-12 — FIX: el botón "Visualizar" de arriba antes abría el
+              .xlsx directo en pestaña nueva con Content-Disposition: inline —
+              pero ningún navegador tiene visor nativo de .xlsx, así que en la
+              práctica solo lo descargaba o lo abría en Excel/Numbers, nunca
+              "sin bajar" como se pidió. Los mismos datos del Excel (SKU,
+              costo, precio, margen) YA están en oportunidad_chilecompra_items
+              — este modal los pinta como tabla HTML, sin abrir ningún
+              archivo. La descarga real del .xlsx queda como opción aparte,
+              para quien sí lo quiera adjuntar/enviar. */}
+          {verCruce && (
+            <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4" style={{ background: 'rgba(15,35,60,0.4)' }} onClick={() => setVerCruce(false)}>
+              <div className="rmg-card w-full max-w-5xl p-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--rmg-border)' }}>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold" style={{ color: 'var(--rmg-off)' }}>Cruce Bases vs Catálogo RMG</div>
+                    <div className="text-xs truncate" style={{ color: 'var(--rmg-muted)' }}>{excelCruce?.nombre_archivo}</div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {excelCruce && (
+                      <a href={`${api.defaults.baseURL}/documentos/archivo/${excelCruce.id}`} target="_blank" rel="noreferrer"
+                        className="text-xs font-medium px-2.5 py-1.5 rounded-lg border" style={{ borderColor: 'var(--rmg-border)', color: 'var(--rmg-muted)' }}>
+                        Descargar .xlsx
+                      </a>
+                    )}
+                    <button type="button" onClick={() => setVerCruce(false)} className="text-xs font-medium px-2.5 py-1.5" style={{ color: 'var(--rmg-muted)' }}>Cerrar</button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto" style={{ maxHeight: '70vh' }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: 'rgba(15,35,60,0.03)' }}>
+                        {['Ítem solicitado', 'Cant.', 'SKU RMG', 'Confianza', 'Costo unit. neto', 'Precio unit. neto', 'Margen', 'Observación'].map((h, i) => (
+                          <th key={`${h}-${i}`} className="text-left px-3 py-2 font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(op.items || []).map(it => (
+                        <tr key={it.id} style={{ borderTop: '1px solid rgba(15,35,60,0.04)' }}>
+                          <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>
+                            {it.descripcion_solicitada}
+                            {it.especificacion_tecnica && it.especificacion_tecnica !== it.descripcion_solicitada && (
+                              <div className="text-[11px] mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{it.especificacion_tecnica}</div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{it.cantidad} {it.unidad || ''}</td>
+                          <td className="px-3 py-2 font-mono whitespace-nowrap" style={{ color: it.cubierto ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>{it.sku_match || 'Sin cobertura'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{it.match_confianza != null ? formatPct(it.match_confianza) : '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{it.costo_unitario_rmg != null ? formatCLP(it.costo_unitario_rmg) : '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{it.precio_venta_sugerido != null ? formatCLP(it.precio_venta_sugerido) : '—'}</td>
+                          <td className="px-3 py-2 font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{it.margen_pct_estimado != null ? formatPct(it.margen_pct_estimado) : '—'}</td>
+                          <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)', maxWidth: 260 }}>{it.observacion || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Anexos de la licitación — los documentos REALES que el organismo
               publicó (Bases de Licitación, Anexos técnicos/administrativos,

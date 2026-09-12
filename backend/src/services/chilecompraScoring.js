@@ -495,6 +495,64 @@ function esMarcaCompetencia(palabra) {
 }
 
 /**
+ * ── Pasada 0 — match por atributo técnico exacto (2026-09) ─────────────────
+ * Auditoría real (licitación Coronel, GANADA): "Aceite hidráulico ISO 68",
+ * "SAE 5W-30 ACEA C3/API SN", "GL-4 SAE 75W90" — TODOS existen tal cual en el
+ * catálogo Vistony, pero el conteo de palabras (pasada 1) los scoreaba en
+ * 25-39% igual, porque la mayoría de las palabras del ítem (organismo,
+ * relleno del pliego) no están en la descripción comercial del SKU aunque el
+ * producto SÍ sea el correcto. Pedido explícito del usuario: "lo relevante
+ * es en que consiste el producto... ahí está el match" — el producto se
+ * identifica por su especificación técnica exacta (grado SAE, ISO, norma
+ * API/ACEA/GL/JASO/DOT), no por cuántas palabras del pliego se repiten.
+ *
+ * Esta pasada extrae esos atributos tanto del ítem como de cada candidato y,
+ * si UNO SOLO coincide literal (ej. "5w-30" aparece en ambos textos), se
+ * toma como señal fuerte — mucho más confiable que el solapamiento de
+ * palabras, porque un grado SAE o una norma API no aparecen por casualidad.
+ * Corre ANTES que la pasada 1 (solapamiento); si no encuentra nada, cae a
+ * pasada 1 y pasada 2 exactamente igual que antes — no reemplaza el resto,
+ * lo antecede.
+ */
+const RE_SAE = /\b(\d{1,2}\s?w\s?-?\s?\d{1,2})\b/i // "5W-30", "5W30", "15 W 40"
+const RE_ISO = /\biso\s?(32|46|68|100|150|220|320|460|680)\b/i
+const RE_NORMA = /\b(api\s?(sn\+?|sp|sq|ck-4|cj-4|cf-4|cf|cd|cc)|acea\s?(a3\/?b4|a5\/?b5|c2|c3|c4)|gl-4|gl-5|jaso\s?ma-?2?|dot-?\s?[34])\b/i
+
+function normalizarAtributo(s) {
+  return (s || '').toLowerCase().replace(/[\s-]+/g, '')
+}
+
+/** {sae, iso, norma} normalizados (ej. "5w30", "iso68", "acea c3" → "aceac3") o null si no hay señal. */
+function extraerAtributosTecnicos(texto) {
+  const t = texto || ''
+  const sae = t.match(RE_SAE)?.[1]
+  const iso = t.match(RE_ISO)?.[0]
+  const norma = t.match(RE_NORMA)?.[0]
+  return {
+    sae: sae ? normalizarAtributo(sae) : null,
+    iso: iso ? normalizarAtributo(iso) : null,
+    norma: norma ? normalizarAtributo(norma) : null,
+  }
+}
+
+/**
+ * Candidatos cuya descripción comercial contiene, normalizado, el MISMO
+ * atributo técnico exacto que el ítem (SAE, ISO o norma) — el que primero dé
+ * resultado, en ese orden de especificidad (SAE es lo más específico que
+ * suele traer un pliego de aceites). Devuelve [] si el ítem no trae ningún
+ * atributo reconocible (nunca inventa uno).
+ */
+function candidatosPorAtributoExacto(atributosItem, candidatos) {
+  for (const clave of ['sae', 'iso', 'norma']) {
+    const valor = atributosItem[clave]
+    if (!valor) continue
+    const coinciden = candidatos.filter(c => normalizarAtributo(c.descripcion).includes(valor))
+    if (coinciden.length) return coinciden
+  }
+  return []
+}
+
+/**
  * Solapamiento de palabras (>=4 letras, sin tokens puramente numéricos+
  * unidad) del texto del ítem contra descripcion+producto_generico+marca de
  * cada candidato.
@@ -575,6 +633,27 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
     FROM lista_precios
     WHERE codigo_sku IS NOT NULL AND LOWER(marca) = 'vistony'
   `).all()
+
+  // Pasada 0 — atributo técnico exacto (SAE/ISO/norma). Corre PRIMERO porque
+  // es más confiable que contar palabras: ver candidatosPorAtributoExacto().
+  const atributosItem = extraerAtributosTecnicos(texto)
+  const porAtributo = candidatosPorAtributoExacto(atributosItem, candidatos)
+  if (porAtributo.length) {
+    // Si el texto también da para inferir categoría, se acota más — pero
+    // solo si esa intersección no queda vacía (un producto con el mismo
+    // grado SAE exacto casi seguro es de la categoría correcta; si acotar
+    // por categoría lo dejara en cero, se prefiere mantener el match por
+    // atributo antes que perderlo por una inferencia de categoría de
+    // respaldo).
+    const categoriaInferida = inferirCategoria(texto)
+    const acotado = categoriaInferida
+      ? porAtributo.filter(c => (categoriaEfectiva(c) || '').toLowerCase() === categoriaInferida.toLowerCase())
+      : porAtributo
+    const pool = acotado.length ? acotado : porAtributo
+    const elegido = [...pool].sort((a, b) => (a.ranking_compra ?? 999) - (b.ranking_compra ?? 999))[0]
+    const { sku, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa } = preferirFormatoMenor(elegido, candidatos)
+    return { sku, confianza: 0.9, porAtributoTecnico: true, sustituido, skuOriginalTambor, formatoGrandeSinAlternativa }
+  }
 
   const { mejor, mejorScore } = mejorPorSolapamiento(palabras, candidatos)
 
