@@ -314,44 +314,85 @@ async function listarPublicadasEnVentana({ ventanaMs = 6 * 3600_000, estados = [
   return { items, erroresPorRegion }
 }
 
-// ── Descarga de documentos adjuntos (2026-09-09) ────────────────────────────
+// ── Descarga de documentos adjuntos (2026-09-09, confirmado 2026-09-12) ─────
 // Pedido real del usuario: "no veo que lea los adjuntos y encuentre lo que se
 // pide" — el detalle de la API a veces solo trae una línea genérica en
-// `productos_solicitados[]`, y el requerimiento real vive en un PDF que la
-// propia API referencia en `documentos[]` (ver mapearDetalle). El shape
-// exacto de cada entrada de `documentos[]` NO está confirmado contra un caso
-// real todavía (hasta ahora ninguna Compra Ágil detectada traía adjuntos) —
-// se prueban los nombres de campo más probables (url/urlDescarga/link, etc.)
-// y, si ninguno calza, se devuelve el motivo exacto en vez de fallar en
-// silencio, para poder ajustar esto en 5 minutos apenas aparezca un caso real
-// (revisar el log de advertencia que deja compraAgilAnalisis.js).
+// `productos_solicitados[]`, y el requerimiento real vive en un PDF/Word que
+// la propia API referencia en `documentos[]` (ver mapearDetalle).
+//
+// 2026-09-12 — CONFIRMADO contra un caso real (3086-735-COT26, que sí tiene
+// un adjunto ".docx" visible en el portal público): `documentos[]` viene como
+// `[{ id: 1883455, nombre: "3086-735-COT26 }.docx" }]` — SOLO `id` y
+// `nombre`, SIN ningún campo de URL directa. La guía de la API v2 no
+// documenta (o no se encontró) el endpoint exacto para bajar un documento
+// por su `id` — se prueban acá las rutas más probables del mismo estilo REST
+// que el resto de la API (`/v2/compra-agil/.../documento/{id}`), UNA SOLA
+// VEZ cada una, y si ninguna responde con el archivo real, se informa el
+// motivo exacto de cada intento (no un genérico "no se pudo") para poder
+// ajustar esto en cuanto se confirme el endpoint correcto (con la guía del
+// desarrollador, o mirando el tráfico de red del portal público al abrir ese
+// mismo adjunto).
 const CAMPOS_URL_PROBABLES = ['url', 'urlDescarga', 'url_descarga', 'link', 'uri', 'urlDocumento', 'url_documento']
 const CAMPOS_NOMBRE_PROBABLES = ['nombre', 'nombreArchivo', 'nombre_archivo', 'name', 'titulo']
+const CAMPOS_ID_PROBABLES = ['id', 'idDocumento', 'id_documento', 'documentoId']
+const RUTAS_DOCUMENTO_POR_ID = (id) => [
+  `/v2/compra-agil/documento/${id}`,
+  `/v2/compra-agil/documentos/${id}`,
+  `/v2/documento/${id}`,
+  `/v2/documentos/${id}`,
+]
+
+async function descargarPorUrl(url, nombre) {
+  const resp = await axios.get(url, {
+    responseType: 'arraybuffer',
+    headers: TICKET ? { ticket: TICKET } : undefined,
+    timeout: 30_000,
+    validateStatus: () => true,
+  })
+  if (resp.status >= 400) {
+    return { ok: false, motivo: `HTTP ${resp.status} en ${url}` }
+  }
+  const tipoRespuesta = String(resp.headers?.['content-type'] || '').split(';')[0].trim()
+  // Un 200 con content-type text/html casi siempre es una página de error o
+  // de login disfrazada de "éxito" (validateStatus:true no distingue esto) —
+  // se trata igual que un fallo, para no guardar un HTML como si fuera el PDF/Word.
+  if (tipoRespuesta.includes('text/html')) {
+    return { ok: false, motivo: `${url} respondió HTML (200) en vez de un archivo — probablemente la ruta no existe o requiere otra autenticación` }
+  }
+  const mediaType = tipoRespuesta || (nombre.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream')
+  return { ok: true, documento: { base64: Buffer.from(resp.data).toString('base64'), mediaType, nombre } }
+}
 
 async function descargarDocumentoAdjunto(doc) {
-  const campoUrl = CAMPOS_URL_PROBABLES.find(c => typeof doc?.[c] === 'string' && doc[c].startsWith('http'))
-  if (!campoUrl) {
-    return { ok: false, motivo: `sin campo de URL reconocible (claves recibidas: ${Object.keys(doc || {}).join(', ') || 'ninguna'})` }
-  }
   const campoNombre = CAMPOS_NOMBRE_PROBABLES.find(c => typeof doc?.[c] === 'string')
   const nombre = campoNombre ? doc[campoNombre] : 'documento'
-  const url = doc[campoUrl]
-  try {
-    const resp = await axios.get(url, {
-      responseType: 'arraybuffer',
-      headers: TICKET ? { ticket: TICKET } : undefined,
-      timeout: 30_000,
-      validateStatus: () => true,
-    })
-    if (resp.status >= 400) {
-      return { ok: false, motivo: `HTTP ${resp.status} al descargar ${url}` }
+
+  const campoUrl = CAMPOS_URL_PROBABLES.find(c => typeof doc?.[c] === 'string' && doc[c].startsWith('http'))
+  if (campoUrl) {
+    try {
+      return await descargarPorUrl(doc[campoUrl], nombre)
+    } catch (err) {
+      return { ok: false, motivo: `error de red descargando ${doc[campoUrl]} — ${err.message}` }
     }
-    const tipoRespuesta = String(resp.headers?.['content-type'] || '').split(';')[0].trim()
-    const mediaType = tipoRespuesta || (nombre.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream')
-    return { ok: true, documento: { base64: Buffer.from(resp.data).toString('base64'), mediaType, nombre } }
-  } catch (err) {
-    return { ok: false, motivo: `error de red descargando ${url} — ${err.message}` }
   }
+
+  const campoId = CAMPOS_ID_PROBABLES.find(c => doc?.[c] != null)
+  if (campoId) {
+    const id = doc[campoId]
+    const intentos = []
+    for (const ruta of RUTAS_DOCUMENTO_POR_ID(id)) {
+      try {
+        const r = await descargarPorUrl(`${BASE_URL}${ruta}`, nombre)
+        if (r.ok) return r
+        intentos.push(r.motivo)
+      } catch (err) {
+        intentos.push(`error de red en ${ruta} — ${err.message}`)
+      }
+    }
+    return { ok: false, motivo: `documento con id=${id} pero sin endpoint de descarga confirmado — se probó: ${intentos.join(' | ')}` }
+  }
+
+  return { ok: false, motivo: `sin campo de URL ni de id reconocible (claves recibidas: ${Object.keys(doc || {}).join(', ') || 'ninguna'})` }
 }
 
 module.exports = {

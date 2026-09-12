@@ -22,6 +22,7 @@ const {
 } = require('./chilecompraScoring')
 const { adjuntarFichasAOportunidad } = require('./fichasTecnicasVistonyService')
 const { compararFichaTecnica, leerAnexos, leerFichaPublica } = require('./chilecompraDocReader')
+const { generarExcelCruce } = require('./chilecompraExcelExport')
 
 // ── Detector automático (2026-09-08 noche) — API oficial, sin navegador ────
 // Candado contra corridas solapadas, compartido entre el cron y el botón
@@ -218,7 +219,9 @@ async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase
         VALUES (?,?,?,?,?,?,?,?,?)
       `).run(
         uuidv4(), 'oportunidad_chilecompra', id,
-        doc.mediaType === 'application/pdf' ? 'pdf' : 'imagen',
+        doc.mediaType === 'application/pdf' ? 'pdf'
+          : doc.mediaType?.startsWith('image/') ? 'imagen'
+          : 'word',
         doc.nombre, doc.mediaType, doc.base64, user?.id || null, 'anexo_api_compra_agil'
       )
       nuevos++
@@ -237,6 +240,41 @@ async function guardarYProcesarOportunidad(codigo, detalle, user, tipoEventoBase
     calcularYGuardarScores(id, cruce)
   } catch (e) {
     logEvento(id, 'cruce_error', { usuario_id: user?.id, usuario_nombre: user?.email, detalle: e.message })
+  }
+
+  // 2026-09-12 — BUG real reportado: la ficha quedaba "detectada" con el
+  // cruce ya calculado en la base, pero SIN el Excel de cruce adjunto — ese
+  // archivo (el que sirve para postular) solo se generaba cuando el usuario
+  // pasaba manualmente a "analizando" (analizarOportunidadInterno) o corregía
+  // un ítem (actualizarObservacionItem). Para Evaluador en particular no
+  // tiene sentido esperar ese segundo paso: el cruce ya es válido apenas se
+  // importa (los adjuntos, si los hay, ya se leyeron arriba). Se genera y
+  // adjunta acá mismo, igual que en esos otros dos lugares — mismo nombre de
+  // archivo/categoría 'cruce_auto', así que si más adelante el usuario sí
+  // reanaliza o corrige un ítem, simplemente lo reemplaza.
+  try {
+    const excelBuffer = await generarExcelCruce(id)
+    const nombreExcel = 'Cruce_Bases_vs_Catalogo_RMG.xlsx'
+    const existenteExcel = db.prepare(`
+      SELECT id FROM documentos_adjuntos
+      WHERE entidad = 'oportunidad_chilecompra' AND entidad_id = ? AND nombre_archivo = ? AND categoria = 'cruce_auto'
+    `).get(id, nombreExcel)
+    if (existenteExcel) {
+      db.prepare(`UPDATE documentos_adjuntos SET contenido_base64 = ?, created_at = datetime('now') WHERE id = ?`)
+        .run(excelBuffer.toString('base64'), existenteExcel.id)
+    } else {
+      db.prepare(`
+        INSERT INTO documentos_adjuntos
+          (id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, categoria)
+        VALUES (?,?,?,?,?,?,?,?,?)
+      `).run(
+        uuidv4(), 'oportunidad_chilecompra', id, 'excel', nombreExcel,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        excelBuffer.toString('base64'), user?.id || null, 'cruce_auto'
+      )
+    }
+  } catch (e) {
+    logEvento(id, 'excel_cruce_error', { usuario_id: user?.id, usuario_nombre: user?.email, detalle: e.message })
   }
 
   // Fichas técnicas internas RMG para los productos con match.
@@ -285,9 +323,15 @@ async function enriquecerConDocumentosAdjuntos(detalle) {
     return detalle
   }
 
-  const legibles = descargados.filter(d => d.mediaType === 'application/pdf' || d.mediaType?.startsWith('image/'))
+  // 2026-09-12 — BUG real confirmado (3086-735-COT26): este filtro descartaba
+  // Word (.docx/.doc) aunque leerAnexos() SÍ sabe leerlos (mammoth, ver
+  // chilecompraDocReader.js) — es el mismo formato que ya se lee sin problema
+  // para licitaciones. Un adjunto Word real quedaba silenciosamente fuera del
+  // análisis, indistinguible de "no había nada que leer".
+  const TIPOS_WORD = ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+  const legibles = descargados.filter(d => d.mediaType === 'application/pdf' || d.mediaType?.startsWith('image/') || TIPOS_WORD.includes(d.mediaType))
   if (!legibles.length) {
-    console.warn(`⚠️ Compra Ágil ${detalle.codigo_externo}: ${descargados.length} documento(s) descargado(s) pero ninguno es PDF/imagen legible (tipos: ${descargados.map(d => d.mediaType).join(', ')})`)
+    console.warn(`⚠️ Compra Ágil ${detalle.codigo_externo}: ${descargados.length} documento(s) descargado(s) pero ninguno es PDF/imagen/Word legible (tipos: ${descargados.map(d => d.mediaType).join(', ')})`)
     return detalle
   }
 
