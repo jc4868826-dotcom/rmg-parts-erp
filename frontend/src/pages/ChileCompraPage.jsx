@@ -19,7 +19,7 @@ import {
   XCircle, Clock, FileSearch, ClipboardCheck, Send, Trophy, Ban,
   MapPin, Calendar, Package, TrendingUp, ShieldCheck, ExternalLink,
   History, ChevronDown, Sparkles, ListChecks, Truck, Undo2, FileStack, Eraser, Zap, Loader2,
-  Building2, Globe2, ClipboardPaste, Paperclip,
+  Building2, Globe2, ClipboardPaste, Paperclip, FileSpreadsheet, Eye,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -783,6 +783,22 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
     enabled: verChecklist || op?.estado === 'preparando_postulacion',
   })
 
+  // 2026-09 — pedido explícito del usuario: "ponle boton visualizar" para el
+  // Excel de cruce (Bases vs Catálogo) que se genera automáticamente al
+  // analizar (ver guardarYProcesarOportunidad en compraAgilAnalisis.js,
+  // categoria='cruce_auto' en documentos_adjuntos). Antes solo aparecía
+  // mezclado dentro de "Anexos de la licitación" — fácil de no ver porque
+  // comparte panel con los documentos que el usuario sube a mano. Se separa
+  // acá en su propio bloque, siempre visible, con link directo de descarga/
+  // vista (mismo endpoint público GET /documentos/archivo/:id que ya usa
+  // DocumentosPanel).
+  const { data: documentosOp = [] } = useQuery({
+    queryKey: ['chilecompra-documentos', id],
+    queryFn: () => api.get(`/documentos/oportunidad_chilecompra/${id}`).then(r => r.data),
+    enabled: Boolean(op?.id),
+  })
+  const excelCruce = documentosOp.find(d => d.categoria === 'cruce_auto')
+
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['chilecompra'] })
     qc.invalidateQueries({ queryKey: ['chilecompra-detalle', id] })
@@ -1193,6 +1209,28 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
               <ListChecks size={13} /> Ver checklist de documentos para postular
             </button>
           )}
+
+          {/* Excel de cruce (Bases vs Catálogo) — se genera solo al analizar,
+              en su propio bloque para que sea imposible no verlo (antes
+              quedaba mezclado adentro de "Anexos de la licitación"). */}
+          <div className="rounded-lg p-3 flex items-center justify-between gap-3" style={{ background: 'rgba(45,201,138,0.08)', border: '1px solid rgba(45,201,138,0.25)' }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <FileSpreadsheet size={16} style={{ color: 'var(--rmg-teal)', flexShrink: 0 }} />
+              <div className="min-w-0">
+                <div className="text-xs font-semibold" style={{ color: 'var(--rmg-off)' }}>Excel de cruce (Bases vs Catálogo RMG)</div>
+                <div className="text-xs truncate" style={{ color: 'var(--rmg-muted)' }}>
+                  {excelCruce ? excelCruce.nombre_archivo : 'Aún no se ha generado — se crea automáticamente al analizar la oportunidad.'}
+                </div>
+              </div>
+            </div>
+            {excelCruce && (
+              <a href={`${api.defaults.baseURL}/documentos/archivo/${excelCruce.id}`} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg flex-shrink-0"
+                style={{ background: 'var(--rmg-teal)', color: '#fff' }}>
+                <Eye size={13} /> Visualizar
+              </a>
+            )}
+          </div>
 
           {/* Anexos de la licitación — los documentos REALES que el organismo
               publicó (Bases de Licitación, Anexos técnicos/administrativos,
