@@ -22,6 +22,9 @@
  *                                              Para cuando una corrección de matching (ver
  *                                              compraAgilApiClient.js) debe aplicarse a un caso ya
  *                                              guardado con el dato viejo.
+ * DELETE /api/evaluador/:id                   (2026-09-13) elimina la solicitud — pedido explícito
+ *                                              del usuario, ya existía en Cotizador y quedó pendiente
+ *                                              acá. Cascada sobre ítems/historial.
  *
  * Deliberadamente NO montado bajo /api/chilecompra (ese router está apagado
  * de emergencia — ver nota en app.js y en evaluadorController.js): este
@@ -42,6 +45,7 @@ router.post('/:id/analizar',                authenticate, c.analizarOportunidad)
 router.post('/:id/extraer-fichas-tecnicas', authenticate, c.extraerFichasTecnicas)
 router.post('/:id/limpiar-historial',       authenticate, c.limpiarHistorial)
 router.post('/:id/reingestar',              authenticate, c.reingestar)
+router.delete('/:id',                       authenticate, c.eliminar)
 router.put('/:id/items/:itemId/observacion', authenticate, c.actualizarObservacionItem)
 
 module.exports = router

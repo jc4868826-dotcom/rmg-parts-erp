@@ -24,7 +24,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, formatRelativo } from '@utils/format'
 import { DetalleModal, ESTADO_MAP } from './ChileCompraPage'
-import { Search, Loader2, ClipboardCheck, MapPin, Clock } from 'lucide-react'
+import { Search, Loader2, ClipboardCheck, MapPin, Clock, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const diasParaCierre = (fecha) => {
@@ -53,6 +53,24 @@ export default function EvaluadorPage() {
     },
     onError: (e) => toast.error(e.response?.data?.error || 'No se pudo procesar el código'),
   })
+
+  // 2026-09-13 — botón "Eliminar" pedido explícitamente por el usuario, ya
+  // existía en Cotizador y quedó pendiente en Evaluador.
+  const eliminarMut = useMutation({
+    mutationFn: (id) => api.delete(`/evaluador/${id}`),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['evaluador'] })
+      if (seleccionId === id) setSeleccionId(null)
+      toast.success('Solicitud eliminada')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'No se pudo eliminar'),
+  })
+
+  const handleEliminar = (op) => {
+    if (window.confirm(`¿Eliminar la solicitud ${op.codigo_externo}? Esta acción no se puede deshacer.`)) {
+      eliminarMut.mutate(op.id)
+    }
+  }
 
   const handleBuscar = (e) => {
     e.preventDefault()
@@ -107,7 +125,7 @@ export default function EvaluadorPage() {
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {oportunidades.map(op => (
-              <EvaluadorCard key={op.id} op={op} onClick={() => setSeleccionId(op.id)} />
+              <EvaluadorCard key={op.id} op={op} onClick={() => setSeleccionId(op.id)} onEliminar={() => handleEliminar(op)} />
             ))}
           </div>
         )}
@@ -120,12 +138,23 @@ export default function EvaluadorPage() {
   )
 }
 
-function EvaluadorCard({ op, onClick }) {
+function EvaluadorCard({ op, onClick, onEliminar }) {
   const est = ESTADO_MAP[op.estado]
   const dias = diasParaCierre(op.fecha_cierre)
   return (
-    <button onClick={onClick} type="button" className="rmg-card p-3 w-full text-left transition-all hover:shadow-md">
-      <div className="flex items-start justify-between gap-2 mb-1.5">
+    <button onClick={onClick} type="button" className="rmg-card p-3 w-full text-left transition-all hover:shadow-md relative group">
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(e) => { e.stopPropagation(); onEliminar() }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onEliminar() } }}
+        title="Eliminar solicitud"
+        className="absolute top-2 right-2 p-1 rounded opacity-60 hover:opacity-100 hover:bg-red-50 transition-opacity"
+        style={{ color: 'var(--rmg-red)' }}
+      >
+        <Trash2 size={14} />
+      </span>
+      <div className="flex items-start justify-between gap-2 mb-1.5 pr-6">
         <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
           style={{ background: est?.bg, color: est?.color }}>
           {est?.label || op.estado}

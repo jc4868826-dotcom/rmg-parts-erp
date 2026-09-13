@@ -179,12 +179,29 @@ const reingestar = async (req, res) => {
   }
 }
 
+// 2026-09-13 — botón "Eliminar" pedido explícitamente por el usuario para las
+// solicitudes ("dejale un boton a las solicitudes para eliminar"). Se había
+// agregado en Cotizador pero quedó pendiente acá — mismo patrón exacto:
+// ON DELETE CASCADE en oportunidad_chilecompra_items y
+// oportunidad_chilecompra_historial se encarga de los ítems e historial.
+const eliminar = (req, res) => {
+  try {
+    const op = db.prepare(`SELECT id FROM oportunidades_chilecompra WHERE id = ? AND fuente = ?`).get(req.params.id, FUENTE)
+    if (!op) return res.status(404).json({ error: 'No encontrada' })
+    db.prepare(`DELETE FROM oportunidades_chilecompra WHERE id = ?`).run(op.id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 module.exports = {
   listar,
   getDetalle,
   buscar,
   analizarOportunidad,
   reingestar,
+  eliminar,
   // Reutilizados tal cual de chilecompraController — agnósticos de fuente,
   // ninguno depende de que /api/chilecompra esté montado ni del interruptor
   // chilecompra_enabled.
