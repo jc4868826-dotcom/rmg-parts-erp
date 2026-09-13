@@ -59,6 +59,7 @@
  *     antes de elegir por ranking_compra a ciegas.
  */
 const { db } = require('../../config/database')
+const { textoConocimientoPara } = require('./conocimientoVistony')
 
 const MARGEN_OBJETIVO_MINIMO = 0.15 // 15% — por debajo de esto, rentabilidad cae fuerte
 
@@ -331,6 +332,42 @@ function inferirCategoria(texto) {
 }
 
 /**
+ * Bug real confirmado 2026-09-13 (código 4042-130-COT26, Ilustre
+ * Municipalidad de Fresia — Salud): el ítem traía descripcion_solicitada =
+ * "Lubricantes de uso general" (el RUBRO/bucket genérico que usa Mercado
+ * Público para agrupar ítems, NO el nombre del producto) y
+ * especificacion_tecnica = "Bidones de ADBLUE 10 litros equivalente a
+ * BLUEMAX ingredientes: 67.5% agua 32.5% carbamida" — el producto real es
+ * AdBlue/urea automotriz, que RMG SÍ vende (SKU 1200212 "BAL AIRBLUE DEF DE
+ * 20 L", 1200120 "CIL AIRBLUE - UREA AUTOMOTRIZ de 208 L").
+ *
+ * inferirCategoria(texto) concatenaba ambos campos y devolvía la PRIMERA
+ * categoría de SINONIMOS_CATEGORIA cuyo término aparece en el texto — como
+ * "Lubricante" va primero en la lista y "Lubricantes de uso general"
+ * contiene literalmente "lubricante", la categoría quedaba fijada en
+ * "Lubricante" ANTES de que el texto real del producto (que sí menciona
+ * "adblue"/"urea" y hubiera devuelto "Refrigerante/Aditivo Diesel") tuviera
+ * oportunidad de pesar. El pool de candidatos quedó filtrado a solo
+ * lubricantes, el AIRBLUE correcto ni siquiera entró a competir, y el ítem
+ * terminó en el fallback de "sin señal textual" (25% de confianza, dentro
+ * de la categoría equivocada) — que el piso de confianza real (ver
+ * cotizadorController.js) correctamente rechazó, pero mostrando "sin match"
+ * para un producto que RMG sí tiene.
+ *
+ * Fix: la especificación técnica (el texto específico de ESTE ítem) manda
+ * sobre el rubro genérico — se infiere la categoría a partir de
+ * especificacion_tecnica primero, y solo si no da ninguna señal se cae al
+ * texto combinado (incluyendo el rubro genérico) como red de respaldo.
+ */
+function inferirCategoriaPreferida(descripcionSolicitada, especificacionTecnica, textoCombinado) {
+  if (especificacionTecnica) {
+    const deLaEspecificacion = inferirCategoria(especificacionTecnica)
+    if (deLaEspecificacion) return deLaEspecificacion
+  }
+  return inferirCategoria(textoCombinado)
+}
+
+/**
  * Infiere el sub-tipo (dentro de una categoria con entrada en
  * SUBTIPOS_CATEGORIA) a partir de un texto libre. Devuelve null si la
  * categoria no tiene sub-tipos definidos o si el texto no matchea ninguno —
@@ -583,7 +620,10 @@ function mejorPorSolapamiento(palabras, lista) {
   let mejorScore = 0
   if (!palabras.length) return { mejor, mejorScore }
   for (const c of lista) {
-    const campo = `${c.descripcion || ''} ${c.producto_generico || ''} ${c.marca || ''}`.toLowerCase()
+    // 2026-09-13 — c._kbTexto es la descripción verbatim del archivo de
+    // conocimientos Vistony cuando existe (ver buscarSkuCandidato); amplía el
+    // texto comparable sin reemplazar los campos de lista_precios.
+    const campo = `${c.descripcion || ''} ${c.producto_generico || ''} ${c.marca || ''} ${c._kbTexto || ''}`.toLowerCase()
     const matches = palabras.filter(p => campo.includes(p)).length
     const score = matches / palabras.length
     if (score > mejorScore) { mejorScore = score; mejor = c }
@@ -634,6 +674,17 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
     WHERE codigo_sku IS NOT NULL AND LOWER(marca) = 'vistony'
   `).all()
 
+  // 2026-09-13 — pedido explícito del usuario: usar el archivo de conocimientos
+  // (RMG_Base_Conocimiento_Productos_Vistony.md, descripciones verbatim del sitio
+  // Vistony) como señal EXTRA de texto en el matching, nunca en reemplazo de
+  // lista_precios. Ver conocimientoVistony.js — no cubre AdBlue/Urea ni otros ~30
+  // productos que RMG vende sin estar en el sitio público de Vistony; para esos,
+  // _kbTexto queda '' y el matching sigue dependiendo solo de lista_precios, como
+  // antes.
+  for (const c of candidatos) {
+    c._kbTexto = textoConocimientoPara(c)
+  }
+
   // Pasada 0 — atributo técnico exacto (SAE/ISO/norma). Corre PRIMERO porque
   // es más confiable que contar palabras: ver candidatosPorAtributoExacto().
   const atributosItem = extraerAtributosTecnicos(texto)
@@ -645,7 +696,7 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
     // por categoría lo dejara en cero, se prefiere mantener el match por
     // atributo antes que perderlo por una inferencia de categoría de
     // respaldo).
-    const categoriaInferida = inferirCategoria(texto)
+    const categoriaInferida = inferirCategoriaPreferida(descripcionSolicitada, especificacionTecnica, texto)
     const acotado = categoriaInferida
       ? porAtributo.filter(c => (categoriaEfectiva(c) || '').toLowerCase() === categoriaInferida.toLowerCase())
       : porAtributo
@@ -666,8 +717,11 @@ function buscarSkuCandidato(descripcionSolicitada, especificacionTecnica) {
 
   // Fallback por categoria: el ítem no trajo texto que calzara literalmente
   // contra TODO el catálogo, pero sí es reconocible como un rubro que RMG
-  // vende.
-  const categoriaInferida = inferirCategoria(texto)
+  // vende. Se prefiere la categoría que sugiere la especificación técnica del
+  // ítem sobre el rubro genérico de Mercado Público (ver
+  // inferirCategoriaPreferida) — evita que un bucket como "Lubricantes de uso
+  // general" oculte que el producto real es, por ejemplo, AdBlue.
+  const categoriaInferida = inferirCategoriaPreferida(descripcionSolicitada, especificacionTecnica, texto)
   if (categoriaInferida) {
     // categoriaEfectiva() en vez de c.categoria — evita que un SKU mal
     // tageado en lista_precios (ej. líquido de frenos marcado como
