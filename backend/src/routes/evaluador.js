@@ -14,6 +14,14 @@
  * PUT    /api/evaluador/:id/items/:itemId/observacion  campo libre + "Volver a generar": SOLO
  *                                              recalcula el match contra el catálogo local — NUNCA
  *                                              vuelve a buscar en Mercado Público ni relee adjuntos.
+ * POST   /api/evaluador/:id/reingestar        (2026-09-13) fuerza una ingesta completa nueva desde
+ *                                              Mercado Público para un código YA ingresado — a
+ *                                              diferencia de /buscar (que para códigos existentes
+ *                                              solo revisa el estado real), esto vuelve a traer los
+ *                                              ítems, re-cruza contra el catálogo y regenera el Excel.
+ *                                              Para cuando una corrección de matching (ver
+ *                                              compraAgilApiClient.js) debe aplicarse a un caso ya
+ *                                              guardado con el dato viejo.
  *
  * Deliberadamente NO montado bajo /api/chilecompra (ese router está apagado
  * de emergencia — ver nota en app.js y en evaluadorController.js): este
@@ -33,6 +41,7 @@ router.get('/:id/checklist',                authenticate, c.getChecklistPostulac
 router.post('/:id/analizar',                authenticate, c.analizarOportunidad)
 router.post('/:id/extraer-fichas-tecnicas', authenticate, c.extraerFichasTecnicas)
 router.post('/:id/limpiar-historial',       authenticate, c.limpiarHistorial)
+router.post('/:id/reingestar',              authenticate, c.reingestar)
 router.put('/:id/items/:itemId/observacion', authenticate, c.actualizarObservacionItem)
 
 module.exports = router

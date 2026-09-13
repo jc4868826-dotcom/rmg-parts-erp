@@ -141,11 +141,50 @@ const analizarOportunidad = async (req, res) => {
   }
 }
 
+// 2026-09-13 — BUG real reportado (código 3877-474-COT26, I. Municipalidad
+// de Lampa): esta solicitud NO tiene adjuntos — el texto técnico completo del
+// ítem ("GRASA LUBRICANTE DE COMPLEJO DE LITIO... MoS2 3-5%... BALDES DE 16 KG
+// O SUPERIOR") vive directamente en "Listado de productos solicitados" de la
+// página pública, no en un documento. `mapearDetalle` (compraAgilApiClient.js)
+// solo leía `it.descripcion`, y para este caso ese campo no traía el texto
+// largo — el cruce quedó con el nombre corto "Grasa" a secas y matcheó contra
+// un aceite de motor 5W-30 al 25% de confianza (evidencia: Excel real subido
+// por el usuario). Ya se corrigió `mapearDetalle` para no apostar a un solo
+// nombre de campo (ver extraerEspecificacionCompleta en compraAgilApiClient.js),
+// pero la oportunidad 3877-474-COT26 YA quedó guardada en la base con el dato
+// viejo — `buscar` (arriba) deliberadamente NO relee códigos ya ingresados,
+// así que sin esta acción el fix nuevo nunca se aplicaría a este caso ya
+// existente. `reingestar` vuelve a llamar `importarCompraAgil` para el MISMO
+// código YA guardado (mismo `fuente='evaluador'`), lo que — al ser un UPSERT
+// completo por (fuente, codigo_externo) en guardarYProcesarOportunidad — borra
+// y reinserta los ítems, recalcula el cruce contra el catálogo y regenera el
+// Excel, todo sobre la misma fila (no crea una oportunidad duplicada).
+//
+// OJO: a diferencia del botón equivalente de Compra Ágil (que pega contra
+// POST /api/compra-agil/importar, cuyo controlador llama a importarCompraAgil
+// SIN pasar `fuente` — por lo que asume el default 'compra_agil'), acá no se
+// puede reusar ese mismo endpoint genérico: si se llamara para una
+// oportunidad de Evaluador, el UPSERT buscaría una fila con fuente='compra_agil'
+// para ese código, no la encontraría (la real tiene fuente='evaluador'), e
+// insertaría una fila NUEVA duplicada en vez de actualizar la existente. Por
+// eso esta acción vive acá, pasando explícitamente FUENTE='evaluador'.
+const reingestar = async (req, res) => {
+  try {
+    const op = db.prepare(`SELECT * FROM oportunidades_chilecompra WHERE id = ? AND fuente = ?`).get(req.params.id, FUENTE)
+    if (!op) return res.status(404).json({ error: 'No encontrada' })
+    await importarCompraAgil(op.codigo_externo, req.user, 'evaluador_reingesta', FUENTE)
+    res.json(withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(op.id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 module.exports = {
   listar,
   getDetalle,
   buscar,
   analizarOportunidad,
+  reingestar,
   // Reutilizados tal cual de chilecompraController — agnósticos de fuente,
   // ninguno depende de que /api/chilecompra esté montado ni del interruptor
   // chilecompra_enabled.

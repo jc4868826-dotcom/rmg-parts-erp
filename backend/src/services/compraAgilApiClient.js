@@ -119,13 +119,67 @@ async function buscarCompraAgil(codigo) {
   return mapearDetalle(payload, codigo)
 }
 
+// ── Especificación técnica completa del ítem (2026-09-13, incidente real) ──
+// Caso real confirmado (3877-474-COT26, I. Municipalidad de Lampa, SIN
+// adjuntos): en el portal público, "Listado de productos solicitados" muestra
+// un nombre corto ("Grasa") y, debajo, la especificación técnica completa
+// ("GRASA LUBRICANTE DE COMPLEJO DE LITIO, NLGI 2, CON ADITIVOS... MoS2 entre
+// 3% y 5%... EN BALDES DE 16 KG O SUPERIOR") — ese texto largo es lo único
+// que distingue el producto real de cualquier otro y es indispensable para
+// el matching (ver chilecompraScoring.js). El código anterior solo leía
+// `it.descripcion`, y para este caso ese texto largo terminó SIN capturarse
+// (el Excel de cruce salió con "Grasa" a secas y emparejó contra un aceite de
+// motor al 25%) — lo más probable es que la API use para este campo una
+// clave distinta a `descripcion` en al menos algunos casos/versiones, pero
+// no hay forma de confirmarlo sin ver el JSON crudo de un caso real (mismo
+// problema no resuelto que la descarga de adjuntos — ver aviso de
+// `descargarDocumentoAdjunto` más abajo).
+//
+// Fix: en vez de apostar a un solo nombre de campo, se prueba una lista de
+// nombres probables (estilo APIs de ChileCompra) y, si ninguno calza, se
+// barre CUALQUIER otro campo de texto del ítem y se toma el más largo que no
+// sea igual al nombre corto — así, sea cual sea la clave real que use
+// Mercado Público para este ítem, el texto largo no se pierde. Si el barrido
+// termina sin encontrar nada más que el nombre corto, se deja constancia en
+// el log del servidor con las claves reales recibidas, para confirmar el
+// nombre exacto del campo la próxima vez que se vea un caso así (mismo
+// patrón que se usó para confirmar el shape real de `documentos[]`).
+const CAMPOS_ESPECIFICACION_PROBABLES = [
+  'especificacionTecnica', 'especificacion_tecnica', 'especificaciones', 'especificacion',
+  'detalleTecnico', 'detalle_tecnico', 'detalle', 'caracteristicas', 'descripcionProducto',
+  'descripcionDetallada', 'observacion', 'descripcion',
+]
+const CAMPOS_CORTOS_ITEM = new Set(['nombre', 'cantidad', 'unidad_medida', 'unidad', 'id', 'codigo', 'sku', 'codigoProducto', 'codigo_producto'])
+
+function extraerEspecificacionCompleta(it, codigoSolicitado) {
+  if (!it || typeof it !== 'object') return null
+  const nombreCorto = (it.nombre || '').trim()
+  for (const campo of CAMPOS_ESPECIFICACION_PROBABLES) {
+    const valor = it[campo]
+    if (typeof valor === 'string' && valor.trim() && valor.trim() !== nombreCorto) {
+      return valor.trim()
+    }
+  }
+  let mejor = null
+  for (const [clave, valor] of Object.entries(it)) {
+    if (CAMPOS_CORTOS_ITEM.has(clave) || typeof valor !== 'string') continue
+    const v = valor.trim()
+    if (!v || v === nombreCorto) continue
+    if (!mejor || v.length > mejor.length) mejor = v
+  }
+  if (!mejor) {
+    console.warn(`⚠️ Compra Ágil ${codigoSolicitado}: el ítem "${nombreCorto}" no trajo ninguna especificación técnica más allá del nombre corto — claves recibidas: ${Object.keys(it).join(', ') || 'ninguna'}. Revisar manualmente en el portal si el ítem real trae más detalle.`)
+  }
+  return mejor
+}
+
 function mapearDetalle(p, codigoSolicitado) {
   const itemsRaw = p.productos_solicitados || []
   const items = itemsRaw.map(it => ({
     descripcion_solicitada: it.nombre || it.descripcion || null,
     cantidad: it.cantidad ?? null,
     unidad: it.unidad_medida || null,
-    especificacion_tecnica: it.descripcion || it.nombre || null,
+    especificacion_tecnica: extraerEspecificacionCompleta(it, codigoSolicitado) || it.nombre || null,
     // La API no entrega precio unitario en los productos solicitados — solo
     // aparece en proveedores_cotizando[].productos_cotizados[] una vez que
     // hay cotizaciones (incluida la propia, después de postular). Antes de

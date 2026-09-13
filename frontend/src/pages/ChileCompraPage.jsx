@@ -864,6 +864,21 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al volver a traer desde ChileCompra'),
   })
 
+  // 2026-09-13 — BUG real (código 3877-474-COT26, sin adjuntos, texto técnico
+  // completo solo en la página pública): la solicitud ya quedó guardada con
+  // el dato viejo antes de corregir `mapearDetalle` (compraAgilApiClient.js),
+  // y "Buscar" nunca relee un código ya ingresado. Este botón es el
+  // equivalente de "Volver a traer desde ChileCompra" pero para Evaluador —
+  // NO reusa `/compra-agil/importar` (ese endpoint no recibe `fuente` y
+  // asume 'compra_agil', lo que crearía una fila DUPLICADA en vez de
+  // actualizar esta oportunidad) — pega contra `/evaluador/:id/reingestar`,
+  // que reingesta el MISMO código ya guardado con fuente='evaluador'.
+  const reingestarEvaluadorMut = useMutation({
+    mutationFn: () => api.post(`/${basePath}/${id}/reingestar`).then(r => r.data),
+    onSuccess: () => { invalidar(); toast.success('Solicitud re-ingestada desde Mercado Público — ítems y cruce recalculados.') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al reingestar desde Mercado Público'),
+  })
+
   // Corregir un ítem cuyo match salió mal — pedido real: "si el match de
   // excel salió mal, debemos agregar observaciones para que lo vuelva a
   // calcular". Un solo campo de texto: "SKU:<codigo>" fija el producto
@@ -1372,6 +1387,10 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
               {op.fuente === 'compra_agil' && (
                 <ActionBtn onClick={() => reimportarApiMut.mutate()} busy={reimportarApiMut.isPending}
                   icon={Zap} label="Volver a traer desde ChileCompra (incluye adjuntos)" color="var(--rmg-teal)" bg="rgba(45,201,138,0.12)" />
+              )}
+              {op.fuente === 'evaluador' && (
+                <ActionBtn onClick={() => reingestarEvaluadorMut.mutate()} busy={reingestarEvaluadorMut.isPending}
+                  icon={Zap} label="Reingestar desde Mercado Público (ítems + cruce)" color="var(--rmg-teal)" bg="rgba(45,201,138,0.12)" />
               )}
             </>
           )}
