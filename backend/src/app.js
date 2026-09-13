@@ -114,6 +114,12 @@ app.use('/api/usuarios',            require('./routes/usuarios'));    // Usuario
 // app.use('/api/chilecompra',      require('./routes/chilecompra')); // Asistente de oportunidades ChileCompra
 app.use('/api/compra-agil',         require('./routes/compraAgil'));  // Submenú Compra Ágil (importar código, benchmarks, fundamento IA)
 app.use('/api/evaluador',           require('./routes/evaluador'));   // Submenú Evaluador (ingresar código puntual → busca solo esa solicitud)
+// 2026-09-13 — Cotizador: pestaña nueva y deliberadamente simple, sin nada
+// del Kanban/checklist/historial de Evaluador — "Buscar" siempre relee fresco
+// desde Mercado Público, el Excel se genera al vuelo (nunca queda un archivo
+// viejo desincronizado) y hay un "sin match" real bajo un piso de confianza
+// en vez de forzar un SKU cualquiera. Ver cotizadorController.js.
+app.use('/api/cotizador',           require('./routes/cotizador'));
 app.use('/api/utilitarios',         require('./routes/utilitarios')); // Librería de fichas técnicas (scrape Vistony)
 
 // ─── Health check ───────────────────────────────────────────

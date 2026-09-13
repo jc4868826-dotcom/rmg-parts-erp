@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark, Calculator
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -57,6 +57,12 @@ const NAV_SECTIONS = [
       // que está apagado de emergencia — ver app.js) para no depender de que
       // ese módulo esté reactivado.
       { to: '/evaluador',    icon: Search,          label: '↳ Evaluador',    badge: 'evaluador' },
+      // 2026-09-13 — "Cotizador": pestaña nueva y deliberadamente simple para
+      // reemplazar el uso diario de Evaluador — sin Kanban/checklist/historial,
+      // "Buscar" siempre relee fresco (nunca dice "ya ingresada") y el Excel
+      // se genera al vuelo, siempre igual a lo que se ve en pantalla. Ver
+      // cotizadorController.js para el detalle de las 3 fallas que la motivaron.
+      { to: '/cotizador',    icon: Calculator,      label: '↳ Cotizador',    badge: null },
     ],
   },
   {

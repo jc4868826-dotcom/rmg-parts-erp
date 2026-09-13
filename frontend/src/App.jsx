@@ -45,6 +45,7 @@ import AsesorProductos from '@pages/AsesorProductos'
 import ChileCompraPage from '@pages/ChileCompraPage'
 import CompraAgilPage  from '@pages/CompraAgilPage'
 import EvaluadorPage   from '@pages/EvaluadorPage'
+import CotizadorPage   from '@pages/CotizadorPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -130,6 +131,10 @@ export default function App() {
                   desplegar. Corregido junto con el resto del esquema aprobado. */}
               <Route path="compra-agil"       element={<CompraAgilPage />} />
               <Route path="evaluador"         element={<EvaluadorPage />} />
+              {/* 2026-09-13 — Cotizador: pestaña nueva, deliberadamente simple,
+                  para reemplazar el uso diario de Evaluador (ver notas en
+                  cotizadorController.js sobre las 3 fallas reales que la motivaron). */}
+              <Route path="cotizador"         element={<CotizadorPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
