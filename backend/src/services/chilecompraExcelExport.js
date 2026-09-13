@@ -63,6 +63,21 @@ const MONEY_FMT = '$#,##0'
 const NCOLS = 19
 const HEADER_ROW = 4
 
+// 2026-09-13 — sacado de generarExcelCruce() para que el preview en pantalla
+// use el mismo texto de metodología que el .xlsx real (ver construirCrucePreview).
+const NOTAS_METODOLOGIA = [
+  '0) Las columnas de detalle de Costo (rojo) y Precio (verde) están agrupadas y colapsadas por defecto — use los botones [+/-] sobre las columnas para mostrar/ocultar ese detalle sin perderlo.',
+  '1) Presentación de Compra RMG (columna H) es el formato en que RMG efectivamente vende cada producto, leído directo de la lista de precios vigente. Cuando ese formato no coincide exactamente con la unidad pedida, queda indicado en la Observación — es un dato a resolver con el proveedor, NUNCA una corrección al precio.',
+  '2) Costo/Precio Neto Unitario = Neto Pack ÷ Unidades por Pack (fórmula) — costo real de UN envase individual.',
+  '3) Costo/Precio c/IVA Unitario = Neto Unitario × 1,19 (fórmula, IVA 19%).',
+  '4) Total Compra/Venta c/IVA (línea) = c/IVA Unitario × Cantidad Referencial (fórmula) — el P×Q por línea que se totaliza contra el presupuesto.',
+  '5) La fila de TOTALES y el bloque de comparación con presupuesto sólo consideran las líneas con cobertura RMG (fondo rojo = sin cobertura, excluidas).',
+  '6) Confianza Match es el puntaje (0-100%) que el emparejador automático asignó al SKU propuesto — no reemplaza revisión de ficha técnica formal antes de ofertar.',
+  '7) PATRÓN DE ANÁLISIS aplicado automáticamente: cuando la presentación exacta pedida (tineta/balde) no existe en la línea de producto requerida, el sistema prefiere la presentación de MENOR formato disponible en catálogo (balde, caja, bidón) como unidad de compra proxy — NUNCA un tambor/cilindro grande. Cuando el volumen unitario de esa presentación es menor al pedido, la columna "Cant. Ref." (col. 4, resaltada en rojo cuando aplica) se recalcula automáticamente para que el volumen TOTAL comprado siga cubriendo lo solicitado (ej.: si se piden 200L y la presentación proxy es de 20L, la cantidad pasa de 1 a 10). Ver columna Observación para el detalle de cada ajuste — revisar siempre antes de cotizar.',
+  '8) Cuando el tipo de envase pedido en las bases (balde, tambor, tineta, bidón, caja, IBC) es distinto al tipo de envase de la presentación RMG ofrecida, queda marcado con "⚠️ TIPO DE ENVASE DISTINTO" en la Observación — un volumen similar en litros no garantiza que el formato (a granel vs. unidades empaquetadas) sea el que el organismo exige.',
+  '9) Este Excel se generó automáticamente al analizar la oportunidad — queda adjunto a la ficha de la postulación junto con las fichas técnicas de los productos ofertados.',
+]
+
 const HEADERS = {
   1: 'N°', 2: 'Categoría', 3: 'Ítem solicitado (Bases Técnicas)', 4: 'Cant.\nRef.',
   5: 'Producto RMG (Genérico)', 6: 'SKU RMG', 7: 'Detalle / Descripción original RMG',
@@ -97,11 +112,16 @@ function applyBorderFill(cell, fill) {
 }
 
 /**
- * Genera el workbook del cruce para una oportunidad ChileCompra ya analizada
- * (cruzarItemsConCatalogo debe haberse ejecutado antes). Devuelve un Buffer
- * XLSX listo para adjuntar como documento.
+ * 2026-09-13 — Extraído de generarExcelCruce() para que el .xlsx real y el
+ * preview en pantalla ("Visualizar", ver ChileCompraPage.jsx) lean EXACTAMENTE
+ * los mismos ítems + catálogo emparejado — pedido real del usuario tras
+ * reportar que "el excel trae datos de solicitud estúpidos" (investigado en
+ * vivo: el preview de la app reconstruía la tabla desde op.items directo, sin
+ * categoría/presentación/pack — una versión empobrecida del Excel real, no
+ * los mismos datos). Cero riesgo de que texto/categorización diverjan entre
+ * ambos: una sola consulta, una sola fuente de verdad.
  */
-async function generarExcelCruce(oportunidadId) {
+function filasBase(oportunidadId) {
   const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(oportunidadId)
   if (!op) throw new Error(`Oportunidad ${oportunidadId} no encontrada`)
 
@@ -118,6 +138,101 @@ async function generarExcelCruce(oportunidadId) {
       ).get(it.sku_match)
     }
   }
+  return { op, items, catalogoBySku }
+}
+
+/**
+ * 2026-09-13 — Mismos números que las fórmulas del Excel (Costo/Precio Neto
+ * Unit. = Neto Pack ÷ Unid. por Pack; c/IVA Unit. = Neto Unit. × 1,19; Total
+ * línea = c/IVA Unit. × Cantidad — ver notas de generarExcelCruce más abajo,
+ * son las mismas fórmulas, solo resueltas acá en JS en vez de en celdas de
+ * Excel) para que el preview en pantalla muestre los mismos montos que el
+ * .xlsx descargado, línea por línea y en los totales.
+ */
+function construirCrucePreview(oportunidadId) {
+  const { op, items, catalogoBySku } = filasBase(oportunidadId)
+
+  let totalCompraCiva = 0
+  let totalVentaCiva = 0
+
+  const filas = items.map((item, idx) => {
+    const sku = item.sku_match ? catalogoBySku[item.sku_match] : null
+    const isGap = !item.cubierto || !sku
+
+    const fila = {
+      n: idx + 1,
+      categoria: sku ? sku.categoria : 'SIN COBERTURA',
+      item_solicitado: item.descripcion_solicitada,
+      cantidad_ref: item.cantidad,
+      cantidad_ajustada: !!item.cantidad_ajustada,
+      producto_generico: sku ? sku.producto_generico : 'SIN COBERTURA',
+      sku_rmg: sku ? sku.codigo_sku : null,
+      detalle_original: sku ? sku.descripcion : 'No existe producto en catálogo RMG para este ítem',
+      presentacion_compra: sku ? sku.presentacion : null,
+      unidades_por_pack: sku ? sku.unidades_por_pack : null,
+      confianza_match: item.match_confianza != null ? item.match_confianza : null,
+      observacion: item.observacion || (isGap ? 'Sin coincidencia en catálogo RMG — revisión manual pendiente.' : ''),
+      sin_cobertura: isGap,
+    }
+
+    if (!isGap) {
+      const costoPack = sku.costo_pack_neto != null ? sku.costo_pack_neto : sku.costo_unidad_neto
+      const precioPack = sku.precio_venta_neto
+      const unidPack = fila.unidades_por_pack || null
+
+      const costoNetoUnit = (costoPack != null && unidPack) ? costoPack / unidPack : null
+      const costoCivaUnit = costoNetoUnit != null ? costoNetoUnit * 1.19 : null
+      const totalCompraLinea = costoCivaUnit != null ? costoCivaUnit * item.cantidad : null
+
+      const precioNetoUnit = (precioPack != null && unidPack) ? precioPack / unidPack : null
+      const precioCivaUnit = precioNetoUnit != null ? precioNetoUnit * 1.19 : null
+      const totalVentaLinea = precioCivaUnit != null ? precioCivaUnit * item.cantidad : null
+
+      Object.assign(fila, {
+        costo_neto_pack: costoPack,
+        costo_neto_unit: costoNetoUnit,
+        costo_civa_unit: costoCivaUnit,
+        total_compra_civa: totalCompraLinea,
+        precio_neto_pack: precioPack,
+        precio_neto_unit: precioNetoUnit,
+        precio_civa_unit: precioCivaUnit,
+        total_venta_civa: totalVentaLinea,
+      })
+
+      if (totalCompraLinea != null) totalCompraCiva += totalCompraLinea
+      if (totalVentaLinea != null) totalVentaCiva += totalVentaLinea
+    }
+
+    return fila
+  })
+
+  const presupuesto = op.presupuesto_estimado || 0
+  const margen = totalVentaCiva - totalCompraCiva
+
+  return {
+    organismo_nombre: op.organismo_nombre,
+    nombre: op.nombre || op.codigo_externo,
+    codigo_externo: op.codigo_externo,
+    presupuesto_estimado: op.presupuesto_estimado,
+    filas,
+    totales: {
+      total_compra_civa: totalCompraCiva,
+      total_venta_civa: totalVentaCiva,
+      diferencia: presupuesto - totalVentaCiva,
+      pct_presupuesto: presupuesto ? totalVentaCiva / presupuesto : null,
+      margen,
+    },
+    notas: NOTAS_METODOLOGIA,
+  }
+}
+
+/**
+ * Genera el workbook del cruce para una oportunidad ChileCompra ya analizada
+ * (cruzarItemsConCatalogo debe haberse ejecutado antes). Devuelve un Buffer
+ * XLSX listo para adjuntar como documento.
+ */
+async function generarExcelCruce(oportunidadId) {
+  const { op, items, catalogoBySku } = filasBase(oportunidadId)
 
   const wb = new ExcelJS.Workbook()
   wb.creator = 'RMG Auto Parts — Asistente ChileCompra'
@@ -344,19 +459,7 @@ async function generarExcelCruce(oportunidadId) {
   }
   r++
 
-  const notas = [
-    '0) Las columnas de detalle de Costo (rojo) y Precio (verde) están agrupadas y colapsadas por defecto — use los botones [+/-] sobre las columnas para mostrar/ocultar ese detalle sin perderlo.',
-    '1) Presentación de Compra RMG (columna H) es el formato en que RMG efectivamente vende cada producto, leído directo de la lista de precios vigente. Cuando ese formato no coincide exactamente con la unidad pedida, queda indicado en la Observación — es un dato a resolver con el proveedor, NUNCA una corrección al precio.',
-    '2) Costo/Precio Neto Unitario = Neto Pack ÷ Unidades por Pack (fórmula) — costo real de UN envase individual.',
-    '3) Costo/Precio c/IVA Unitario = Neto Unitario × 1,19 (fórmula, IVA 19%).',
-    '4) Total Compra/Venta c/IVA (línea) = c/IVA Unitario × Cantidad Referencial (fórmula) — el P×Q por línea que se totaliza contra el presupuesto.',
-    '5) La fila de TOTALES y el bloque de comparación con presupuesto sólo consideran las líneas con cobertura RMG (fondo rojo = sin cobertura, excluidas).',
-    '6) Confianza Match es el puntaje (0-100%) que el emparejador automático asignó al SKU propuesto — no reemplaza revisión de ficha técnica formal antes de ofertar.',
-    '7) PATRÓN DE ANÁLISIS aplicado automáticamente: cuando la presentación exacta pedida (tineta/balde) no existe en la línea de producto requerida, el sistema prefiere la presentación de MENOR formato disponible en catálogo (balde, caja, bidón) como unidad de compra proxy — NUNCA un tambor/cilindro grande. Cuando el volumen unitario de esa presentación es menor al pedido, la columna "Cant. Ref." (col. 4, resaltada en rojo cuando aplica) se recalcula automáticamente para que el volumen TOTAL comprado siga cubriendo lo solicitado (ej.: si se piden 200L y la presentación proxy es de 20L, la cantidad pasa de 1 a 10). Ver columna Observación para el detalle de cada ajuste — revisar siempre antes de cotizar.',
-    '8) Cuando el tipo de envase pedido en las bases (balde, tambor, tineta, bidón, caja, IBC) es distinto al tipo de envase de la presentación RMG ofrecida, queda marcado con "⚠️ TIPO DE ENVASE DISTINTO" en la Observación — un volumen similar en litros no garantiza que el formato (a granel vs. unidades empaquetadas) sea el que el organismo exige.',
-    '9) Este Excel se generó automáticamente al analizar la oportunidad — queda adjunto a la ficha de la postulación junto con las fichas técnicas de los productos ofertados.',
-  ]
-  for (const nota of notas) {
+  for (const nota of NOTAS_METODOLOGIA) {
     ws.mergeCells(r, 1, r, NCOLS)
     const c = ws.getCell(r, 1)
     c.value = nota
@@ -370,4 +473,4 @@ async function generarExcelCruce(oportunidadId) {
   return Buffer.from(buffer)
 }
 
-module.exports = { generarExcelCruce }
+module.exports = { generarExcelCruce, construirCrucePreview }

@@ -221,4 +221,5 @@ module.exports = {
   extraerFichasTecnicas: cc.extraerFichasTecnicas,
   getChecklistPostulacion: cc.getChecklistPostulacion,
   limpiarHistorial: cc.limpiarHistorial,
+  getCrucePreview: cc.getCrucePreview,
 }

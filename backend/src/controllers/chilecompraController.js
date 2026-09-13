@@ -16,7 +16,7 @@ const { db, uuidv4 } = require('../../config/database')
 const { cruzarItemsConCatalogo, calcularScoreRentabilidad, calcularScoreSeguridad, calcularScoreCompuesto } = require('../services/chilecompraScoring')
 const { leerAnexos, leerFichaPublica } = require('../services/chilecompraDocReader')
 const chilecompraApi = require('../services/chilecompraApiClient')
-const { generarExcelCruce } = require('../services/chilecompraExcelExport')
+const { generarExcelCruce, construirCrucePreview } = require('../services/chilecompraExcelExport')
 const { adjuntarFichasAOportunidad } = require('../services/fichasTecnicasVistonyService')
 
 // ── Interruptor de módulo (mitigación OOM Render, 2026-09-11) ────────────────
@@ -658,6 +658,29 @@ const getChecklistPostulacion = (req, res) => {
   }
 }
 
+// 2026-09-13 — botón "Visualizar" del Excel de cruce (pedido explícito del
+// usuario: "debe mostrarse el excel para no bajarlo" + reporte real de que la
+// visualización anterior "es un chiste" y traía "datos de solicitud
+// estúpidos"). Investigado en vivo (dashboard → código 1030-41-COT26 →
+// Mercado Público): el .xlsx real generado por generarExcelCruce() SÍ trae el
+// requerimiento correcto y una tabla rica (categoría, presentación de compra,
+// unidades por pack, totales vs. presupuesto, notas de metodología) — el
+// preview anterior en ChileCompraPage.jsx reconstruía una tabla aparte desde
+// op.items directo, sin nada de eso: no eran "los mismos datos del Excel"
+// como decía el comentario viejo, era una versión empobrecida. Este endpoint
+// devuelve construirCrucePreview(), que arma sus números con las MISMAS
+// fórmulas que el Excel (ver chilecompraExcelExport.js) a partir de la MISMA
+// consulta de ítems+catálogo — no puede divergir del .xlsx descargado.
+const getCrucePreview = (req, res) => {
+  try {
+    const op = db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(req.params.id)
+    if (!op) return res.status(404).json({ error: 'Oportunidad no encontrada' })
+    res.json(construirCrucePreview(req.params.id))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 module.exports = {
   getOportunidades,
   getOportunidad,
@@ -671,4 +694,5 @@ module.exports = {
   actualizarObservacionItem,
   getModuloConfig,
   setModuloConfig,
+  getCrucePreview,
 }

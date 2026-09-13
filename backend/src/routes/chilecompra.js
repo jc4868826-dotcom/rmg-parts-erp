@@ -9,6 +9,10 @@
  *                                             (genera y adjunta también el Excel de cruce
  *                                             + intenta adjuntar fichas técnicas)
  * GET    /api/chilecompra/:id/checklist      documentos necesarios para postular
+ * GET    /api/chilecompra/:id/cruce-preview  (2026-09-13) datos del Excel de cruce ya
+ *                                             calculados (mismas fórmulas/fuente que el
+ *                                             .xlsx) para el modal "Visualizar" — sin
+ *                                             tener que descargar el archivo.
  * POST   /api/chilecompra/:id/extraer-fichas-tecnicas   botón "Extraer fichas técnicas":
  *                                             adjunta a la ficha de la postulación la ficha
  *                                             técnica de cada producto emparejado (usa la
@@ -43,6 +47,7 @@ router.get('/:id',               authenticate, c.getOportunidad)
 router.patch('/:id/estado',      authenticate, c.cambiarEstado)
 router.post('/:id/analizar',     authenticate, c.analizarOportunidad)
 router.get('/:id/checklist',     authenticate, c.getChecklistPostulacion)
+router.get('/:id/cruce-preview', authenticate, c.getCrucePreview)
 router.post('/:id/extraer-fichas-tecnicas', authenticate, c.extraerFichasTecnicas)
 router.post('/:id/limpiar-historial', authenticate, c.limpiarHistorial)
 router.put('/:id/items/:itemId/observacion', authenticate, c.actualizarObservacionItem)

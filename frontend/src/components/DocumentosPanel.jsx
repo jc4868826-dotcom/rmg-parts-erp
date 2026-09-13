@@ -9,16 +9,30 @@ const ICONO = { pdf: FileText, excel: FileSpreadsheet, imagen: ImageIcon }
 // Panel reutilizable de documentos adjuntos (PDF / Excel / imagen).
 // Se usa en cotización, pedido, venta y orden de compra — cualquier punto
 // donde se crea o recibe un documento debe poder adjuntar el respaldo.
-export default function DocumentosPanel({ entidad, entidadId, titulo = 'Documentos' }) {
+//
+// 2026-09-13 — BUG real reportado ("el excel trae datos de solicitud
+// estúpidos"): en ChileCompra/Evaluador este mismo panel se usa para "Anexos
+// de la licitación" (los documentos REALES que publicó el organismo), pero
+// listaba TODOS los documentos de la oportunidad sin filtrar — incluido el
+// Excel de cruce que el propio sistema genera y adjunta (categoria
+// 'cruce_auto'). Cuando una solicitud no tiene ningún anexo real subido, el
+// panel mostraba solo ese Excel como si fuera "el anexo de la licitación",
+// dando la impresión de que el requerimiento real era ese Excel en vez del
+// documento del organismo. `excluirCategorias` deja fuera esas categorías
+// de salida propia sin tocar ningún otro uso del componente.
+export default function DocumentosPanel({ entidad, entidadId, titulo = 'Documentos', excluirCategorias = [] }) {
   const qc = useQueryClient()
   const fileRef = useRef(null)
   const habilitado = Boolean(entidadId)
 
-  const { data: docs = [], isLoading } = useQuery({
+  const { data: docsCrudos = [], isLoading } = useQuery({
     queryKey: ['documentos', entidad, entidadId],
     queryFn: () => api.get(`/documentos/${entidad}/${entidadId}`).then(r => r.data),
     enabled: habilitado,
   })
+  const docs = excluirCategorias.length
+    ? docsCrudos.filter(d => !excluirCategorias.includes(d.categoria))
+    : docsCrudos
 
   const subirMut = useMutation({
     mutationFn: (file) => {

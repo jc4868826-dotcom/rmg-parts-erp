@@ -9,6 +9,9 @@
  * PATCH  /api/evaluador/:id/estado            cambio de estado manual (mismas transiciones/Kanban
  *                                              que ChileCompra/Compra Ágil)
  * GET    /api/evaluador/:id/checklist         documentos necesarios para postular
+ * GET    /api/evaluador/:id/cruce-preview     (2026-09-13) datos del Excel de cruce ya
+ *                                              calculados, para el modal "Visualizar" sin
+ *                                              descargar el archivo (ver chilecompra.js)
  * POST   /api/evaluador/:id/extraer-fichas-tecnicas   botón "Extraer fichas" (usa el link/match ya
  *                                              guardado, no vuelve a Mercado Público)
  * PUT    /api/evaluador/:id/items/:itemId/observacion  campo libre + "Volver a generar": SOLO
@@ -41,6 +44,7 @@ router.post('/buscar',                      authenticate, c.buscar)
 router.get('/:id',                          authenticate, c.getDetalle)
 router.patch('/:id/estado',                 authenticate, c.cambiarEstado)
 router.get('/:id/checklist',                authenticate, c.getChecklistPostulacion)
+router.get('/:id/cruce-preview',            authenticate, c.getCrucePreview)
 router.post('/:id/analizar',                authenticate, c.analizarOportunidad)
 router.post('/:id/extraer-fichas-tecnicas', authenticate, c.extraerFichasTecnicas)
 router.post('/:id/limpiar-historial',       authenticate, c.limpiarHistorial)

@@ -800,6 +800,23 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
   })
   const excelCruce = documentosOp.find(d => d.categoria === 'cruce_auto')
 
+  // 2026-09-13 — BUG real reportado ("el excel trae datos de solicitud
+  // estúpidos... la visualización del excel es un chiste"): este modal
+  // pintaba una tabla propia armada desde op.items directo (8 columnas, sin
+  // categoría/presentación/pack/totales), muy por debajo del .xlsx real que
+  // sí trae todo eso (ver chilecompraExcelExport.js) — no eran "los mismos
+  // datos del Excel" como decía el comentario original más abajo, era una
+  // versión empobrecida y por eso, al lado del archivo real, parecía
+  // "un chiste". Ahora se trae /cruce-preview, que usa la MISMA consulta y
+  // las MISMAS fórmulas que generarExcelCruce() — lo que se ve acá es
+  // exactamente lo que trae el .xlsx descargado, línea por línea y en los
+  // totales, sin tener que bajarlo.
+  const { data: crucePreview, isLoading: cargandoCruce } = useQuery({
+    queryKey: ['chilecompra-cruce-preview', basePath, id],
+    queryFn: () => api.get(`/${basePath}/${id}/cruce-preview`).then(r => r.data),
+    enabled: verCruce,
+  })
+
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['chilecompra'] })
     qc.invalidateQueries({ queryKey: ['chilecompra-detalle', id] })
@@ -1248,22 +1265,26 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
             )}
           </div>
 
-          {/* 2026-09-12 — FIX: el botón "Visualizar" de arriba antes abría el
-              .xlsx directo en pestaña nueva con Content-Disposition: inline —
-              pero ningún navegador tiene visor nativo de .xlsx, así que en la
-              práctica solo lo descargaba o lo abría en Excel/Numbers, nunca
-              "sin bajar" como se pidió. Los mismos datos del Excel (SKU,
-              costo, precio, margen) YA están en oportunidad_chilecompra_items
-              — este modal los pinta como tabla HTML, sin abrir ningún
-              archivo. La descarga real del .xlsx queda como opción aparte,
-              para quien sí lo quiera adjuntar/enviar. */}
+          {/* 2026-09-13 — REESCRITO tras bug real reportado: el modal antes
+              pintaba una tabla propia de 8 columnas armada desde op.items
+              directo — no eran "los mismos datos del Excel" como decía el
+              comentario original de 2026-09-12, era una versión mucho más
+              pobre (sin categoría, sin presentación de compra, sin pack, sin
+              fila de totales vs. presupuesto, sin notas de metodología).
+              Ahora pinta crucePreview (GET /cruce-preview), que usa la MISMA
+              consulta y las MISMAS fórmulas que generarExcelCruce() — lo que
+              se ve acá es el contenido real del .xlsx, no una reconstrucción
+              aparte. Sigue sin abrir el archivo ("sin bajar" pedido por el
+              usuario); la descarga real queda como opción aparte. */}
           {verCruce && (
             <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4" style={{ background: 'rgba(15,35,60,0.4)' }} onClick={() => setVerCruce(false)}>
-              <div className="rmg-card w-full max-w-5xl p-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="rmg-card w-full max-w-6xl p-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--rmg-border)' }}>
                   <div className="min-w-0">
                     <div className="text-sm font-bold" style={{ color: 'var(--rmg-off)' }}>Cruce Bases vs Catálogo RMG</div>
-                    <div className="text-xs truncate" style={{ color: 'var(--rmg-muted)' }}>{excelCruce?.nombre_archivo}</div>
+                    <div className="text-xs truncate" style={{ color: 'var(--rmg-muted)' }}>
+                      {crucePreview?.organismo_nombre || excelCruce?.nombre_archivo} — {crucePreview?.nombre}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {excelCruce && (
@@ -1275,36 +1296,79 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
                     <button type="button" onClick={() => setVerCruce(false)} className="text-xs font-medium px-2.5 py-1.5" style={{ color: 'var(--rmg-muted)' }}>Cerrar</button>
                   </div>
                 </div>
-                <div className="overflow-x-auto" style={{ maxHeight: '70vh' }}>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr style={{ background: 'rgba(15,35,60,0.03)' }}>
-                        {['Ítem solicitado', 'Cant.', 'SKU RMG', 'Confianza', 'Costo unit. neto', 'Precio unit. neto', 'Margen', 'Observación'].map((h, i) => (
-                          <th key={`${h}-${i}`} className="text-left px-3 py-2 font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(op.items || []).map(it => (
-                        <tr key={it.id} style={{ borderTop: '1px solid rgba(15,35,60,0.04)' }}>
-                          <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>
-                            {it.descripcion_solicitada}
-                            {it.especificacion_tecnica && it.especificacion_tecnica !== it.descripcion_solicitada && (
-                              <div className="text-[11px] mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{it.especificacion_tecnica}</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{it.cantidad} {it.unidad || ''}</td>
-                          <td className="px-3 py-2 font-mono whitespace-nowrap" style={{ color: it.cubierto ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}>{it.sku_match || 'Sin cobertura'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{it.match_confianza != null ? formatPct(it.match_confianza) : '—'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{it.costo_unitario_rmg != null ? formatCLP(it.costo_unitario_rmg) : '—'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{it.precio_venta_sugerido != null ? formatCLP(it.precio_venta_sugerido) : '—'}</td>
-                          <td className="px-3 py-2 font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{it.margen_pct_estimado != null ? formatPct(it.margen_pct_estimado) : '—'}</td>
-                          <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)', maxWidth: 260 }}>{it.observacion || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+
+                {cargandoCruce && (
+                  <div className="p-6 text-xs text-center" style={{ color: 'var(--rmg-muted)' }}>Cargando cruce…</div>
+                )}
+
+                {!cargandoCruce && crucePreview && (
+                  <>
+                    <div className="overflow-x-auto" style={{ maxHeight: '55vh' }}>
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr style={{ background: 'rgba(15,35,60,0.03)' }}>
+                            {['#', 'Categoría', 'Ítem solicitado (Bases Técnicas)', 'Cant. Ref.', 'Producto RMG (Genérico)', 'SKU RMG', 'Detalle / Descripción original RMG', 'Presentación de Compra RMG', 'Unid./Pack', 'Confianza', 'Costo unit. c/IVA', 'Precio unit. c/IVA', 'Total venta c/IVA', 'Observación / Brecha'].map((h) => (
+                              <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {crucePreview.filas.map(f => (
+                            <tr key={f.n} style={{ borderTop: '1px solid rgba(15,35,60,0.04)', background: f.sin_cobertura ? 'rgba(220,38,38,0.05)' : 'transparent' }}>
+                              <td className="px-3 py-2 text-center" style={{ color: 'var(--rmg-muted)' }}>{f.n}</td>
+                              <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.categoria}</td>
+                              <td className="px-3 py-2" style={{ color: 'var(--rmg-off)', minWidth: 200 }}>{f.item_solicitado}</td>
+                              <td className="px-3 py-2 text-center whitespace-nowrap" style={{ color: f.cantidad_ajustada ? 'var(--rmg-red)' : 'var(--rmg-muted)', fontWeight: f.cantidad_ajustada ? 600 : 400 }}>{f.cantidad_ref}</td>
+                              <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>{f.producto_generico}</td>
+                              <td className="px-3 py-2 font-mono whitespace-nowrap" style={{ color: f.sin_cobertura ? 'var(--rmg-red)' : 'var(--rmg-teal)' }}>{f.sku_rmg || 'Sin cobertura'}</td>
+                              <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)', minWidth: 220 }}>{f.detalle_original}</td>
+                              <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.presentacion_compra || '—'}</td>
+                              <td className="px-3 py-2 text-center whitespace-nowrap">{f.unidades_por_pack ?? '—'}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{f.confianza_match != null ? formatPct(f.confianza_match) : '—'}</td>
+                              <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.costo_civa_unit != null ? formatCLP(f.costo_civa_unit) : 'S/C'}</td>
+                              <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.precio_civa_unit != null ? formatCLP(f.precio_civa_unit) : 'S/C'}</td>
+                              <td className="px-3 py-2 font-semibold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.total_venta_civa != null ? formatCLP(f.total_venta_civa) : '—'}</td>
+                              <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)', maxWidth: 260 }}>{f.observacion || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Fila de totales + comparación con presupuesto — el mismo
+                        bloque que trae el pie del .xlsx real. */}
+                    <div className="px-4 py-3 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-3" style={{ borderTop: '1px solid var(--rmg-border)', background: 'rgba(15,35,60,0.02)' }}>
+                      <div className="flex justify-between gap-2">
+                        <span style={{ color: 'var(--rmg-muted)' }}>Presupuesto referencial (bases)</span>
+                        <span className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{crucePreview.presupuesto_estimado != null ? formatCLP(crucePreview.presupuesto_estimado) : '—'}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span style={{ color: 'var(--rmg-muted)' }}>Total venta RMG c/IVA (cobertura)</span>
+                        <span className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(crucePreview.totales.total_venta_civa)}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span style={{ color: 'var(--rmg-muted)' }}>Diferencia (presupuesto − venta)</span>
+                        <span className="font-semibold" style={{ color: crucePreview.totales.diferencia < 0 ? 'var(--rmg-red)' : 'var(--rmg-off)' }}>{formatCLP(crucePreview.totales.diferencia)}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span style={{ color: 'var(--rmg-muted)' }}>% del presupuesto utilizado</span>
+                        <span className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{crucePreview.totales.pct_presupuesto != null ? formatPct(crucePreview.totales.pct_presupuesto) : '—'}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span style={{ color: 'var(--rmg-muted)' }}>Margen estimado (venta − compra)</span>
+                        <span className="font-semibold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(crucePreview.totales.margen)}</span>
+                      </div>
+                    </div>
+
+                    {/* Notas y metodología — el mismo texto que el pie del .xlsx. */}
+                    <details className="px-4 py-2 text-[11px]" style={{ borderTop: '1px solid var(--rmg-border)', color: 'var(--rmg-muted)' }}>
+                      <summary className="cursor-pointer font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Notas y metodología</summary>
+                      <ul className="mt-2 space-y-1.5">
+                        {crucePreview.notas.map((n, i) => <li key={i}>{n}</li>)}
+                      </ul>
+                    </details>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1322,7 +1386,7 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
             <p className="text-xs mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
               Sube acá los documentos reales que el organismo publicó (Bases de Licitación, Anexos técnicos/administrativos, especificaciones) — los mismos que ves en "Ver adjuntos" dentro de la ficha de la licitación en Mercado Público. Ahí está el requerimiento técnico real; la ficha pública sola solo trae un resumen genérico. Después de subirlos, vuelve a analizar para que el sistema los lea y haga el cruce con el catálogo.
             </p>
-            <DocumentosPanel entidad="oportunidad_chilecompra" entidadId={op.id} titulo="Anexos de la licitación" />
+            <DocumentosPanel entidad="oportunidad_chilecompra" entidadId={op.id} titulo="Anexos de la licitación" excluirCategorias={['cruce_auto']} />
           </div>
 
           {/* Fichas técnicas de productos RMG — lo que RMG ofrece (hojas de
