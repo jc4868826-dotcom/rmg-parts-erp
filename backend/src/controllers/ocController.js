@@ -35,7 +35,19 @@ function withDetails(oc) {
       WHERE rol.recepcion_id = ?
     `).all(r.id),
   }))
-  return { ...oc, items, historial, recepciones: recepcionesConLineas }
+  // Trazabilidad cotización↔OC (2026-09-13): resuelve nombre de cliente y
+  // número de cotización para mostrarlos directo en la OC — cliente_id/
+  // cotizacion_id en ordenes_compra guardan solo el id.
+  let cliente_nombre = null, cotizacion_numero = null
+  if (oc.cliente_id) {
+    const cl = db.prepare('SELECT razon_social FROM clientes WHERE id = ?').get(oc.cliente_id)
+    cliente_nombre = cl?.razon_social || null
+  }
+  if (oc.cotizacion_id) {
+    const cot = db.prepare('SELECT numero FROM cotizaciones WHERE id = ?').get(oc.cotizacion_id)
+    cotizacion_numero = cot?.numero || null
+  }
+  return { ...oc, items, historial, recepciones: recepcionesConLineas, cliente_nombre, cotizacion_numero }
 }
 
 function logEvento(oc_id, tipo_evento, opts = {}) {
@@ -119,10 +131,20 @@ const getOCs = (req, res) => {
     }
     sql += ' ORDER BY created_at DESC'
     const ocs = db.prepare(sql).all(...params)
-    res.json(ocs.map(oc => ({
-      ...oc,
-      items: db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(oc.id),
-    })))
+    // Trazabilidad cotización↔OC (2026-09-13): número de cotización para
+    // mostrar el badge "🔗 venta calzada" en la lista sin ir al detalle.
+    res.json(ocs.map(oc => {
+      let cotizacion_numero = null
+      if (oc.cotizacion_id) {
+        const cot = db.prepare('SELECT numero FROM cotizaciones WHERE id = ?').get(oc.cotizacion_id)
+        cotizacion_numero = cot?.numero || null
+      }
+      return {
+        ...oc,
+        items: db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(oc.id),
+        cotizacion_numero,
+      }
+    }))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

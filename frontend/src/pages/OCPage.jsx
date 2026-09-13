@@ -6,7 +6,7 @@ import { formatCLP, formatFecha } from '@utils/format'
 import {
   Plus, X, Search, ChevronLeft, Send, CheckCircle, XCircle, Truck,
   PackageCheck, FileText, Mail, ClipboardList, History, RotateCcw,
-  ExternalLink, Package, Trash2, AlertTriangle, Pencil,
+  ExternalLink, Package, Trash2, AlertTriangle, Pencil, Link2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@context/AuthContext'
@@ -421,7 +421,16 @@ export default function OCPage() {
                 <tr key={oc.id} onClick={() => abrirDetalle(oc)} className="cursor-pointer hover:bg-white/[0.03] transition-colors"
                   style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
                   <td className="px-4 py-3 font-mono font-bold text-xs" style={{ color: 'var(--rmg-blt)' }}>{oc.numero}</td>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>{oc.proveedor}</td>
+                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>
+                    {oc.proveedor}
+                    {/* Trazabilidad cotización↔OC (2026-09-13): venta calzada — esta
+                        OC nació de una cotización a cliente con precios negociados. */}
+                    {oc.cotizacion_numero && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }} title={`Venta calzada · ${oc.cotizacion_numero}`}>
+                        <Link2 size={10}/> {oc.cotizacion_numero}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(oc.fecha_emision || oc.created_at)}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: oc.fecha_requerida ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{oc.fecha_requerida ? formatFecha(oc.fecha_requerida) : '—'}</td>
                   <td className="px-4 py-3"><EstadoBadge estado={oc.estado} /></td>
@@ -558,6 +567,11 @@ export default function OCPage() {
               {cargandoDetalle ? '…' : oc?.numero || 'OC'}
             </h1>
             {oc && <EstadoBadge estado={oc.estado} />}
+            {oc?.cotizacion_numero && (
+              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }} title="Venta calzada — nació de una cotización a cliente">
+                <Link2 size={10}/> {oc.cotizacion_numero}
+              </span>
+            )}
           </div>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{oc?.proveedor}</p>
         </div>
@@ -697,6 +711,9 @@ export default function OCPage() {
               ['Medio de pago', oc.medio_pago || '—'],
               ...(oc.forma_pago ? [['Modo de pago (autorizado)', oc.forma_pago]] : []),
               ...(oc.cuenta_bancaria ? [['Cuenta con que se paga', oc.cuenta_bancaria]] : []),
+              // Trazabilidad cotización↔OC (2026-09-13, ventas calzadas).
+              ...(oc.cliente_nombre ? [['Cliente (venta calzada)', oc.cliente_nombre]] : []),
+              ...(oc.cotizacion_numero ? [['Cotización asociada', oc.cotizacion_numero]] : []),
             ].map(([label, val]) => (
               <div key={label}>
                 <div className="text-xs uppercase tracking-wider font-semibold mb-0.5" style={{ color: 'var(--rmg-muted)' }}>{label}</div>
