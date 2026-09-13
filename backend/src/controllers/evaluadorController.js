@@ -105,20 +105,31 @@ const buscar = async (req, res) => {
       // ChileCompra, no se vuelve a leer nada ni a re-cruzar (pedido
       // explícito: "no busca a toda la data, solo busca los id nuevos o los
       // que ya estan ingresados para ver su cambio de estado").
+      //
+      // 2026-09-13 — BUG real reportado: el usuario borraba una solicitud,
+      // la volvía a ingresar, y el toast del frontend igual decía "ya estaba
+      // ingresada" — parecía que el borrado no servía de nada. La causa NO
+      // era el borrado (funciona bien, verificado contra la API en vivo): el
+      // frontend decidía el mensaje mirando `op.historial?.length`, pero UNA
+      // IMPORTACIÓN FRESCA TAMBIÉN CREA historial (evaluador importada, score
+      // logístico, fichas técnicas) — esa condición nunca podía distinguir
+      // "nueva" de "existente". Se agrega `_yaExistia` explícito acá, que el
+      // frontend ahora sí usa (ver EvaluadorPage.jsx).
       try {
         await sincronizarEstadoDeUnaOportunidad(existente, req.user)
       } catch (e) {
         // No bloquea — igual se devuelve la ficha tal como está.
         return res.json({ ...withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(existente.id)),
+          _yaExistia: true,
           advertencia: `No se pudo revisar el estado real en ChileCompra: ${e.message}` })
       }
-      return res.json(withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(existente.id)))
+      return res.json({ ...withDetails(db.prepare('SELECT * FROM oportunidades_chilecompra WHERE id = ?').get(existente.id)), _yaExistia: true })
     }
 
     // Código nuevo — ingesta completa (API oficial + lectura de adjuntos +
     // cruce con catálogo + fichas técnicas), igual que Compra Ágil.
     const op = await importarCompraAgil(codigoRaw, req.user, 'evaluador', FUENTE)
-    res.json(withDetails(op))
+    res.json({ ...withDetails(op), _yaExistia: false })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

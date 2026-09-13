@@ -49,7 +49,12 @@ export default function EvaluadorPage() {
       setCodigo('')
       setSeleccionId(op.id)
       if (op.advertencia) toast.error(op.advertencia, { duration: 7000 })
-      else toast.success(`Solicitud ${op.codigo_externo} lista — ${op.items?.length || 0} ítem(s), ${op.historial?.length ? 'ya estaba ingresada' : 'ingesta completa desde Mercado Público'}`)
+      // 2026-09-13 — antes esto miraba op.historial?.length, pero una
+      // importación fresca TAMBIÉN crea historial, así que el mensaje decía
+      // "ya estaba ingresada" incluso para códigos recién borrados y
+      // reingresados de cero. Ahora usa el flag explícito _yaExistia que
+      // devuelve el backend (ver evaluadorController.js → buscar).
+      else toast.success(`Solicitud ${op.codigo_externo} lista — ${op.items?.length || 0} ítem(s), ${op._yaExistia ? 'ya estaba ingresada' : 'ingesta completa desde Mercado Público'}`)
     },
     onError: (e) => toast.error(e.response?.data?.error || 'No se pudo procesar el código'),
   })
