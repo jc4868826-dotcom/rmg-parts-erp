@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, calcularTotalesCotizacion } from '@utils/format'
-import { ArrowLeft, Plus, Trash2, Send, ShoppingCart } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Send, ShoppingCart, Link2, Truck, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import DocumentosPanel from '@components/DocumentosPanel'
 import ProductoSearch from '@components/ProductoSearch'
@@ -20,10 +20,12 @@ export default function CotizacionForm() {
   const [validezDias, setValidez]   = useState(15)
   const [notas, setNotas]           = useState('')
   const [items, setItems]           = useState([
-    { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0, presentacion: '', unidades_por_pack: null }
+    { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0, presentacion: '', unidades_por_pack: null, costo_unitario: 0, oc_item_id: null }
   ])
   const [saving, setSaving]         = useState(false)
   const [loaded, setLoaded]         = useState(false)
+  const [showCrearOC, setShowCrearOC] = useState(false)
+  const queryClient = useQueryClient()
 
   const { data: clientes = [] } = useQuery({
     queryKey: ['clientes'],
@@ -37,6 +39,18 @@ export default function CotizacionForm() {
     staleTime: 0,
   })
 
+  // Trazabilidad cotización↔OC (2026-09-13, "ventas calzadas"): OCs ya
+  // ligadas a esta cotización, para poder elegir línea por línea de cuál
+  // salió el costo negociado con el proveedor.
+  const { data: ocsLigadas = [] } = useQuery({
+    queryKey: ['oc-por-cotizacion', id],
+    queryFn: () => api.get('/oc', { params: { cotizacion_id: id } }).then(r => r.data),
+    enabled: isEdit,
+  })
+  const ocItemsDisponibles = ocsLigadas.flatMap(oc =>
+    (oc.items || []).map(it => ({ ...it, oc_numero: oc.numero, oc_id: oc.id }))
+  )
+
   useEffect(() => {
     if (cotizacion && !loaded) {
       setClienteId(cotizacion.cliente_id || '')
@@ -46,6 +60,7 @@ export default function CotizacionForm() {
       setNotas(cotizacion.notas || '')
       if (cotizacion.items?.length) {
         setItems(cotizacion.items.map(i => ({
+          id:                 i.id,
           codigo:             i.codigo || '',
           descripcion:        i.descripcion || '',
           cantidad:           i.cantidad || 1,
@@ -53,6 +68,8 @@ export default function CotizacionForm() {
           descuento_pct:      i.descuento_pct || 0,
           presentacion:       i.presentacion || '',
           unidades_por_pack:  i.unidades_por_pack || null,
+          costo_unitario:     i.costo_unitario || 0,
+          oc_item_id:         i.oc_item_id || null,
         })))
       }
       setLoaded(true)
@@ -62,7 +79,7 @@ export default function CotizacionForm() {
   const totales = calcularTotalesCotizacion(items)
 
   const addItem = () => setItems(prev => [
-    ...prev, { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0, presentacion: '', unidades_por_pack: null }
+    ...prev, { codigo: '', descripcion: '', cantidad: 1, precio_unitario: 0, descuento_pct: 0, presentacion: '', unidades_por_pack: null, costo_unitario: 0, oc_item_id: null }
   ])
 
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i))
@@ -73,6 +90,25 @@ export default function CotizacionForm() {
       next[i] = { ...next[i], [field]: value }
       return next
     })
+  }
+
+  // Vincula (o desvincula, ocItemId=null) la línea i con una línea de OC ya
+  // creada. Solo aplica a líneas ya guardadas (con id real) — una línea nueva
+  // sin guardar todavía no existe en cotizacion_items para poder ligarla.
+  const handleVincularOC = async (i, ocItemId) => {
+    const item = items[i]
+    if (!item.id) { toast.error('Guarda la cotización primero para poder vincular esta línea a una OC'); return }
+    try {
+      const { data } = await api.patch(`/cotizaciones/items/${item.id}/vincular-oc`, { oc_item_id: ocItemId || null })
+      setItems(prev => {
+        const next = [...prev]
+        next[i] = { ...next[i], oc_item_id: data.oc_item_id, costo_unitario: data.costo_unitario }
+        return next
+      })
+      toast.success(ocItemId ? 'Línea vinculada a la OC' : 'Vínculo con OC quitado')
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error al vincular con la OC')
+    }
   }
 
   const handleProductoSelect = (i, p) => {
@@ -185,15 +221,22 @@ export default function CotizacionForm() {
                 <span className="font-bold">Productos</span>
                 <span className="ml-2 text-xs" style={{ color: 'var(--rmg-muted)' }}>Busca en lista de precios o escribe manualmente</span>
               </div>
-              <button type="button" onClick={addItem} className="btn-secondary flex items-center gap-1.5 text-xs">
-                <Plus size={14} /> Agregar línea
-              </button>
+              <div className="flex items-center gap-2">
+                {isEdit && (
+                  <button type="button" onClick={() => setShowCrearOC(true)} className="btn-secondary flex items-center gap-1.5 text-xs">
+                    <Truck size={14} /> Crear OC desde esta cotización
+                  </button>
+                )}
+                <button type="button" onClick={addItem} className="btn-secondary flex items-center gap-1.5 text-xs">
+                  <Plus size={14} /> Agregar línea
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-                    {['Buscar producto', 'Código', 'Descripción', 'Cant.', 'Precio neto', 'Desc %', 'Subtotal', ''].map(h => (
+                    {['Buscar producto', 'Código', 'Descripción', 'Cant.', 'Precio neto', 'Desc %', 'Subtotal', 'OC vinculada', ''].map(h => (
                       <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
                   </tr>
@@ -201,6 +244,7 @@ export default function CotizacionForm() {
                 <tbody>
                   {items.map((item, i) => {
                     const subtotal = Math.round(item.cantidad * item.precio_unitario * (1 - item.descuento_pct / 100))
+                    const ocItemLigado = item.oc_item_id ? ocItemsDisponibles.find(o => o.id === item.oc_item_id) : null
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         <td className="px-4 py-2 min-w-52">
@@ -232,6 +276,38 @@ export default function CotizacionForm() {
                         </td>
                         <td className="px-4 py-2 font-bold precio-clp text-right whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>
                           {formatCLP(subtotal)}
+                        </td>
+                        <td className="px-4 py-2 min-w-44">
+                          {/* Trazabilidad cotización↔OC, línea por línea (2026-09-13).
+                              Solo tiene sentido una vez que la cotización ya está
+                              guardada (necesita el id real de la línea) y existe al
+                              menos una OC ligada a esta cotización. */}
+                          {isEdit ? (
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                className="rmg-input text-xs"
+                                value={item.oc_item_id || ''}
+                                onChange={e => handleVincularOC(i, e.target.value || null)}
+                                disabled={!item.id || !ocItemsDisponibles.length}
+                              >
+                                <option value="">
+                                  {ocItemsDisponibles.length ? 'Sin vincular' : 'Sin OC ligadas aún'}
+                                </option>
+                                {ocItemsDisponibles.map(o => (
+                                  <option key={o.id} value={o.id}>
+                                    {o.oc_numero} · {o.codigo} · {formatCLP(o.precio_unitario)}
+                                  </option>
+                                ))}
+                              </select>
+                              {ocItemLigado && (
+                                <span title={`Costo negociado: ${formatCLP(ocItemLigado.precio_unitario)}`} style={{ color: 'var(--rmg-teal)' }}>
+                                  <Link2 size={14} />
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Guarda para vincular</span>
+                          )}
                         </td>
                         <td className="px-4 py-2">
                           <button type="button" onClick={() => removeItem(i)}
@@ -292,6 +368,78 @@ export default function CotizacionForm() {
           </div>
         </form>
       )}
+
+      {showCrearOC && (
+        <CrearOCModal
+          cotizacionId={id}
+          onClose={() => setShowCrearOC(false)}
+          onCreated={() => {
+            setShowCrearOC(false)
+            queryClient.invalidateQueries({ queryKey: ['oc-por-cotizacion', id] })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// Modal simple: crea una OC prellenada con los ítems de esta cotización,
+// pidiendo solo el proveedor. Los precios de compra quedan editables en
+// OCPage (Compras) una vez creada — ahí se negocia el costo real con el
+// proveedor, línea por línea, antes de vincularla desde acá.
+function CrearOCModal({ cotizacionId, onClose, onCreated }) {
+  const [proveedorId, setProveedorId] = useState('')
+  const [creando, setCreando] = useState(false)
+
+  const { data: proveedores = [] } = useQuery({
+    queryKey: ['proveedores'],
+    queryFn: () => api.get('/compras/proveedores').then(r => r.data),
+  })
+
+  const handleCrear = async () => {
+    const prov = proveedores.find(p => String(p.id) === String(proveedorId))
+    if (!prov) { toast.error('Selecciona un proveedor'); return }
+    setCreando(true)
+    try {
+      const { data } = await api.post(`/oc/desde-cotizacion/${cotizacionId}`, {
+        proveedor_id: prov.id,
+        proveedor: prov.razon_social || prov.nombre,
+      })
+      toast.success(`OC ${data.numero} creada — ajusta los precios de compra en Compras`)
+      onCreated()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error al crear la OC')
+    } finally {
+      setCreando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,35,60,0.45)' }}>
+      <div className="rmg-card p-5 w-full max-w-sm space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="font-bold">Crear OC desde esta cotización</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
+            <X size={16} />
+          </button>
+        </div>
+        <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+          Se copian todas las líneas de la cotización a una OC nueva en borrador, con el proveedor que elijas.
+        </p>
+        <div>
+          <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Proveedor *</label>
+          <select className="rmg-input" value={proveedorId} onChange={e => setProveedorId(e.target.value)}>
+            <option value="">Seleccionar proveedor...</option>
+            {proveedores.map(p => <option key={p.id} value={p.id}>{p.razon_social || p.nombre}</option>)}
+          </select>
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+          <button type="button" onClick={handleCrear} disabled={creando} className="btn-primary disabled:opacity-50">
+            {creando ? 'Creando...' : 'Crear OC'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

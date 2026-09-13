@@ -200,10 +200,23 @@ const createFromCotizacion = (req, res) => {
     if (existente) return res.status(400).json({ error: 'La cotización ya tiene una venta asociada' })
 
     const items = db.prepare('SELECT * FROM cotizacion_items WHERE cotizacion_id = ?').all(cotId).map(i => {
-      const lp = getLp(i.codigo)
+      // Trazabilidad cotización↔OC (2026-09-13): si esta línea quedó ligada a
+      // una línea de OC con precio negociado puntual para este negocio, ese es
+      // el costo real — no el costo genérico de lista_precios. Solo cuando no
+      // hay oc_item_id (el caso normal, ventas con precios desde lista) se usa
+      // el costo por defecto de siempre.
+      let costo_unitario = null
+      if (i.oc_item_id) {
+        const ocItem = db.prepare('SELECT precio_unitario FROM oc_items WHERE id = ?').get(i.oc_item_id)
+        if (ocItem) costo_unitario = Number(ocItem.precio_unitario) || 0
+      }
+      if (costo_unitario === null) {
+        const lp = getLp(i.codigo)
+        costo_unitario = lp ? lp.costo : 0
+      }
       return {
         sku: i.codigo, descripcion: i.descripcion, cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario, costo_unitario: lp ? lp.costo : 0,
+        precio_unitario: i.precio_unitario, costo_unitario,
         descuento_pct: i.descuento_pct || 0,
       }
     })

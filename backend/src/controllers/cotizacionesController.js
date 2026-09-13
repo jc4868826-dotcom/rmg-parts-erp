@@ -92,13 +92,18 @@ const _insertCotizacion = (body, extra = {}) => {
   }
 
   if (Array.isArray(items)) {
+    // costo_unitario y oc_item_id (2026-09-13): trazabilidad cotización↔OC.
+    // oc_item_id liga esta línea a la línea de OC con el precio negociado
+    // puntual para este negocio — nullable, el modelo con precios desde
+    // lista_precios sigue igual cuando no se manda.
     const ins = db.prepare(`INSERT INTO cotizacion_items
-      (id,cotizacion_id,codigo,descripcion,cantidad,precio_unitario,descuento_pct,subtotal)
-      VALUES (?,?,?,?,?,?,?,?)`)
+      (id,cotizacion_id,codigo,descripcion,cantidad,precio_unitario,descuento_pct,subtotal,costo_unitario,oc_item_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
     for (const item of items) {
       const sub = item.subtotal || Math.round(item.cantidad * item.precio_unitario * (1 - (item.descuento_pct || 0) / 100))
       ins.run(uuidv4(), id, item.codigo || null, item.descripcion || null,
-        item.cantidad, item.precio_unitario, item.descuento_pct || 0, sub)
+        item.cantidad, item.precio_unitario, item.descuento_pct || 0, sub,
+        item.costo_unitario || 0, item.oc_item_id || null)
     }
   }
   return db.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(id)
@@ -136,12 +141,13 @@ const update = (req, res) => {
     if (Array.isArray(req.body.items)) {
       db.prepare('DELETE FROM cotizacion_items WHERE cotizacion_id = ?').run(req.params.id)
       const ins = db.prepare(`INSERT INTO cotizacion_items
-        (id,cotizacion_id,codigo,descripcion,cantidad,precio_unitario,descuento_pct,subtotal)
-        VALUES (?,?,?,?,?,?,?,?)`)
+        (id,cotizacion_id,codigo,descripcion,cantidad,precio_unitario,descuento_pct,subtotal,costo_unitario,oc_item_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
       for (const item of req.body.items) {
         const sub = item.subtotal || Math.round(item.cantidad * item.precio_unitario * (1 - (item.descuento_pct || 0) / 100))
         ins.run(uuidv4(), req.params.id, item.codigo || null, item.descripcion || null,
-          item.cantidad, item.precio_unitario, item.descuento_pct || 0, sub)
+          item.cantidad, item.precio_unitario, item.descuento_pct || 0, sub,
+          item.costo_unitario || 0, item.oc_item_id || null)
       }
     }
     res.json(withItems(db.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(req.params.id)))
@@ -233,6 +239,34 @@ const createDesdeLanding = (req, res) => {
   }
 }
 
+// Liga una línea de cotización a una línea de OC ya creada (línea por línea,
+// per pedido explícito de JC, 2026-09-13 — trazabilidad cotización↔OC en
+// "ventas calzadas"). PATCH /api/cotizaciones/items/:itemId/vincular-oc
+// body: { oc_item_id } — null para desvincular. Al vincular, el costo_unitario
+// de la línea se actualiza al precio_unitario negociado en esa línea de OC.
+const vincularItemOC = (req, res) => {
+  try {
+    const { itemId } = req.params
+    const { oc_item_id } = req.body
+    const cotItem = db.prepare('SELECT * FROM cotizacion_items WHERE id = ?').get(itemId)
+    if (!cotItem) return res.status(404).json({ error: 'Línea de cotización no encontrada' })
+
+    let costo_unitario = cotItem.costo_unitario || 0
+    if (oc_item_id) {
+      const ocItem = db.prepare('SELECT * FROM oc_items WHERE id = ?').get(oc_item_id)
+      if (!ocItem) return res.status(404).json({ error: 'Línea de OC no encontrada' })
+      costo_unitario = Number(ocItem.precio_unitario) || 0
+    }
+
+    db.prepare('UPDATE cotizacion_items SET oc_item_id = ?, costo_unitario = ? WHERE id = ?')
+      .run(oc_item_id || null, costo_unitario, itemId)
+
+    res.json(db.prepare('SELECT * FROM cotizacion_items WHERE id = ?').get(itemId))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const remove = (req, res) => {
   try {
     const c = db.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(req.params.id)
@@ -245,4 +279,4 @@ const remove = (req, res) => {
   }
 }
 
-module.exports = { getAll, getOne, create, createPublica, createDesdeLanding, update, aprobar, generarPDF, enviarWhatsApp, enviarEmail, remove }
+module.exports = { getAll, getOne, create, createPublica, createDesdeLanding, update, aprobar, generarPDF, enviarWhatsApp, enviarEmail, remove, vincularItemOC }

@@ -16,4 +16,10 @@ router.post('/:id/enviar-email',   c.enviarEmailOC)
 router.get('/:id/impacto-eliminacion', c.getImpactoEliminacion)
 router.delete('/:id',  authenticate, c.deleteOC)
 
+// Trazabilidad cotización↔OC (2026-09-13, ventas calzadas) — crear una OC
+// prellenada desde una cotización ganada, con cliente_id/cotizacion_id en el
+// encabezado y los ítems copiados (precio de compra sugerido = costo
+// negociado en la cotización si existe).
+router.post('/desde-cotizacion/:cotizacionId', authenticate, c.createOCDesdeCotizacion)
+
 module.exports = router

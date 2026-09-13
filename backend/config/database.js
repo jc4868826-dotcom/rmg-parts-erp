@@ -2889,6 +2889,35 @@ function runMigrations() {
       console.error('❌ Migración compra_agil_v3_sync_estado_real falló:', e.message)
     }
   }
+
+  // Trazabilidad cotización ↔ OC, línea por línea (pedido 2026-09-13 por JC).
+  // El modelo de negocio de "ventas calzadas" (licitación ganada → OC al
+  // proveedor con precios negociados puntualmente para ese negocio) necesita
+  // que cada línea de cotización pueda apuntar a la línea de OC de la que
+  // salió su costo real. cotizacion_items.oc_item_id es esa liga (nullable —
+  // el modelo actual con precios desde lista_precios sigue funcionando igual
+  // cuando no se setea). costo_unitario en cotizacion_items registra el costo
+  // negociado en el momento de armar la cotización, aunque todavía no exista
+  // la OC. En ordenes_compra, cliente_id/cotizacion_id son de conveniencia a
+  // nivel de encabezado (para poder filtrar "OCs de este cliente/cotización")
+  // — la fuente de verdad de la liga real es siempre cotizacion_items.oc_item_id.
+  const mCotOcTrazabilidad = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('cotizacion_oc_trazabilidad_v1')
+  if (!mCotOcTrazabilidad) {
+    try {
+      const cotItemCols = db.prepare('PRAGMA table_info(cotizacion_items)').all().map(c => c.name)
+      if (!cotItemCols.includes('costo_unitario')) db.exec('ALTER TABLE cotizacion_items ADD COLUMN costo_unitario REAL DEFAULT 0')
+      if (!cotItemCols.includes('oc_item_id')) db.exec('ALTER TABLE cotizacion_items ADD COLUMN oc_item_id TEXT REFERENCES oc_items(id)')
+
+      const ocCols = db.prepare('PRAGMA table_info(ordenes_compra)').all().map(c => c.name)
+      if (!ocCols.includes('cliente_id')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN cliente_id TEXT REFERENCES clientes(id)')
+      if (!ocCols.includes('cotizacion_id')) db.exec('ALTER TABLE ordenes_compra ADD COLUMN cotizacion_id TEXT REFERENCES cotizaciones(id)')
+
+      db.prepare("INSERT INTO _migrations (id) VALUES (?)").run('cotizacion_oc_trazabilidad_v1')
+      console.log('✅ Migración cotizacion_oc_trazabilidad_v1 — trazabilidad cotización↔OC línea por línea añadida')
+    } catch (e) {
+      console.error('❌ Migración cotizacion_oc_trazabilidad_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

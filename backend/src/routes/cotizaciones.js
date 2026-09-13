@@ -39,4 +39,9 @@ router.post('/:id/whatsapp', authenticate, cotizacionesController.enviarWhatsApp
 // POST /api/cotizaciones/:id/email — Enviar por email
 router.post('/:id/email', authenticate, cotizacionesController.enviarEmail);
 
+// PATCH /api/cotizaciones/items/:itemId/vincular-oc — liga una línea de
+// cotización a una línea de OC (trazabilidad cotización↔OC, 2026-09-13).
+// body: { oc_item_id } — null para desvincular.
+router.patch('/items/:itemId/vincular-oc', authenticate, cotizacionesController.vincularItemOC);
+
 module.exports = router;

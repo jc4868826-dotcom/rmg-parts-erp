@@ -101,13 +101,18 @@ const TIPO_EVENTO = {
 
 const getOCs = (req, res) => {
   try {
-    const { estado, proveedor, fecha_desde, fecha_hasta, q } = req.query
+    const { estado, proveedor, fecha_desde, fecha_hasta, q, cliente_id, cotizacion_id } = req.query
     let sql = 'SELECT * FROM ordenes_compra WHERE 1=1'
     const params = []
     if (estado)      { sql += ' AND estado = ?';                                 params.push(estado) }
     if (proveedor)   { sql += ' AND LOWER(proveedor) LIKE LOWER(?)';             params.push(`%${proveedor}%`) }
     if (fecha_desde) { sql += ' AND fecha_emision >= ?';                         params.push(fecha_desde) }
     if (fecha_hasta) { sql += ' AND fecha_emision <= ?';                         params.push(fecha_hasta) }
+    // cliente_id/cotizacion_id (2026-09-13, trazabilidad cotización↔OC): filtra
+    // las OC de conveniencia ligadas a un cliente o cotización desde el
+    // encabezado — usado por el picker "vincular OC" en la cotización.
+    if (cliente_id)    { sql += ' AND cliente_id = ?';                           params.push(cliente_id) }
+    if (cotizacion_id) { sql += ' AND cotizacion_id = ?';                        params.push(cotizacion_id) }
     if (q) {
       sql += ' AND (numero LIKE ? OR LOWER(proveedor) LIKE LOWER(?))'
       params.push(`%${q}%`, `%${q}%`)
@@ -135,7 +140,8 @@ const getOC = (req, res) => {
 
 const createOC = (req, res) => {
   try {
-    const { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas, items } = req.body
+    const { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas, items,
+            cliente_id, cotizacion_id } = req.body
     if (!proveedor) return res.status(400).json({ error: 'Proveedor requerido' })
     if (!items || !items.length) return res.status(400).json({ error: 'Al menos un ítem es requerido' })
 
@@ -149,11 +155,16 @@ const createOC = (req, res) => {
     const iva   = Math.round(neto * 0.19)
     const total = neto + iva
 
+    // cliente_id/cotizacion_id (2026-09-13, ventas calzadas): de conveniencia,
+    // para poder ubicar "las OC de este cliente/cotización" desde el
+    // encabezado — la liga real y autoritativa sigue siendo
+    // cotizacion_items.oc_item_id, que se setea aparte al vincular cada línea.
     db.prepare(`INSERT INTO ordenes_compra
-      (id, numero, proveedor_id, proveedor, estado, fecha_emision, fecha_requerida, neto, iva, total, observaciones, notas, usuario_creador_id, medio_pago)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      (id, numero, proveedor_id, proveedor, estado, fecha_emision, fecha_requerida, neto, iva, total, observaciones, notas, usuario_creador_id, medio_pago, cliente_id, cotizacion_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(id, numero, proveedor_id || null, proveedor, 'borrador', fecha, fecha_requerida || null,
-        neto, iva, total, observaciones || null, notas || null, usuario_id || null, medio_pago || 'Contado')
+        neto, iva, total, observaciones || null, notas || null, usuario_id || null, medio_pago || 'Contado',
+        cliente_id || null, cotizacion_id || null)
 
     for (const item of items) {
       const pu  = Number(item.precio_unitario || item.precio_compra_neto || 0)
@@ -170,6 +181,42 @@ const createOC = (req, res) => {
     res.status(500).json({ error: err.message })
   }
 }
+
+// Crea una OC prellenada a partir de una cotización — el caso "ventas
+// calzadas": licitación/venta ganada → se arma la OC al proveedor con las
+// mismas líneas de la cotización, listas para negociar el precio de compra
+// puntual. No liga automáticamente cada línea (eso requiere elegir proveedor
+// y negociar precio primero) — deja la OC en 'borrador' con cliente_id/
+// cotizacion_id seteados y los ítems prellenados desde la cotización, para
+// que el usuario ajuste precios y la guarde. La liga línea-por-línea
+// (cotizacion_items.oc_item_id) se hace después, con un PATCH aparte una vez
+// que la OC ya tiene sus oc_items con id real.
+const createOCDesdeCotizacion = (req, res) => {
+  try {
+    const cot = db.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(req.params.cotizacionId)
+    if (!cot) return res.status(404).json({ error: 'Cotización no encontrada' })
+
+    const { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas } = req.body || {}
+    if (!proveedor) return res.status(400).json({ error: 'Proveedor requerido' })
+
+    const cotItems = db.prepare('SELECT * FROM cotizacion_items WHERE cotizacion_id = ?').all(cot.id)
+    if (!cotItems.length) return res.status(400).json({ error: 'La cotización no tiene ítems' })
+
+    const items = cotItems.map(i => ({
+      codigo: i.codigo, descripcion: i.descripcion, cantidad: i.cantidad,
+      // Precio de compra sugerido: el costo ya negociado en la cotización si
+      // existe, si no en blanco para que se complete al negociar con el proveedor.
+      precio_unitario: i.costo_unitario || 0,
+    }))
+
+    req.body = { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas,
+                 cliente_id: cot.cliente_id, cotizacion_id: cot.id, items }
+    return createOC(req, res)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 
 const updateOC = (req, res) => {
   try {
@@ -795,4 +842,5 @@ module.exports = {
   registrarRecepcionOC, getRecepcionesOC, getPendientesFacturar, registrarFactura,
   generarPdfOC, enviarEmailOC,
   getImpactoEliminacion, deleteOC,
+  createOCDesdeCotizacion,
 }
