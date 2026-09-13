@@ -1317,7 +1317,12 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
                             <tr key={f.n} style={{ borderTop: '1px solid rgba(15,35,60,0.04)', background: f.sin_cobertura ? 'rgba(220,38,38,0.05)' : 'transparent' }}>
                               <td className="px-3 py-2 text-center" style={{ color: 'var(--rmg-muted)' }}>{f.n}</td>
                               <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{f.categoria}</td>
-                              <td className="px-3 py-2" style={{ color: 'var(--rmg-off)', minWidth: 200 }}>{f.item_solicitado}</td>
+                              <td className="px-3 py-2" style={{ color: 'var(--rmg-off)', minWidth: 240 }}>
+                                {f.item_solicitado}
+                                {f.requerimiento_completo && (
+                                  <div className="text-[11px] mt-0.5 font-normal" style={{ color: 'var(--rmg-muted)' }}>{f.requerimiento_completo}</div>
+                                )}
+                              </td>
                               <td className="px-3 py-2 text-center whitespace-nowrap" style={{ color: f.cantidad_ajustada ? 'var(--rmg-red)' : 'var(--rmg-muted)', fontWeight: f.cantidad_ajustada ? 600 : 400 }}>{f.cantidad_ref}</td>
                               <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>{f.producto_generico}</td>
                               <td className="px-3 py-2 font-mono whitespace-nowrap" style={{ color: f.sin_cobertura ? 'var(--rmg-red)' : 'var(--rmg-teal)' }}>{f.sku_rmg || 'Sin cobertura'}</td>

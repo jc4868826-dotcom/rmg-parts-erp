@@ -90,7 +90,7 @@ const HEADERS = {
 }
 
 const WIDTHS = {
-  1: 5, 2: 16, 3: 34, 4: 7, 5: 22, 6: 11, 7: 38, 8: 18, 9: 8,
+  1: 5, 2: 16, 3: 46, 4: 7, 5: 22, 6: 11, 7: 38, 8: 18, 9: 8,
   10: 9, 11: 42,
   12: 11, 13: 11, 14: 11, 15: 12,
   16: 11, 17: 11, 18: 11, 19: 12,
@@ -159,10 +159,28 @@ function construirCrucePreview(oportunidadId) {
     const sku = item.sku_match ? catalogoBySku[item.sku_match] : null
     const isGap = !item.cubierto || !sku
 
+    // 2026-09-13 — BUG REAL (reportado dos veces por el usuario: "¿cuál es
+    // el requerimiento? el excel no lo trae... lo tienes en la descripción y
+    // muestra una mierda"): la columna "Ítem solicitado" solo mostraba
+    // item.descripcion_solicitada, que es una etiqueta corta genérica ("Aceite
+    // de motor") — NUNCA el texto completo del requerimiento (marca, norma,
+    // envase, observaciones — ej. "ACEITE MOTOR 15W40 MOBIL DELVAC 1300 SUPER
+    // API CK4 OBS:IGUAL CARACTERISTICA O SUPERIOR (208 LITROS) CERTIFICAR
+    // FECHA ENVASADO 2026"), que SÍ existe en la base (item.especificacion_
+    // tecnica, ya usado en la tarjeta del Evaluador — ver EvaluadorPage.jsx/
+    // ChileCompraPage.jsx) pero nunca se le pasó al Excel ni al preview. Este
+    // bug es del ARCHIVO REAL, no solo del preview — ya estaba antes de esta
+    // ronda de cambios. Se agrega acá y en generarExcelCruce() (col. 3) para
+    // que se vea el requerimiento completo, no la etiqueta corta.
+    const requerimientoCompleto = (item.especificacion_tecnica && item.especificacion_tecnica !== item.descripcion_solicitada)
+      ? item.especificacion_tecnica
+      : null
+
     const fila = {
       n: idx + 1,
       categoria: sku ? sku.categoria : 'SIN COBERTURA',
       item_solicitado: item.descripcion_solicitada,
+      requerimiento_completo: requerimientoCompleto,
       cantidad_ref: item.cantidad,
       cantidad_ajustada: !!item.cantidad_ajustada,
       producto_generico: sku ? sku.producto_generico : 'SIN COBERTURA',
@@ -295,10 +313,21 @@ async function generarExcelCruce(oportunidadId) {
     const isGap = !item.cubierto || !sku
     const fill = isGap ? FILL.gapRow : (n % 2 === 0 ? FILL.alt : FILL.white)
 
+    // 2026-09-13 — BUG REAL en el .xlsx mismo (no solo en el preview en
+    // pantalla): la columna 3 solo traía descripcion_solicitada, la etiqueta
+    // corta ("Aceite de motor") — nunca el requerimiento técnico completo
+    // (especificacion_tecnica: marca, norma, envase, observaciones de las
+    // bases) que sí se guarda en el ítem. El usuario no podía verificar "lo
+    // pedido" contra "lo que hace match" porque lo pedido no estaba. Se
+    // concatena ambos (con salto de línea, la celda ya tiene wrapText).
+    const itemTexto = (item.especificacion_tecnica && item.especificacion_tecnica !== item.descripcion_solicitada)
+      ? `${item.descripcion_solicitada}\n${item.especificacion_tecnica}`
+      : item.descripcion_solicitada
+
     const vals = {
       1: n,
       2: sku ? sku.categoria : 'SIN COBERTURA',
-      3: item.descripcion_solicitada,
+      3: itemTexto,
       4: item.cantidad,
       5: sku ? sku.producto_generico : 'SIN COBERTURA',
       // Nota: cuando cruzarItemsConCatalogo() sustituye un formato grande por
@@ -368,7 +397,7 @@ async function generarExcelCruce(oportunidadId) {
       set(19, { formula: `R${r}*${cantCell}${r}` }, STYLE.boldCalc, MONEY_FMT)
     }
 
-    ws.getRow(r).height = 50
+    ws.getRow(r).height = 68
     r++
   }
   const lastDataRow = r - 1
