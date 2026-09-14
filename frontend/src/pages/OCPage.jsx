@@ -426,9 +426,11 @@ export default function OCPage() {
                     {/* Trazabilidad cotización↔OC (2026-09-13): venta calzada — esta
                         OC nació de una cotización a cliente con precios negociados. */}
                     {oc.cotizacion_numero && (
-                      <span className="ml-2 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }} title={`Venta calzada · ${oc.cotizacion_numero}`}>
+                      <button type="button" onClick={e => { e.stopPropagation(); navigate(`/cotizaciones/${oc.cotizacion_id}`) }}
+                        className="ml-2 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full hover:opacity-80 transition-opacity"
+                        style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }} title={`Ver cotización ${oc.cotizacion_numero}`}>
                         <Link2 size={10}/> {oc.cotizacion_numero}
-                      </span>
+                      </button>
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(oc.fecha_emision || oc.created_at)}</td>
@@ -568,9 +570,11 @@ export default function OCPage() {
             </h1>
             {oc && <EstadoBadge estado={oc.estado} />}
             {oc?.cotizacion_numero && (
-              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }} title="Venta calzada — nació de una cotización a cliente">
+              <button type="button" onClick={() => navigate(`/cotizaciones/${oc.cotizacion_id}`)}
+                className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity"
+                style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }} title="Ver la cotización de esta venta calzada">
                 <Link2 size={10}/> {oc.cotizacion_numero}
-              </span>
+              </button>
             )}
           </div>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{oc?.proveedor}</p>

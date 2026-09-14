@@ -300,9 +300,11 @@ export default function CotizacionForm() {
                                 ))}
                               </select>
                               {ocItemLigado && (
-                                <span title={`Costo negociado: ${formatCLP(ocItemLigado.precio_unitario)}`} style={{ color: 'var(--rmg-teal)' }}>
+                                <button type="button" onClick={() => navigate(`/compras?id=${ocItemLigado.oc_id}`)}
+                                  title={`Ver ${ocItemLigado.oc_numero} — costo negociado: ${formatCLP(ocItemLigado.precio_unitario)}`}
+                                  className="hover:opacity-70 transition-opacity" style={{ color: 'var(--rmg-teal)' }}>
                                   <Link2 size={14} />
-                                </span>
+                                </button>
                               )}
                             </div>
                           ) : (
@@ -373,9 +375,12 @@ export default function CotizacionForm() {
         <CrearOCModal
           cotizacionId={id}
           onClose={() => setShowCrearOC(false)}
-          onCreated={() => {
+          onCreated={(ocId) => {
             setShowCrearOC(false)
             queryClient.invalidateQueries({ queryKey: ['oc-por-cotizacion', id] })
+            // Va directo a la OC recién creada para negociar los precios de
+            // compra con el proveedor — de vuelta acá con el botón "Editar".
+            navigate(`/compras?id=${ocId}`)
           }}
         />
       )}
@@ -405,8 +410,8 @@ function CrearOCModal({ cotizacionId, onClose, onCreated }) {
         proveedor_id: prov.id,
         proveedor: prov.razon_social || prov.nombre,
       })
-      toast.success(`OC ${data.numero} creada — ajusta los precios de compra en Compras`)
-      onCreated()
+      toast.success(`OC ${data.numero} creada — ajusta los precios de compra`)
+      onCreated(data.id)
     } catch (e) {
       toast.error(e.response?.data?.error || 'Error al crear la OC')
     } finally {
