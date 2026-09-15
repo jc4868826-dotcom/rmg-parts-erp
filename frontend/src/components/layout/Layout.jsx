@@ -30,6 +30,12 @@ const NAV_SECTIONS = [
     label: 'Ventas',
     items: [
       { to: '/cotizaciones', icon: FileText,        label: 'Cotizaciones',    badge: '2' },
+      // 2026-09-15 — "Cotizador Manual": pedido de JC — pestaña para armar
+      // cotizaciones B2B a mano (mesón/teléfono/WhatsApp) con ayuda del
+      // tagging técnico Vistony + el mismo motor de matching de precios que
+      // usa el resto del ERP. Va en "Ventas" (no en "Canal Estatal", que es
+      // solo Mercado Público) porque genera cotizaciones reales del día a día.
+      { to: '/cotizador-manual', icon: Calculator,  label: 'Cotizador Manual', badge: null },
       { to: '/pedidos',      icon: ShoppingCart,    label: 'Pedidos',         badge: null },
       { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: null },
       { to: '/cuentas-corrientes', icon: Wallet,    label: 'Cuentas Corrientes', badge: null },

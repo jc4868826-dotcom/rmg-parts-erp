@@ -1,0 +1,2429 @@
+{
+  "meta": {
+    "titulo": "Base de Conocimiento Técnica — Fichas Técnicas Vistony (RMG)",
+    "descripcion": "Tagging estructurado y verificable de las fichas técnicas reales de la carpeta 'fichas tecnicas' de JC, para uso del futuro Cotizador Manual del ERP.",
+    "fecha_generacion": "2026-09-14",
+    "total_productos": 30,
+    "archivos_excluidos": [
+      {
+        "archivo": "EETT.pdf",
+        "motivo": "NO es ficha técnica de producto — es un documento de bases técnicas de una licitación municipal no relacionada (I. Municipalidad de Pelarco, compra de AdBlue/Urea 60 bidones). Detectado y excluido durante esta revisión."
+      },
+      {
+        "archivo": "Cotizacion_979-103-COT26.xlsx",
+        "motivo": "Es una cotización de un proceso de Compra Ágil distinto (PAC 979-103), no una ficha técnica. Excluido del tagging."
+      }
+    ],
+    "regla_de_oro": "El campo tipo_base solo indica 'sintético' o '100% sintético' cuando la ficha lo declara TEXTUALMENTE. Nunca se infiere a partir de marketing genérico ('bases especiales', 'premium', 'alta tecnología', etc.)."
+  },
+  "productos": [
+    {
+      "id": "attom-s400",
+      "nombre_ficha": "ATTOM S400 — Full Synthetic",
+      "archivo_fuente": "ATTOM-S400.pdf",
+      "categoria": "Motor a gasolina (liviano)",
+      "tipo_base": "100% sintético",
+      "evidencia_tipo_base": "Título del producto: 'FULL SYNTHETIC'. Texto: 'ATTOM S400 es un lubricante 100% sintético de alto rendimiento general en el motor'.",
+      "grados_sae_iso": [
+        "5W-30"
+      ],
+      "uso_principal": "Motores modernos a gasolina, GDI/FSI, turbocargados (GTDI/TSI), SUV y transporte liviano. Mitiga LSPI.",
+      "normas_cumplidas": {
+        "licenciado_por": [
+          "API SQ",
+          "ILSAC GF-7A"
+        ],
+        "cumple_categorias_api_anteriores": [
+          "API SP",
+          "SN PLUS",
+          "SN",
+          "SM"
+        ],
+        "oem": [
+          "Chrysler MS6395",
+          "Ford WSS-M2C961-A1",
+          "GM dexos1 Gen 3"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 1 L",
+        "Galón 4 L",
+        "Balde 5 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.8525,
+        "visc_40C_cSt": 65.5,
+        "visc_100C_cSt": 11.0,
+        "indice_viscosidad": 161,
+        "tbn_mgKOHg": 7.2,
+        "ccs_cP": "<6600 @-30C",
+        "punto_inflamacion_C": 225,
+        "punto_fluidez_C": -39,
+        "cenizas_sulfatadas_pct": 0.8
+      },
+      "sku_rmg": [
+        {
+          "sku": "1001413",
+          "descripcion": "CAJ04 ATTOM S400 SAE 5W-30 API SQ DE 4L",
+          "presentacion": "4 L",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000770",
+          "descripcion": "CAJ04 ATTOM S400 SAE 5W30 API SP DE 1 GL",
+          "presentacion": "1 GL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000765",
+          "descripcion": "GL ATTOM S400 SAE 5W30 API SP DE 1 GL (unidad)",
+          "presentacion": "1 GL",
+          "envase": "Galon"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "attom-s320-5w30",
+      "nombre_ficha": "ATTOM S320 5W-30 ACEA C3/C2",
+      "archivo_fuente": "ATTOM-S320.pdf / ATTOM-S320-5W30-5W40-ACEA-C3.C2-_28.02.2020-1.pdf (mismo producto, contenido idéntico — deduplicado)",
+      "categoria": "Motor a gasolina / diésel liviano",
+      "tipo_base": "100% sintético (FULL SINTÉTICO)",
+      "evidencia_tipo_base": "Texto: 'ATTOM S320 es un aceite FULL SINTÉTICO diseñado para motores de servicio liviano a diésel y gasolina'.",
+      "grados_sae_iso": [
+        "5W-30"
+      ],
+      "uso_principal": "Motores modernos a gasolina con post-tratamiento DPF/FAP/GPF; también motores a gas GLP/GNC.",
+      "normas_cumplidas": {
+        "secuencia_europea_acea": [
+          "C3/C2 (v2016)"
+        ],
+        "cumple_y_excede": [
+          "API SN",
+          "SM",
+          "SL"
+        ],
+        "oem": [
+          "Mercedes Benz 229.31"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 1 L",
+        "Envase 4 y 5 L"
+      ],
+      "ensayos_fisicoquimicos": {
+        "visc_40C_cSt": 73.3,
+        "visc_100C_cSt": 12.0,
+        "indice_viscosidad": 160,
+        "viscosidad_aparente_cP": "5551 @-30C",
+        "punto_inflamacion_C": 225,
+        "punto_fluidez_C": -30,
+        "densidad_15C_kgL": 0.852
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000544",
+          "descripcion": "CAJ04 ATTOM S320 SAE 5W-30 ACEA C3/API SN DE 5 L",
+          "presentacion": "5 L",
+          "envase": "Bidon"
+        },
+        {
+          "sku": "1000545",
+          "descripcion": "CIL ATTOM S320 SAE 5W-30 ACEA C3/API SN DE 55 GL",
+          "presentacion": "55 GL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000570",
+          "descripcion": "CAJ12 ATTOM S320 SAE 5W30 ACEA C3/API SN DE 1L",
+          "presentacion": "1 L",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000530",
+          "descripcion": "CAJ04 ATTOM S320 5W30 ACEA C3 API SN DE 1 GL",
+          "presentacion": "1 GL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000747",
+          "descripcion": "GL ATTOM S320 SAE 5W-30 ACEA C3/API SN de 5L (unidad)",
+          "presentacion": "5 L",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000748",
+          "descripcion": "FRA ATTOM S320 SAE 5W30 ACEA C3/API SN DE 1L (unidad)",
+          "presentacion": "1 L",
+          "envase": "Frasco/Botella"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "blindax-super",
+      "nombre_ficha": "Blindax Super",
+      "archivo_fuente": "BLINDAX-SUPER-set-25-1.pdf",
+      "categoria": "Motor a gasolina (liviano)",
+      "tipo_base": "Mineral",
+      "evidencia_tipo_base": "Texto: 'Aceite mineral multigrado de calidad superior'. NO se declara sintético en ningún punto de la ficha.",
+      "grados_sae_iso": [
+        "10W-30",
+        "20W-50"
+      ],
+      "uso_principal": "Autos, camionetas, pick up, SUV a gasolina; también motores convertidos a GNV/GLP.",
+      "normas_cumplidas": {
+        "licenciado_para": [
+          "API SP"
+        ],
+        "cumple_categorias_anteriores": [
+          "API SN",
+          "SM",
+          "SL",
+          "SJ"
+        ],
+        "otros": [
+          "ILSAC GF-6A (Resource Conserving, solo grado 10W-30)"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 1/4 gal",
+        "Envase 1 gal",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "10W30": 0.861,
+          "20W50": 0.877
+        },
+        "visc_40C_cSt": {
+          "10W30": 71.3,
+          "20W50": 168.0
+        },
+        "visc_100C_cSt": {
+          "10W30": 11.0,
+          "20W50": 19.0
+        },
+        "indice_viscosidad": {
+          "10W30": 145,
+          "20W50": 128
+        },
+        "tbn_mgKOHg": {
+          "10W30": 7.1,
+          "20W50": 7.1
+        },
+        "punto_inflamacion_C": {
+          "10W30": 230,
+          "20W50": 251
+        },
+        "punto_fluidez_C": {
+          "10W30": -33,
+          "20W50": -24
+        }
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000285",
+          "descripcion": "CAJ06 BLINDAX SUPER 20W50 API SN DE 1 GAL",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000350",
+          "descripcion": "CAJ12 BLINDAX SUPER 20W50 API SN DE 1/4 GAL",
+          "presentacion": "1/4 GAL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000284",
+          "descripcion": "CAJ04 BLINDAX SUPER 20W50 API SN DE 1 GAL",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000286",
+          "descripcion": "GL BLINDAX SUPER 20W50 API SN DE 1 GAL (unidad)",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000351",
+          "descripcion": "FRA BLINDAX SUPER 20W50 API SN DE 1/4 GAL (unidad)",
+          "presentacion": "1/4 GAL",
+          "envase": "Frasco/Botella"
+        }
+      ],
+      "verificado_por_JC": "CONFIRMADO — descartado como sintético (Licitación TDR N°116, ítem 3)",
+      "notas_correccion_JC": "Confirmado NO sintético durante evaluación TDR 116 — se descartó para reemplazar Forza Raygold.",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "forza-raygold-15w40",
+      "nombre_ficha": "Forza RayGold SAE 15W-40 API CK-4",
+      "archivo_fuente": "FORZA-RAYGOLD-15W40.pdf",
+      "categoria": "Motor diésel (pesado)",
+      "tipo_base": "NO sintético — parafínico severamente hidrotratado",
+      "evidencia_tipo_base": "Texto: 'Desarrollado con aceites parafínicos severamente hidrotratados y perfectamente balanceados con un paquete de aditivos de última generación'. La ficha NUNCA usa la palabra 'sintético'.",
+      "grados_sae_iso": [
+        "15W-40"
+      ],
+      "uso_principal": "Motores diésel modernos OEM europeos/americanos/asiáticos, turboalimentados, Euro IV-VI, sistemas DOC/SCR/EGR/DPF.",
+      "normas_cumplidas": {
+        "licenciado_para": [
+          "API CK-4"
+        ],
+        "cumple_categorias_anteriores": [
+          "CJ-4",
+          "CI-4 Plus",
+          "CI-4",
+          "CH-4"
+        ],
+        "secuencia_europea": [
+          "ACEA E9",
+          "E7"
+        ],
+        "asiatica": [
+          "JASO DHD-1",
+          "JASO DH-2"
+        ],
+        "oem": [
+          "Volvo VDS 4.5*/VDS4/VDS3",
+          "Mercedes Benz 228.31",
+          "Mack EOS-4.5*/EO-O Prem. plus/EO-N",
+          "Cummins CES 20086*/20081",
+          "Detroit Diesel 93K222/93K218",
+          "Renault RLD-4/RLD-3",
+          "Caterpillar ECF-3/ECF-2",
+          "Deutz DQC III-18LA*",
+          "Ford WSS M2C171-F1",
+          "MAN M3775",
+          "MTU Category 2.1",
+          "Allison TES 439"
+        ]
+      },
+      "presentaciones": [
+        "Balde 2.5 gal",
+        "Galón 3.785 L",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.876,
+        "visc_40C_cSt": 114.0,
+        "visc_100C_cSt": 15.0,
+        "indice_viscosidad": 136,
+        "ccs_cP": "<7000 @-20C",
+        "punto_inflamacion_C": 230,
+        "punto_fluidez_C": -33,
+        "tbn_mgKOHg": 9.8,
+        "hths_150C_cP": 4.0,
+        "mrv_cP": "22600 @-25C",
+        "espuma_secuenciaII": "10/0",
+        "cenizas_sulfatadas_pct": 0.9
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000469",
+          "descripcion": "CIL FORZA RAYGOLD SAE 15W40 API CK-4 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000470",
+          "descripcion": "BAL FORZA RAYGOLD SAE 15W40 API CK-4 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        }
+      ],
+      "verificado_por_JC": "CONFIRMADO NO válido para ítem 3 sintético (Licitación TDR N°116)",
+      "notas_correccion_JC": "Descartado como candidato sintético en TDR 116 ítem 3 — reemplazado por Voltek C300.",
+      "alerta_tipo_base": false,
+      "alerta_sku": true,
+      "nota_sku": "🚩 DISCREPANCIA DETECTADA: en RMG_Lista_Precios_2026.csv este SKU está categorizado como 'Producto Generico RMG' = '5W40 sintetico'. Esto CONTRADICE la ficha técnica original, que confirma explícitamente que Forza Raygold es 'parafínico severamente hidrotratado' (NO sintético) -- ya validado durante la evaluación TDR N°116. Se reporta la discrepancia sin corregirla unilateralmente: JC debe decidir si se corrige la categorización interna de la lista de precios."
+    },
+    {
+      "id": "voltek-c300",
+      "nombre_ficha": "Voltek C300 API CK-4",
+      "archivo_fuente": "VOLTEK-C300.pdf",
+      "categoria": "Motor diésel (pesado)",
+      "tipo_base": "100% sintético (Totalmente sintético)",
+      "evidencia_tipo_base": "Texto: 'VOLTEK es un lubricante totalmente sintético, diseñado para motores que operan bajo requerimientos de servicio severo'.",
+      "grados_sae_iso": [
+        "10W-40",
+        "15W-40"
+      ],
+      "uso_principal": "Motores diésel pesados NA y turboalimentados, DPF/SCR, EPA10 Tier4B, Euro VI-anteriores.",
+      "normas_cumplidas": {
+        "licenciado_para": [
+          "API CK-4"
+        ],
+        "cumple_categorias_anteriores": [
+          "CJ-4",
+          "CI-4 plus",
+          "CI-4",
+          "CH-4",
+          "también API SN y anteriores SM, SL, SJ"
+        ],
+        "secuencia_europea": [
+          "ACEA E9",
+          "E7"
+        ],
+        "asiatica": [
+          "JASO DH-2"
+        ],
+        "oem": [
+          "Volvo VDS-4.5/VDS4/VDS3",
+          "Mercedes Benz 228.31",
+          "Cummins CES 20086/20081",
+          "Mack EOS 4.5/EO-O Premium Plus/EO-N",
+          "Detroit Diesel DFS 93K222/93K218",
+          "Renault RLD-4/RLD-3",
+          "MAN M3775",
+          "Deutz DQC III-18LA",
+          "Caterpillar ECF-3/ECF-2",
+          "MTU categoría 2.1",
+          "Ford WSS M2C171-F1"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "10W40": 0.858,
+          "15W40": 0.8595
+        },
+        "visc_40C_cSt": {
+          "10W40": 97.0,
+          "15W40": 104.5
+        },
+        "visc_100C_cSt": {
+          "10W40": 14.5,
+          "15W40": 15.0
+        },
+        "indice_viscosidad": {
+          "10W40": 155,
+          "15W40": 150
+        },
+        "tbn_mgKOHg": {
+          "10W40": 9.8,
+          "15W40": 9.8
+        },
+        "ccs_cP": {
+          "10W40": "6000 @-25C",
+          "15W40": "5000 @-20C"
+        },
+        "punto_inflamacion_C": {
+          "10W40": 225,
+          "15W40": 230
+        },
+        "punto_fluidez_C": {
+          "10W40": -36,
+          "15W40": -30
+        },
+        "cenizas_sulfatadas_pct": {
+          "10W40": 0.9,
+          "15W40": 0.9
+        }
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000649",
+          "descripcion": "BAL VOLTEK C300 SAE 5W40 API CK-4 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000964",
+          "descripcion": "BAL VOLTEK C300 10W40 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000471",
+          "descripcion": "CIL Aceite Voltek SAE 10W40 API CK-4 De 55 Gl",
+          "presentacion": "55 Gl",
+          "envase": "Tambor/Cilindro"
+        }
+      ],
+      "verificado_por_JC": "CONFIRMADO como reemplazo válido (Licitación TDR N°116, ítem 3)",
+      "notas_correccion_JC": "Confirmado 100% sintético con grado 15W-40 publicado — usado para cerrar ítem 3 de TDR 116 (precio pendiente de cotización real Vistony).",
+      "alerta_tipo_base": false,
+      "alerta_sku": true,
+      "nota_sku": "🚩 DISCREPANCIA PARCIAL: el SKU 1000964 (Voltek C300 10W40) está categorizado en la lista de precios como '10W40 semisintetico', pero la ficha técnica declara Voltek como 'totalmente sintético' para AMBOS grados (10W-40 y 15W-40) sin distinción. El SKU 1000649 (5W40) sí está bien categorizado como '5W40 sintetico'. Se reporta para que JC decida si la lista de precios debe unificar la categoría de Voltek 10W40 a sintético."
+    },
+    {
+      "id": "agrox-2t",
+      "nombre_ficha": "Agrox 2T",
+      "archivo_fuente": "AGROX_2T.pdf",
+      "categoria": "Motor 2 tiempos (equipos forestales)",
+      "tipo_base": "Sintético",
+      "evidencia_tipo_base": "Texto: 'Lubricante sintético para motores de 2 tiempos'; propiedades: 'El aceite full sintético Agrox 2T está diseñado para ser quemado en mezcla...'.",
+      "grados_sae_iso": [
+        "N/A (aceite 2T, dosificación por mezcla)"
+      ],
+      "uso_principal": "Motosierras, desbrozadoras, podadoras, sopladores y equipos forestales portátiles.",
+      "normas_cumplidas": {
+        "cumple": [
+          "ISO-L-EGD",
+          "JASO FD"
+        ],
+        "otros": [
+          "Apto para motosierras y motos de nieve"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 100 ml",
+        "Galón 3.785 L",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_kgL": 0.857,
+        "visc_40C_cSt": 61.3,
+        "visc_100C_cSt": 9.4,
+        "indice_viscosidad": 135,
+        "punto_inflamacion_C": 120,
+        "punto_fluidez_C": -33,
+        "color": "Azul"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000666",
+          "descripcion": "AGROX 2T SYNTHETIC DE 55 GL",
+          "presentacion": "55 GL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1001375",
+          "descripcion": "CAJ12 AGROX 2T SYNTHETIC DE 1 L",
+          "presentacion": "1 L",
+          "envase": "Frasco/Botella"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "air-compressor-oil",
+      "nombre_ficha": "Air Compressor Oil",
+      "archivo_fuente": "AIR-COMPRESSOR-OIL.pdf",
+      "categoria": "Industrial — Compresores de aire",
+      "tipo_base": "Mineral",
+      "evidencia_tipo_base": "Texto: 'Producto elaborado de aceites minerales y de aditivos de altísima calidad'.",
+      "grados_sae_iso": [
+        "ISO 32",
+        "ISO 46",
+        "ISO 68",
+        "ISO 100"
+      ],
+      "uso_principal": "Compresoras reciprocantes, cojinetes de bombas, generadores de turbina a vapor, transferencia de calor.",
+      "normas_cumplidas": {
+        "aprobaciones": [
+          "DIN 51506 VDL"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 0.946 L",
+        "Galón 3.785 L",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "32": 0.859,
+          "46": 0.866,
+          "68": 0.869,
+          "100": 0.874
+        },
+        "visc_40C_cSt": {
+          "32": 32,
+          "46": 46,
+          "68": 68,
+          "100": 100
+        },
+        "visc_100C_cSt": {
+          "32": 5.45,
+          "46": 6.9,
+          "68": 8.95,
+          "100": 11.3
+        },
+        "indice_viscosidad": {
+          "32": 105,
+          "46": 105,
+          "68": 105,
+          "100": 99
+        },
+        "punto_inflamacion_C": {
+          "32": 220,
+          "46": 230,
+          "68": 240,
+          "100": 250
+        },
+        "punto_fluidez_C": {
+          "32": -24,
+          "46": -24,
+          "68": -21,
+          "100": -18
+        },
+        "corrosion_cobre": "1b (todos los grados)"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000243",
+          "descripcion": "CAJ12 AIR COMPRESSOR OIL ISO 46 DE 1/4 GL",
+          "presentacion": "1/4 GL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000245",
+          "descripcion": "FRA AIR COMPRESSOR OIL ISO 46 DE 1/4 GL (unidad)",
+          "presentacion": "1/4 GL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000118",
+          "descripcion": "BAL AIR COMPRESSOR OIL 46 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "aquaoil-super-2t",
+      "nombre_ficha": "Aquaoil Super 2T (TC-W3)",
+      "archivo_fuente": "AQUAOIL-SUPER-2T.pdf",
+      "categoria": "Motor 2 tiempos (fuera de borda / marino)",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha (tecnología propia 'MARINELOWA', no declara sintético ni mineral)",
+      "evidencia_tipo_base": "Texto: 'Desarrollado con una formulación avanzada MARINELOWA (Low Ash Marine Technology)' — no incluye la palabra sintético ni mineral.",
+      "grados_sae_iso": [
+        "N/A (2T, dosificación por mezcla)"
+      ],
+      "uso_principal": "Motores 2T fuera de borda enfriados por agua; también motores 2T enfriados por aire (JASO FB/API TC).",
+      "normas_cumplidas": {
+        "cumple": [
+          "NMMA TC-W3",
+          "JASO FB",
+          "API TC"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal",
+        "Galón 3.785 L",
+        "Frasco 0.946 L (1/4 gal)",
+        "Frasco 0.473 L (1/8 gal)",
+        "Cojín 0.473 L (1/8 gal)"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.865,
+        "visc_40C_cSt": 48,
+        "visc_100C_cSt": 7.5,
+        "indice_viscosidad": 119,
+        "punto_inflamacion_C": 112,
+        "punto_fluidez_C": -30,
+        "cenizas_sulfatadas": "No detectado",
+        "color": "Azul"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000094",
+          "descripcion": "CAJ06 AQUAOIL SUPER 2T TC-W3 DE 1 GAL",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000224",
+          "descripcion": "CAJ12 AQUAOIL SUPER 2T TC-W3 DE 1/4 GL",
+          "presentacion": "1/4 GL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000027",
+          "descripcion": "CAJ30 AQUAOIL SUPER 2T TC-W3 DE 1/8 GL",
+          "presentacion": "1/8 GL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000019",
+          "descripcion": "CAJ75 AQUAOIL SUPER 2T TC-W3 DE 1/8 GL",
+          "presentacion": "1/8 GL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000225",
+          "descripcion": "FRA AQUAOIL SUPER 2T TC-W3 DE 1/4 GL (unidad)",
+          "presentacion": "1/4 GL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000028",
+          "descripcion": "FRA AQUAOIL SUPER 2T TC-W3 DE 1/8 GL (unidad)",
+          "presentacion": "1/8 GL",
+          "envase": "Frasco/Botella"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": true,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "atf-generico",
+      "nombre_ficha": "Aceite para Transmisión Automática — ATF (Tipo F)",
+      "archivo_fuente": "ATF.pdf",
+      "categoria": "ATF / Dirección hidráulica",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha",
+      "evidencia_tipo_base": "Ficha no declara tipo de base; describe solo 'aceites base de alta calidad'.",
+      "grados_sae_iso": [
+        "N/A (fluido Tipo F)"
+      ],
+      "uso_principal": "Transmisiones automáticas Tipo F, dirección asistida, aplicaciones hidráulicas. IMPORTANTE: NO usar donde se requiera fluido Dexron o Mercon.",
+      "normas_cumplidas": {
+        "oem": [
+          "Ford ESP/ESW M2C33F (Tipo F)",
+          "Ford ESP/ESW M2C-33G (Tipo G, Ford Europa/Japón 1980)",
+          "John Deere J-21A"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal",
+        "Galón 3.785 L",
+        "Frasco 0.946 L",
+        "Frasco 0.473 L"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.86,
+        "visc_40C_cSt": 42,
+        "visc_100C_cSt": 6.7,
+        "indice_viscosidad": 113,
+        "punto_inflamacion_C": 224,
+        "punto_fluidez_C": -25,
+        "color": "Rojo"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000045",
+          "descripcion": "CAJ12 TRANSMISION AUTOMATICA - ATF DE 1/4 GL",
+          "presentacion": "1/4 GL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000047",
+          "descripcion": "FRA TRANSMISION AUTOMATICA - ATF DE 1/4 GL (unidad)",
+          "presentacion": "1/4 GL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000010",
+          "descripcion": "BAL TRANSMISION AUTOMATICA - ATF DE 5 GL",
+          "presentacion": "5 GL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000102",
+          "descripcion": "CAJ06 TRANSMISION AUTOMATICA - ATF DE GLN",
+          "presentacion": "1 GLN",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000103",
+          "descripcion": "GL TRANSMISION AUTOMATICA - ATF DE GLN (unidad)",
+          "presentacion": "1 GLN",
+          "envase": "Galon"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "ALERTA DE MATCHING: este ATF genérico NO es compatible con especificaciones Dexron/Mercon — riesgo de error si se usa para un requerimiento que pida Dexron/Mercon.",
+      "alerta_tipo_base": true,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "brikson-hd-synth-atf-a8",
+      "nombre_ficha": "Brikson HD Synth ATF A8",
+      "archivo_fuente": "BRIKSON-HD-SYNTH-ATF-A8.pdf",
+      "categoria": "ATF (servicio pesado)",
+      "tipo_base": "100% sintético",
+      "evidencia_tipo_base": "Texto: 'fluido premium de transmisión automática totalmente sintético para vehículos comerciales de servicio pesado'.",
+      "grados_sae_iso": [
+        "N/A (ATF)"
+      ],
+      "uso_principal": "Transmisiones automáticas Allison de equipos pesados (camiones, buses), drenaje extendido.",
+      "normas_cumplidas": {
+        "homologacion": [
+          "Allison TES 668 (No. 668-10512024)"
+        ],
+        "compatible_con": [
+          "Allison TES 295",
+          "TES 389",
+          "TES 468"
+        ],
+        "otros": [
+          "Allison C4, C3",
+          "Ford XT-2-QDX",
+          "Ford XT-5-QM",
+          "GM D-IIIH/IIIG/IID",
+          "JASO M315 class 1-A",
+          "MB 236.92 (DFTR 13C190)",
+          "MB 236.9, 236.8",
+          "MAN 339 type V1, 339 D, 339 F",
+          "Volvo 97340/AT100",
+          "Volvo 97341/AT101",
+          "Voith H55.6335.xx",
+          "ZF TE-ML 21L",
+          "ZF TE-ML 11B"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_gml": 0.848,
+        "visc_40C": 33.3,
+        "visc_100C": 6.7,
+        "indice_viscosidad": 163,
+        "punto_inflamacion_C": 215,
+        "punto_fluidez_C": -51,
+        "color": "Rojo"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1001182",
+          "descripcion": "BRIKSON HD SYNTH ATF A8 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "brikson-md-iii",
+      "nombre_ficha": "ATF Brikson MD-III",
+      "archivo_fuente": "BRIKSON-MD-III-1.pdf",
+      "categoria": "ATF",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha",
+      "evidencia_tipo_base": "Texto: 'fluido con bases premium mejoradas' — no declara sintético ni mineral.",
+      "grados_sae_iso": [
+        "N/A (ATF)"
+      ],
+      "uso_principal": "Vehículos de pasajeros y comerciales que requieren Ford o Mercon; también Allison C-4.",
+      "normas_cumplidas": {
+        "cumple": [
+          "GM Dexron III H y anteriores IIIG, IIE, IID",
+          "Ford Mercon hasta 2005",
+          "Deninson HF-0",
+          "Allison TES 389",
+          "Allison C-4",
+          "ZF TE-ML 09"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 0.946 L",
+        "Frasco 1 L",
+        "Galón 3.785 L",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.853,
+        "visc_40C_cSt": 34.8,
+        "visc_100C_cSt": 7.2,
+        "indice_viscosidad": 178,
+        "punto_inflamacion_C": 212,
+        "punto_fluidez_C": -48,
+        "color": "Rojo"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000234",
+          "descripcion": "CAJ06 ATF BRIKSON III DE GAL",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000236",
+          "descripcion": "CAJ12 ATF BRIKSON III DE 1/4 GAL",
+          "presentacion": "1/4 GAL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000233",
+          "descripcion": "BAL ATF BRIKSON III DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000232",
+          "descripcion": "CIL ATF BRIKSON III DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000235",
+          "descripcion": "GL ATF BRIKSON III DE GAL (unidad)",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000237",
+          "descripcion": "FRA ATF BRIKSON III DE 1/4 GAL (unidad)",
+          "presentacion": "1/4 GAL",
+          "envase": "Frasco/Botella"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": true,
+      "alerta_sku": true,
+      "nota_sku": "⚠ MATCH PROBABLE, NO CONFIRMADO: la lista de precios usa el nombre comercial 'ATF BRIKSON III' (sin 'MD-'), mientras la ficha técnica se titula 'Brikson MD-III'. Se asume que es el mismo producto (mismo uso ATF Dexron III/Mercon/Allison C-4), pero JC debe confirmar que no son dos generaciones distintas del producto."
+    },
+    {
+      "id": "compressor-oil-rsp-synth",
+      "nombre_ficha": "Compressor Oil RSP Synth",
+      "archivo_fuente": "COMPRESSOR-OIL-RSP-SYNTH.pdf",
+      "categoria": "Industrial — Compresores de aire",
+      "tipo_base": "Sintético",
+      "evidencia_tipo_base": "Texto: 'COMPRESSOR OIL RSP SYNTH es un lubricante sintético para compresores de aire de desplazamiento positivo'.",
+      "grados_sae_iso": [
+        "ISO 32",
+        "ISO 46",
+        "ISO 68"
+      ],
+      "uso_principal": "Compresores reciprocantes de pistones, rotativos de tornillos o paletas, portátiles y estacionarios. No usar en equipos de aire para respiración ni médicos.",
+      "normas_cumplidas": {
+        "cumple": [
+          "DIN 51506 VDL"
+        ]
+      },
+      "presentaciones": [
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "32": 0.84,
+          "46": 0.845,
+          "68": 0.85
+        },
+        "visc_40C_cSt": {
+          "32": 32.0,
+          "46": 46.0,
+          "68": 68.0
+        },
+        "visc_100C_cSt": {
+          "32": 5.95,
+          "46": 7.65,
+          "68": 10.0
+        },
+        "indice_viscosidad": {
+          "32": 133,
+          "46": 134,
+          "68": 131
+        },
+        "punto_inflamacion_C": {
+          "32": 220,
+          "46": 230,
+          "68": 240
+        },
+        "punto_fluidez_C": {
+          "32": -39,
+          "46": -36,
+          "68": -36
+        },
+        "separacion_agua_min": 15,
+        "espuma": "10/0"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000300",
+          "descripcion": "BAL COMPRESSOR SYNTHETIC 46 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "draula-h-t",
+      "nombre_ficha": "Draula-H T",
+      "archivo_fuente": "DRAULA-H-T-2.pdf",
+      "categoria": "Hidráulico antidesgaste (AW)",
+      "tipo_base": "Mineral parafínico (bases parafínicas Grupo II)",
+      "evidencia_tipo_base": "Texto: 'elaborado con bases parafínicas grupo II de alta calidad' — no declara sintético.",
+      "grados_sae_iso": [
+        "ISO VG 32",
+        "ISO VG 46",
+        "ISO VG 68"
+      ],
+      "uso_principal": "Sistemas hidráulicos y transmisión de potencia; bombas de paletas, bombas axiales de pistón bronce-acero, transmisiones hidrostáticas, servo-válvulas, winches. NO usar en equipos con componentes de plata (aditivo AW con zinc).",
+      "normas_cumplidas": {
+        "cumple": [
+          "Bosch Rexroth RDE 90235",
+          "Parker(ex Denison) HF-0/HF-1/HF-2 (HM,HV)",
+          "Eaton E-FDGN-TB002-E",
+          "Fives P68/P69/P70 (HM,HV)",
+          "DIN 51524-2 (HLP); DIN 51524-3 (HVLP)",
+          "ISO 11158 (HM,HV)",
+          "GB 11118.1-2011 (L-HL,HM,HV,HS)",
+          "ASTM D6158 (HM,HV)",
+          "SAE MS 1004 (HM,HV)",
+          "JCMAS P041 HK",
+          "GM LS-2",
+          "AIST 126, 127",
+          "SEB 181222"
+        ]
+      },
+      "presentaciones": [
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "32": 0.849,
+          "46": 0.862,
+          "68": 0.872
+        },
+        "visc_40C_cSt": {
+          "32": 32.0,
+          "46": 46.0,
+          "68": 68.0
+        },
+        "visc_100C_cSt": {
+          "32": 6.6,
+          "46": 8.5,
+          "68": 10.1
+        },
+        "indice_viscosidad": {
+          "32": 165,
+          "46": 165,
+          "68": 155
+        },
+        "punto_inflamacion_C": {
+          "32": 210,
+          "46": 220,
+          "68": 230
+        },
+        "punto_fluidez_C": {
+          "32": -36,
+          "46": -36,
+          "68": -33
+        },
+        "fzg_etapa_minima": "12 (46, 68)"
+      },
+      "sku_rmg": null,
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": true,
+      "nota_sku": "SIN SKU ASIGNADO: la lista de precios solo usa el nombre 'DRAULA H' (sin sufijo 'T') para los grados ISO 32/46/68, y esos SKUs ya se asignaron al producto hermano 'draula-h'. Como la ficha 'Draula-H T' (bases parafínicas Grupo II) y 'Draula-H' (bases parafínicas, sin especificar grupo) son dos fichas técnicas distintas pero con nombres casi idénticos, NO se fuerza un SKU para 'Draula-H T' hasta que JC confirme si son el mismo producto o si la lista de precios solo vende una de las dos versiones."
+    },
+    {
+      "id": "draula-h",
+      "nombre_ficha": "Draula-H",
+      "archivo_fuente": "DRAULA-H.pdf",
+      "categoria": "Hidráulico antidesgaste (AW)",
+      "tipo_base": "Mineral parafínico",
+      "evidencia_tipo_base": "Texto: 'Fluido hidráulico antidesgaste (AW) elaborado con bases parafínicas de alta calidad' — no declara sintético.",
+      "grados_sae_iso": [
+        "ISO VG 32",
+        "ISO VG 46",
+        "ISO VG 68",
+        "ISO VG 100"
+      ],
+      "uso_principal": "Sistemas hidráulicos y transmisión de potencia móviles y estacionarios; bombas axiales de pistón bronce-acero, transmisiones hidrostáticas.",
+      "normas_cumplidas": {
+        "cumple": [
+          "Bosch Rexroth RDE 90235",
+          "Parker(ex Denison) HF-0/HF-1/HF-2 (HM,HV)",
+          "Eaton E-FDGN-TB002-E",
+          "Fives P68/P69/P70 (HM,HV)",
+          "DIN 51524-2 (HLP)",
+          "ISO 11158 (HM)",
+          "GB 11118.1-2011 (L-HL,HM,HV,HS)",
+          "ASTM D6158 (HM,HV)",
+          "SAE MS 1004 (HM,HV)",
+          "JCMAS P041 HK",
+          "GM LS-2",
+          "AIST 126, 127",
+          "SEB 181222"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 3.785 L (1 gal)",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "32": 0.859,
+          "46": 0.866,
+          "68": 0.8695,
+          "100": 0.8745
+        },
+        "visc_40C_cSt": {
+          "32": 32.0,
+          "46": 46.0,
+          "68": 68.0,
+          "100": 100.0
+        },
+        "visc_100C_cSt": {
+          "32": 5.45,
+          "46": 6.9,
+          "68": 8.95,
+          "100": 11.3
+        },
+        "indice_viscosidad": {
+          "32": 105,
+          "46": 105,
+          "68": 105,
+          "100": 99
+        },
+        "punto_inflamacion_C": {
+          "32": 220,
+          "46": 230,
+          "68": 240,
+          "100": 250
+        },
+        "punto_fluidez_C": {
+          "32": -24,
+          "46": -24,
+          "68": -21,
+          "100": -18
+        }
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000738",
+          "descripcion": "BAL DRAULA H 68 DE 5 GL",
+          "presentacion": "5 GL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000740",
+          "descripcion": "CIL DRAULA H 68 DE 55GL",
+          "presentacion": "55 GL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000786",
+          "descripcion": "LIT DRAULA H 68",
+          "presentacion": "1 L",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000087",
+          "descripcion": "BAL DRAULA H 32 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000112",
+          "descripcion": "CIL DRAULA H32 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000083",
+          "descripcion": "BAL DRAULA H 46 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000110",
+          "descripcion": "CIL DRAULA H46 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "draulacat",
+      "nombre_ficha": "Draulacat",
+      "archivo_fuente": "DRAULACAT-1.pdf",
+      "categoria": "Transmisión/hidráulico equipos pesados (línea amarilla)",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha (aceites refinados y aditivos importados de alta tecnología)",
+      "evidencia_tipo_base": "Ficha describe 'aceites refinados y aditivos importados de alta tecnología' — no usa la palabra sintético ni mineral.",
+      "grados_sae_iso": [
+        "SAE 10W",
+        "SAE 30",
+        "SAE 50"
+      ],
+      "uso_principal": "Equipos de línea amarilla (minería/agricultura/construcción): mandos finales, diferenciales, convertidores de torque, sistemas hidráulicos. 10W/30 para sistemas hidráulicos móviles; 50 para transmisiones finales.",
+      "normas_cumplidas": {
+        "cumple": [
+          "Caterpillar TO-4",
+          "Allison C-4",
+          "ZF TE-ML 03C",
+          "ZF TE-ML 07F",
+          "Dana Powershift",
+          "Komatsu KES 07.868.1",
+          "API MT-1",
+          "API CF/CF-2 (CAT 1-M PC)"
+        ]
+      },
+      "presentaciones": [
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "10W": 0.8715,
+          "30": 0.881,
+          "50": 0.8925
+        },
+        "visc_40C_cSt": {
+          "10W": 39.25,
+          "30": 95.35,
+          "50": 210.9
+        },
+        "visc_100C_cSt": {
+          "10W": 6.29,
+          "30": 11.02,
+          "50": 18.77
+        },
+        "indice_viscosidad": {
+          "10W": 108,
+          "30": 100,
+          "50": 99
+        },
+        "tbn_mgKOHg": {
+          "10W": 8.5,
+          "30": 8.6,
+          "50": 8.9
+        },
+        "punto_inflamacion_C": {
+          "10W": 227,
+          "30": 235,
+          "50": 248
+        },
+        "punto_fluidez_C": {
+          "10W": -27,
+          "30": -24,
+          "50": -21
+        }
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000157",
+          "descripcion": "BAL DRAULACAT TO-4 SAE 30 DE 5 GL",
+          "presentacion": "5 GL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000133",
+          "descripcion": "BAL DRAULACAT TO-4 SAE 50 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000155",
+          "descripcion": "BAL DRAULACAT TO-4 SAE 10W DE 5 GL",
+          "presentacion": "5 GL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000154",
+          "descripcion": "CIL DRAULACAT TO-4 SAE 50 DE 55 GL",
+          "presentacion": "55 GL",
+          "envase": "Tambor/Cilindro"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": true,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "forza-plus-15w40",
+      "nombre_ficha": "Forza Plus SAE 15W-40",
+      "archivo_fuente": "FORZA-PLUS-15W40.pdf",
+      "categoria": "Motor diésel (pesado)",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha (bases especiales balanceadas — no declara sintético ni mineral)",
+      "evidencia_tipo_base": "Texto: 'Elaborado con bases especiales perfectamente balanceadas y aditivos de última tecnología' — ambigüedad deliberada de Vistony, NO asumir sintético.",
+      "grados_sae_iso": [
+        "15W-40"
+      ],
+      "uso_principal": "Motores diésel modernos 4T alta velocidad, turbo/EGR, americano/asiático/europeo, incluye equipos antiguos.",
+      "normas_cumplidas": {
+        "licenciado_para": [
+          "API CI-4",
+          "API SL"
+        ],
+        "clasificacion": [
+          "API CI-4 PLUS"
+        ],
+        "secuencia_europea": [
+          "ACEA E7-12"
+        ],
+        "asiatica": [
+          "JASO DHD-1",
+          "Global DHD-1"
+        ],
+        "oem": [
+          "Mercedes Benz MB 228.3",
+          "Volvo VDS-3/VDS-2/MTU Tipo2",
+          "Mack EO-M Plus/EO-N",
+          "Cummins CES 20077/20078",
+          "Caterpillar ECF-2",
+          "Renault RLD-2",
+          "MAN 3275",
+          "Deutz DCQ-III",
+          "Detroit Diesel DDC 93K215"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 1/4 gal",
+        "Balde 2.5 gal",
+        "Galón 3.785 L",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": "máx 0.882",
+        "visc_40C_cSt": 115.0,
+        "visc_100C_cSt": 15.0,
+        "indice_viscosidad": 136,
+        "tbn_mgKOHg": 11.6,
+        "ccs_cP": "6200 @-20C",
+        "punto_inflamacion_C": 225,
+        "punto_fluidez_C": -39,
+        "cenizas_sulfatadas_pct": 1.3,
+        "gravedad_api": 29.88
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000411",
+          "descripcion": "BAL FORZA PLUS SAE 15W40 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000409",
+          "descripcion": "CAJ06 FORZA PLUS SAE 15W40 DE 1 GAL",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000412",
+          "descripcion": "CIL FORZA PLUS SAE 15W40 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000407",
+          "descripcion": "CAJ12 FORZA PLUS SAE 15W40 DE 1/4 GAL",
+          "presentacion": "1/4 GAL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000408",
+          "descripcion": "FRA FORZA PLUS SAE 15W40 DE 1/4 GAL (unidad)",
+          "presentacion": "1/4 GAL",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000410",
+          "descripcion": "GL FORZA PLUS SAE 15W40 DE 1 GAL (unidad)",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": true,
+      "alerta_sku": true,
+      "nota_sku": "🚩 DISCREPANCIA: la lista de precios categoriza estos SKUs como '5W40 sintetico', pero la ficha de Forza Plus NO declara tipo de base (ver alerta_tipo_base) -- no hay evidencia textual de que sea sintético. No se debe asumir sintético solo porque la lista de precios lo categoriza así."
+    },
+    {
+      "id": "forza-turbo-25w50",
+      "nombre_ficha": "Forza Turbo SAE 25W-50 API CF-4/CF",
+      "archivo_fuente": "FORZA-TURBO-25W50.pdf",
+      "categoria": "Motor diésel (pesado)",
+      "tipo_base": "Mineral",
+      "evidencia_tipo_base": "Texto: 'Aceite multigrado mineral de alta viscosidad'.",
+      "grados_sae_iso": [
+        "25W-50"
+      ],
+      "uso_principal": "Motores diésel origen americano/europeo/asiático, turbo y aspiración natural, servicio severo.",
+      "normas_cumplidas": {
+        "cumple_y_excede": [
+          "API CF-4/CF"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 1 L",
+        "Frasco 1/4 gal",
+        "Envase 1 gal",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.881,
+        "visc_40C_cSt": 176.0,
+        "visc_100C_cSt": 19.3,
+        "indice_viscosidad": 125,
+        "tbn_mgKOHg": 10,
+        "ccs_cP": "6500 @-10C",
+        "punto_inflamacion_C": 250,
+        "punto_fluidez_C": -21
+      },
+      "sku_rmg": null,
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": true,
+      "nota_sku": "SIN SKU ASIGNADO: no se encontró ningún producto 'FORZA TURBO' en la lista de precios (sí existe 'FORZA TRUCK SAE 20W-50', pero es un nombre y grado distinto -- no se fuerza el match). Posible que este producto no esté actualmente en el catálogo de venta de RMG."
+    },
+    {
+      "id": "forza-ultra-d",
+      "nombre_ficha": "Forza Ultra D SAE 30/40/50",
+      "archivo_fuente": "FORZA-ULTRA-D.pdf",
+      "categoria": "Motor diésel",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha (bases minerales típicas del segmento; ficha no usa la palabra 'mineral' ni 'sintético')",
+      "evidencia_tipo_base": "Ficha no declara el tipo de base explícitamente; describe solo 'alta retención de TBN' y aditivos.",
+      "grados_sae_iso": [
+        "SAE 30",
+        "SAE 40",
+        "SAE 50"
+      ],
+      "uso_principal": "Motores diésel turbo y aspiración natural, ligero a pesado, alto contenido de azufre en combustible (>0.5%).",
+      "normas_cumplidas": {
+        "cumple": [
+          "API CF-4",
+          "CF-2",
+          "CF",
+          "SJ",
+          "SG",
+          "SF"
+        ],
+        "secuencia_europea": [
+          "ACEA E2, A2, B2"
+        ],
+        "oem": [
+          "Mercedes Benz MB 228.1(p)",
+          "Volvo VDS",
+          "MAN 2761"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 1/4 gal",
+        "Galón 3.785 L",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_kgL": {
+          "30": 0.87,
+          "40": 0.88,
+          "50": 0.885
+        },
+        "visc_40C_cSt": {
+          "30": 98.41,
+          "40": 165,
+          "50": 235
+        },
+        "visc_100C_cSt": {
+          "30": 11.5,
+          "40": 14.7,
+          "50": 17.7
+        },
+        "indice_viscosidad": {
+          "30": 104,
+          "40": 103,
+          "50": 102
+        },
+        "tbn_mgKOHg": {
+          "30": 6.5,
+          "40": 6.8,
+          "50": 6.8
+        },
+        "punto_inflamacion_C": {
+          "30": 228,
+          "40": 230,
+          "50": 238
+        },
+        "punto_fluidez_C": {
+          "30": -19,
+          "40": -18,
+          "50": -15
+        }
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000443",
+          "descripcion": "BAL FORZA ULTRA D SAE 30 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000421",
+          "descripcion": "BAL FORZA ULTRA D SAE 50 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000422",
+          "descripcion": "CIL FORZA ULTRA D SAE 50 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000455",
+          "descripcion": "BAL FORZA ULTRA D SAE 40 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000453",
+          "descripcion": "CIL FORZA ULTRA D SAE 40 API CF-4 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": true,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "forza-vis-25w60",
+      "nombre_ficha": "Forza VIS SAE 25W-60 API CF-4",
+      "archivo_fuente": "FORZA-VIS-25W60.pdf",
+      "categoria": "Motor diésel",
+      "tipo_base": "Mineral",
+      "evidencia_tipo_base": "Texto: 'Lubricante mineral multigrado con bases minerales altamente refinadas'.",
+      "grados_sae_iso": [
+        "25W-60"
+      ],
+      "uso_principal": "Motores diésel 4T turbo/NA con alto recorrido o excesivo consumo de aceite; camiones, buses, transporte urbano/interprovincial.",
+      "normas_cumplidas": {
+        "cumple_y_excede": [
+          "API CF-4"
+        ]
+      },
+      "presentaciones": [
+        "Frasco 1/4 gal",
+        "Envase 1 gal",
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.8921,
+        "visc_40C_cSt": 269.1,
+        "visc_100C_cSt": 24.69,
+        "indice_viscosidad": 118,
+        "ccs_cP": "9000 @-10C",
+        "punto_inflamacion_C": 250,
+        "punto_fluidez_C": -21,
+        "tbn_mgKOHg": 10.0
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000440",
+          "descripcion": "BAL FORZA VIS SAE 25W60 API CF-4 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000399",
+          "descripcion": "GL FORZA VIS SAE 25W60 API CF-4 DE 1 GAL (unidad)",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000398",
+          "descripcion": "CAJ06 FORZA VIS SAE 25W60 API CF-4 DE 1 GAL",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000451",
+          "descripcion": "CIL FORZA VIS SAE 25W60 API CF-4 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "gear-oil-synthetic",
+      "nombre_ficha": "Gear Oil Synthetic SAE 75W-90",
+      "archivo_fuente": "GEAR-OIL-SYNTHETIC.pdf",
+      "categoria": "Transmisión/engranajes (eje diferencial)",
+      "tipo_base": "Sintético",
+      "evidencia_tipo_base": "Texto: 'Gear Oil Synthetic es un lubricante sintético de alto rendimiento para cajas manuales y ejes de última generación'.",
+      "grados_sae_iso": [
+        "75W-90"
+      ],
+      "uso_principal": "Ejes diferenciales hipoidales, transmisiones no sincronizadas, extrema carga (buses/camiones servicio pesado).",
+      "normas_cumplidas": {
+        "cumple_y_excede": [
+          "API GL-5",
+          "SAE J2360",
+          "API MT-1",
+          "Mack GO-J",
+          "Scania STO 1:0",
+          "Scania STO 2:0 A",
+          "ZF TE-ML 07A",
+          "ZF TE-ML 08",
+          "Meritor O-76 N"
+        ]
+      },
+      "presentaciones": [
+        "Balde 5 gal",
+        "Cilindro 55 gal",
+        "Galón 3.785 L",
+        "Frasco 1 L"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.86,
+        "visc_40C_cSt": 85.0,
+        "visc_100C_cSt": 15.5,
+        "indice_viscosidad": 194,
+        "punto_inflamacion_C": 220,
+        "punto_fluidez_C": -45
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000588",
+          "descripcion": "CAJ12 GEAR OIL SYNTHETIC API GL-5 SAE J2360 75W-90 DE 1L",
+          "presentacion": "1 L",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000589",
+          "descripcion": "FRA GEAR OIL SYNTHETIC API GL-5 SAE J2360 75W-90 DE 1L (unidad)",
+          "presentacion": "1 L",
+          "envase": "Frasco/Botella"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "gear-oil-gl5",
+      "nombre_ficha": "Gear Oil API GL-5 (mineral)",
+      "archivo_fuente": "GEAR-OIL.pdf",
+      "categoria": "Transmisión/engranajes",
+      "tipo_base": "Mineral",
+      "evidencia_tipo_base": "Texto: 'Gear Oil es un lubricante mineral multigrado de alto rendimiento para engranajes automotrices'.",
+      "grados_sae_iso": [
+        "80W-90",
+        "85W-140"
+      ],
+      "uso_principal": "Transmisiones, cajas de cambio mecánicas, cajas de transferencia, diferenciales hipoidales, buses/camiones servicio pesado. NO aplicar en diferenciales autoblocantes o LS.",
+      "normas_cumplidas": {
+        "cumple": [
+          "AGMA 250.04",
+          "API GL-5",
+          "MIL-L-2105D",
+          "MAN 342N-M2/M1",
+          "ZF TE-ML 05A/07A/12E/16B C&D 17B",
+          "ZF TE-ML 19B y 21A",
+          "AISE 224 (ex US Steel 224)",
+          "Volvo 1273.10",
+          "Scania STO 1:0"
+        ]
+      },
+      "presentaciones": [
+        "Balde 5 gal",
+        "Cilindro 55 gal",
+        "Envase 1 gal",
+        "Frasco 1/4 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "80W90": 0.888,
+          "85W140": 0.898
+        },
+        "visc_40C_cSt": {
+          "80W90": 168.7,
+          "85W140": 375.0
+        },
+        "visc_100C_cSt": {
+          "80W90": 15.95,
+          "85W140": 26.5
+        },
+        "indice_viscosidad": {
+          "80W90": 97,
+          "85W140": 95
+        },
+        "punto_inflamacion_C": {
+          "80W90": 225,
+          "85W140": 235
+        },
+        "punto_fluidez_C": {
+          "80W90": -24,
+          "85W140": -15
+        }
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000130",
+          "descripcion": "CAJ12 GEAR OIL GL-5 SAE 80W90 DE 0.946 LT",
+          "presentacion": "0.946 LT",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000127",
+          "descripcion": "CAJ12 GEAR OIL GL-5 SAE 85W140 DE 0.946 LT",
+          "presentacion": "0.946 LT",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000142",
+          "descripcion": "CIL GEAR OIL GL-5 SAE 85W140 DE 55 GL",
+          "presentacion": "55 GL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000143",
+          "descripcion": "CIL GEAR OIL GL-5 SAE 80W90 DE 55 GL",
+          "presentacion": "55 GL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000140",
+          "descripcion": "BAL GEAR OIL GL-5 SAE 85W140 DE 5 GL",
+          "presentacion": "5 GL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000139",
+          "descripcion": "BAL GEAR OIL GL-5 SAE 80W90 DE 5 GL",
+          "presentacion": "5 GL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000135",
+          "descripcion": "CAJ06 GEAR OIL GL-5 SAE 80W90 DE 1 GAL",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000137",
+          "descripcion": "CAJ06 GEAR OIL GL-5 SAE 85W140 DE GAL",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000129",
+          "descripcion": "FRA GEAR OIL GL-5 SAE 85W140 DE 0.946 LT (unidad)",
+          "presentacion": "0.946 LT",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000132",
+          "descripcion": "FRA GEAR OIL GL-5 SAE 80W90 DE 0.946 LT (unidad)",
+          "presentacion": "0.946 LT",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000136",
+          "descripcion": "GL GEAR OIL GL-5 SAE 80W90 DE 1 GAL (unidad)",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000138",
+          "descripcion": "GL GEAR OIL GL-5 SAE 85W140 DE GAL (unidad)",
+          "presentacion": "1 GAL",
+          "envase": "Galon"
+        },
+        {
+          "sku": "1000206",
+          "descripcion": "CHI GL5 GEAR OIL DE 207 ML",
+          "presentacion": "207 ML",
+          "envase": "Frasco chico"
+        },
+        {
+          "sku": "1000205",
+          "descripcion": "CAJ24 GL5 GEAR OIL DE 207 ML",
+          "presentacion": "207 ML",
+          "envase": "Sachet/Spray"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "OJO: existe también 'Gear Oil Synthetic' (75W-90, sintético) — no confundir ambos productos que comparten nombre base 'Gear Oil'.",
+      "alerta_tipo_base": false,
+      "alerta_sku": true,
+      "nota_sku": "Nota: en la lista de precios existe además el SKU 1000299/1000135 'GEAR OIL GL-5 SAE 75W90' (balde 5 gal) que NO corresponde a ningún grado cubierto por esta ficha (que solo declara 80W-90 y 85W-140). No se incluyó ese SKU aquí -- podría ser un grado adicional del mismo producto que Vistony no publicó en esta ficha, o un rotulado distinto. Requiere revisión de JC."
+    },
+    {
+      "id": "muturrol",
+      "nombre_ficha": "Muturrol",
+      "archivo_fuente": "MUTURROL.pdf",
+      "categoria": "Metalmecánica — aceite de corte emulsionable",
+      "tipo_base": "Emulsionable en agua (no aplica clasificación sintético/mineral tradicional; base mineral)",
+      "evidencia_tipo_base": "Texto: 'Aceite emulsionable en agua; desarrollado para satisfacer las operaciones de corte'. Relación recomendada agua/aceite 20:1.",
+      "grados_sae_iso": [
+        "N/A"
+      ],
+      "uso_principal": "Torneado, taladrado, fresado, embutido, deformación en frío/caliente; compatible con aleaciones de aluminio y agua dura.",
+      "normas_cumplidas": {},
+      "presentaciones": [
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.8816,
+        "visc_40C_cSt": 32,
+        "visc_100C_cSt": 5.3,
+        "indice_viscosidad": 96,
+        "punto_inflamacion_C": 200,
+        "punto_fluidez_C_max": -6,
+        "color": "Pardo"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000017",
+          "descripcion": "CIL MUTURROL DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000009",
+          "descripcion": "BAL MUTURROL DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "rockdur-oil",
+      "nombre_ficha": "Rockdur Oil",
+      "archivo_fuente": "ROCKDUR-OIL.pdf",
+      "categoria": "Herramientas neumáticas",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha",
+      "evidencia_tipo_base": "Ficha no declara tipo de base.",
+      "grados_sae_iso": [
+        "ISO 100",
+        "ISO 150"
+      ],
+      "uso_principal": "Herramientas neumáticas de percusión, martillos neumáticos, rompe pavimentos, perforación de rocas, minería y construcción.",
+      "normas_cumplidas": {},
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "visc_40C_cSt": {
+          "100": 100,
+          "150": 150
+        },
+        "visc_100C_cSt": {
+          "100": 11,
+          "150": 14.6
+        },
+        "indice_viscosidad": {
+          "100": 94,
+          "150": 96
+        },
+        "punto_inflamacion_C": {
+          "100": 200,
+          "150": 200
+        },
+        "punto_fluidez_C": {
+          "100": -20,
+          "150": -20
+        },
+        "densidad_15C_kgL": {
+          "100": 0.888,
+          "150": 0.89
+        },
+        "color": "Ámbar"
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000161",
+          "descripcion": "BAL ROKDUR OIL 100 DE 5 GL (nota: en la lista de precios aparece escrito 'ROKDUR', sin la 'c')",
+          "presentacion": "5 GL",
+          "envase": "Balde"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "Nota de catálogo Vistony: bug de slug del sitio — la URL pública '/texvac/' muestra en realidad el contenido de Rockdur Oil (ya documentado en RMG_Base_Conocimiento_Productos_Vistony.md). No confundir con TEXVAC real (aceite para guías y correderas).",
+      "alerta_tipo_base": true,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "trakoil",
+      "nombre_ficha": "Trakoil (UTTO) SAE 10W-30",
+      "archivo_fuente": "TRAKOIL-1.pdf",
+      "categoria": "Transmisión/hidráulico multifuncional (agrícola)",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha (aceite refinado con avanzado paquete de aditivos — no declara sintético ni mineral)",
+      "evidencia_tipo_base": "Ficha describe 'un aceite refinado y un avanzado paquete de aditivos' sin declarar tipo de base.",
+      "grados_sae_iso": [
+        "10W-30"
+      ],
+      "uso_principal": "UTTO multifuncional: transmisiones, sistemas hidráulicos, frenos húmedos, mandos de equipos agrícolas y de construcción en condiciones severas.",
+      "normas_cumplidas": {
+        "sistema_transmision": [
+          "Allison C-4",
+          "Caterpillar TO-2",
+          "Case New Holland MAT 3526/3525/3510",
+          "Fiat-Hesston AF-87",
+          "Ford FNH-2-C-200,C201,M2CA-C",
+          "Ford M2C-41,43,48B,53A,B,77A,92A,142A,143,159A",
+          "Ford FNHA-2-C-200,C201,M2CA-C",
+          "Ford M2C86A,B,C",
+          "Ford M2C134A-D",
+          "International Harvester IHC B-5",
+          "J.I. Case/Case Int MS-1204,6,7,9",
+          "JIC 143-145 International Farmall",
+          "John Deere J14A-C,JTD303,J121A",
+          "John Deere J20D,C,B,A",
+          "Kubota UDT",
+          "Massey Ferguson M1145,M1143,M1141,M1138,M1135",
+          "Renk Doromat 87.3.874A/B",
+          "White Q-1826"
+        ],
+        "sistema_hidraulico": [
+          "JCMAS HK P-041, P-042",
+          "Parker(Denison UTTO) HF-1 to HF-2",
+          "Sauer Sunstrand/Danfoss",
+          "Sperry Vicker/Eaton M2950S",
+          "Sperry Vicker/Eaton I-280-S",
+          "Sauer Sunstrand/Danfoss S: Hydrostatic Trans Fluid"
+        ],
+        "frenos_humedos": [
+          "API GL-4",
+          "Volvo WB101 (VCE97303)"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.8685,
+        "visc_40C_cSt": 69.0,
+        "visc_100C_cSt": 10.65,
+        "indice_viscosidad": 143,
+        "ccs_cP": "<7000 @-25C",
+        "punto_inflamacion_C": 224,
+        "punto_fluidez_C": -36
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000153",
+          "descripcion": "CIL TRAKOIL 10W30 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        },
+        {
+          "sku": "1000105",
+          "descripcion": "BAL TRAKOIL 10W30 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": true,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "transfer-termico",
+      "nombre_ficha": "Transfer Térmico",
+      "archivo_fuente": "TRANSFER-TERMICO.pdf",
+      "categoria": "Fluido de transferencia de calor",
+      "tipo_base": "Mineral",
+      "evidencia_tipo_base": "Texto: 'Fluidos térmicos a base de aceite minerales altamente refinados'.",
+      "grados_sae_iso": [
+        "ISO 22",
+        "ISO 32",
+        "ISO 46",
+        "ISO 68"
+      ],
+      "uso_principal": "Sistemas de transferencia de calor abierto o cerrado (calderas); tratamientos térmicos (templado/revenido) de piezas metálicas. Temp. máx. sistemas cerrados: ISO22=280°C, ISO32/46=310°C, ISO68=260°C; sistemas abiertos: 180°C.",
+      "normas_cumplidas": {},
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "22": 0.8518,
+          "32": 0.855,
+          "46": 0.87,
+          "68": 0.867
+        },
+        "visc_40C_cSt": {
+          "22": 23.1,
+          "32": 32,
+          "46": 45.6,
+          "68": 68.16
+        },
+        "visc_100C_cSt": {
+          "22": 4.4,
+          "32": 5.1,
+          "46": 6.6,
+          "68": 8.76
+        },
+        "indice_viscosidad": {
+          "22": 98,
+          "32": 110,
+          "46": 113,
+          "68": 100
+        },
+        "punto_inflamacion_C": {
+          "22": 210,
+          "32": 220,
+          "46": 232,
+          "68": 247
+        },
+        "punto_fluidez_C_max": {
+          "22": -30,
+          "32": -30,
+          "46": -30,
+          "68": -33
+        }
+      },
+      "sku_rmg": null,
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": false,
+      "alerta_sku": true,
+      "nota_sku": "SIN SKU ASIGNADO: no se encontró ningún producto con nombre 'Transfer Térmico' ni similar en la lista de precios. Posible que este producto no esté actualmente en el catálogo de venta de RMG."
+    },
+    {
+      "id": "transmec-dual-gl4",
+      "nombre_ficha": "Transmec Dual GL-4 (mineral)",
+      "archivo_fuente": "TRANSMEC-DUAL-1.pdf",
+      "categoria": "Transmisión mecánica (cajas manuales)",
+      "tipo_base": "Mineral",
+      "evidencia_tipo_base": "Texto: 'Es un lubricante mineral para transmisión mecánica, elaborado con aceites base hidrotratadas'.",
+      "grados_sae_iso": [
+        "80W-90",
+        "90",
+        "140",
+        "250"
+      ],
+      "uso_principal": "Cajas de cambio manuales, transmisiones con sincronizadores, carga ligera y alta velocidad, vehículos de pasajeros/buses/camiones; engranajes de metales amarillos.",
+      "normas_cumplidas": {
+        "clasificacion": [
+          "API GL-4"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal",
+        "Envase 1 gal",
+        "Envase 1/4 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "80W90": 0.885,
+          "90": 0.886,
+          "140": 0.899,
+          "250": 0.9225
+        },
+        "visc_40C_cSt": {
+          "80W90": 175,
+          "90": 181,
+          "140": 415,
+          "250": 859
+        },
+        "visc_100C_cSt": {
+          "80W90": 16.15,
+          "90": 16.5,
+          "140": 28.5,
+          "250": 43
+        },
+        "indice_viscosidad": {
+          "80W90": 95,
+          "90": 95,
+          "140": 95,
+          "250": 90
+        },
+        "punto_inflamacion_C": {
+          "80W90": 230,
+          "90": 235,
+          "140": 250,
+          "250": 275
+        },
+        "punto_fluidez_C": {
+          "80W90": -24,
+          "90": -18,
+          "140": -12,
+          "250": -9
+        }
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000340",
+          "descripcion": "BAL TRANSMISION TRANSMEC DUAL GL-4 250 X 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000310",
+          "descripcion": "CIL ACEITE TRANSMEC API GL-4 SAE 80W90 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "OJO: NO confundir con 'Transmec Synthetic GL-4' (sintético, 75W-90) — nombres muy similares, tipos de base opuestos.",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "transmec-synthetic-gl4",
+      "nombre_ficha": "Transmec Synthetic GL-4",
+      "archivo_fuente": "TRANSMEC-SYNTHETIC.pdf",
+      "categoria": "Transmisión mecánica (cajas manuales)",
+      "tipo_base": "Sintético",
+      "evidencia_tipo_base": "Texto: 'Lubricante sintético, altamente termoestable, conteniendo aditivos EP'.",
+      "grados_sae_iso": [
+        "75W-90"
+      ],
+      "uso_principal": "Transmisiones manuales, transeje, ejes automotrices (autos, camionetas, servicio ligero/pesado). Especificado por autos americanos y asiáticos (Hyundai, Kia).",
+      "normas_cumplidas": {
+        "cumple": [
+          "API GL-4"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal",
+        "Envase 1 gal",
+        "Frasco 1/4 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": 0.8529,
+        "visc_40C_cSt": 105.2,
+        "visc_100C_cSt": 14.75,
+        "indice_viscosidad": 145,
+        "punto_inflamacion_C": 235,
+        "punto_fluidez_C": -45
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000618",
+          "descripcion": "CAJ12 TRANSMEC SYNTHETIC API GL-4 SAE 75W90 DE 1L",
+          "presentacion": "1 L",
+          "envase": "Frasco/Botella"
+        },
+        {
+          "sku": "1000897",
+          "descripcion": "BAL TRANSMEC SYNTHETIC SAE 75W90 DE 5 GAL",
+          "presentacion": "5 GAL",
+          "envase": "Balde"
+        },
+        {
+          "sku": "1000619",
+          "descripcion": "FRA TRANSMEC SYNTHETIC API GL-4 SAE 75W90 DE 1L (unidad)",
+          "presentacion": "1 L",
+          "envase": "Frasco/Botella"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "OJO: NO confundir con 'Transmec Dual GL-4' (mineral, 80W-90/90/140/250).",
+      "alerta_tipo_base": false,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "turbinium-t",
+      "nombre_ficha": "Turbinium T",
+      "archivo_fuente": "TURBINIUM-T.pdf",
+      "categoria": "Industrial — Turbinas / Circulación",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha (aceite tipo R&O; no declara sintético ni mineral)",
+      "evidencia_tipo_base": "Texto: 'Lubricante Premium de tipo R&O para turbinas de vapor y gas industriales' — no menciona base sintética ni mineral.",
+      "grados_sae_iso": [
+        "ISO 46",
+        "ISO 68"
+      ],
+      "uso_principal": "Turbinas de vapor/gas industriales (particularmente turbinas de gas ligeras sin engranajes), cojinetes de máquinas de vapor, turbocompresores, protección anticorrosiva en almacenamiento prolongado (hasta 1 año).",
+      "normas_cumplidas": {
+        "cumple": [
+          "DIN 51515-1 TD (ISO 32,46,68,100,150)",
+          "GEK 325686",
+          "GEK 46506e (*)",
+          "MAG Cincinnati P-38 (ISO32)/P-55 (ISO46)/P-54 (ISO68)",
+          "Siemens Power Generation TLV 901304",
+          "Solar ES 9-224"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "46": 0.865,
+          "68": 0.87
+        },
+        "visc_40C_cSt": {
+          "46": 45.5,
+          "68": 68
+        },
+        "visc_100C_cSt": {
+          "46": 7.55,
+          "68": 10.1
+        },
+        "indice_viscosidad": {
+          "46": 132,
+          "68": 133
+        },
+        "punto_inflamacion_C": {
+          "46": 235,
+          "68": 240
+        },
+        "punto_fluidez_C_max": {
+          "46": -18,
+          "68": -18
+        },
+        "tan_mgKOHg": {
+          "46": 0.05,
+          "68": 0.05
+        },
+        "demulsibilidad_min": {
+          "46": 15,
+          "68": 20
+        }
+      },
+      "sku_rmg": [
+        {
+          "sku": "1000318",
+          "descripcion": "CIL TURBINIUM T ISO 46 DE 55 GAL",
+          "presentacion": "55 GAL",
+          "envase": "Tambor/Cilindro"
+        }
+      ],
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": true,
+      "alerta_sku": false,
+      "nota_sku": ""
+    },
+    {
+      "id": "veltron-ep",
+      "nombre_ficha": "Veltron EP",
+      "archivo_fuente": "VELTRON-EP.pdf",
+      "categoria": "Industrial — Reductores / Engranajes cerrados",
+      "tipo_base": "⚠ (CONSULTAR FICHA — NO INDICA) — No especificado en ficha (bases severamente hidrotratadas; no declara sintético)",
+      "evidencia_tipo_base": "Texto: 'Veltron EP se ha diseñado con bases severamente hidrotratadas y un paquete especial de aditivos de extrema presión' — NO usa la palabra sintético.",
+      "grados_sae_iso": [
+        "ISO 100",
+        "ISO 150",
+        "ISO 220",
+        "ISO 320",
+        "ISO 460",
+        "ISO 680"
+      ],
+      "uso_principal": "Reductores, moto-reductores, engranajes rectos/cónicos/tornillo sinfín en sistemas cerrados; minería, molino de cemento/bolas, chancadoras, fajas transportadoras, chumaceras.",
+      "normas_cumplidas": {
+        "cumple_y_excede": [
+          "AGMA 9005-F16 (Antiscuff)",
+          "AIST 224 (ex US Steel 224)",
+          "Siemens MD rev.15 (Flender)",
+          "DIN 51517 PARTE III (CLP)"
+        ]
+      },
+      "presentaciones": [
+        "Cilindro 55 gal",
+        "Balde 5 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "100": 0.875,
+          "150": 0.88,
+          "220": 0.88,
+          "320": 0.892,
+          "460": 0.904,
+          "680": 0.905
+        },
+        "visc_40C_cSt": {
+          "100": 100.0,
+          "150": 149.0,
+          "220": 218.0,
+          "320": 318.0,
+          "460": 460.0,
+          "680": 680.0
+        },
+        "visc_100C_cSt": {
+          "100": 11.4,
+          "150": 14.5,
+          "220": 18.6,
+          "320": 23.8,
+          "460": 30.0,
+          "680": 37.25
+        },
+        "indice_viscosidad": {
+          "100": 100,
+          "150": 95,
+          "220": 95,
+          "320": 95,
+          "460": 94,
+          "680": 90
+        },
+        "punto_inflamacion_C": {
+          "100": 250,
+          "150": 260,
+          "220": 260,
+          "320": 260,
+          "460": 270,
+          "680": 280
+        },
+        "punto_fluidez_C": {
+          "100": -21,
+          "150": -21,
+          "220": -18,
+          "320": -15,
+          "460": -12,
+          "680": -9
+        },
+        "fzg_etapa_minima": ">12 (todos)",
+        "micropicado_fva54": "10 (todos)",
+        "prueba_4bolas_kgf": {
+          "100_150_220": 200,
+          "320_460_680": 250
+        }
+      },
+      "sku_rmg": null,
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "",
+      "alerta_tipo_base": true,
+      "alerta_sku": true,
+      "nota_sku": "🚩🚩 ALERTA CRÍTICA DE MATCHING -- SIN SKU ASIGNADO A PROPÓSITO: la lista de precios solo tiene SKUs genéricos 'VELTRON ISO VG 150/220/320/460/680' SIN distinguir 'EP' de 'Synth'. Como Veltron EP (NO declara sintético) y Veltron Synth (100% sintético) son fichas técnicas con tipo de base OPUESTO pero comparten exactamente el mismo uso (reductores/engranajes cerrados) y los mismos grados ISO, es IMPOSIBLE determinar desde el nombre de la lista de precios cuál SKU corresponde a cuál ficha. Asignar cualquiera de los SKUs 'VELTRON ISO VG xxx' a este producto sin verificar físicamente la etiqueta/ficha de despacho sería exactamente el tipo de error que este tagging existe para prevenir. JC debe verificar con Vistony o en bodega cuál de los dos productos (EP o Synth) es el que efectivamente se vende bajo esos SKUs antes de asignarlos."
+    },
+    {
+      "id": "veltron-synth",
+      "nombre_ficha": "Veltron Synth",
+      "archivo_fuente": "VELTRON-SYNTH.pdf",
+      "categoria": "Industrial — Reductores / Engranajes cerrados",
+      "tipo_base": "100% sintético",
+      "evidencia_tipo_base": "Texto: 'Veltron Synth es un aceite 100% sintético de desempeño destacado para engranajes y cojinetes'.",
+      "grados_sae_iso": [
+        "ISO 150",
+        "ISO 220",
+        "ISO 320",
+        "ISO 460",
+        "ISO 680"
+      ],
+      "uso_principal": "Engranajes y cojinetes en aplicaciones exigentes a temperaturas altas y bajas; resistencia al cizallamiento mecánico.",
+      "normas_cumplidas": {
+        "cumple": [
+          "AGMA 9005 F-16",
+          "DIN 51517 parte III (CLP)",
+          "DIN 3761 Seal Test",
+          "AIST 224",
+          "Fives Cincinnati P-74",
+          "Flender",
+          "ISO 1295-1 (CKD) para ISO VG 150",
+          "FZG Micropitting Test"
+        ]
+      },
+      "presentaciones": [
+        "Balde 5 gal",
+        "Cilindro 55 gal"
+      ],
+      "ensayos_fisicoquimicos": {
+        "densidad_15C_kgL": {
+          "150": 0.865,
+          "220": 0.87,
+          "320": 0.88,
+          "460": 0.86,
+          "680": 0.87
+        },
+        "visc_40C_cSt": {
+          "150": 150,
+          "220": 220,
+          "320": 320,
+          "460": 460,
+          "680": 680
+        },
+        "visc_100C_cSt": {
+          "150": 19.6,
+          "220": 27.5,
+          "320": 38.0,
+          "460": 51.5,
+          "680": 70
+        },
+        "indice_viscosidad": {
+          "150": 150,
+          "220": 161,
+          "320": 169,
+          "460": 175,
+          "680": 180
+        },
+        "punto_inflamacion_C": {
+          "150": 235,
+          "220": 240,
+          "320": 250,
+          "460": 230,
+          "680": 235
+        },
+        "punto_fluidez_C": "-42 (todos los grados)",
+        "corrosion_cobre": "1b (todos)",
+        "fzg_etapa_minima": ">12 (todos)",
+        "micropicado_fva54": "10 (todos)",
+        "fzg_A_8_3_90": ">14 (todos)",
+        "prueba_4bolas_kgf": "250 (todos)",
+        "espuma": "0 (todos)"
+      },
+      "sku_rmg": null,
+      "verificado_por_JC": "Pendiente",
+      "notas_correccion_JC": "OJO: NO confundir con 'Veltron EP' — mismo uso (reductores/engranajes), pero tipo de base opuesto (EP no declara sintético; Synth sí es 100% sintético).",
+      "alerta_tipo_base": false,
+      "alerta_sku": true,
+      "nota_sku": "🚩🚩 ALERTA CRÍTICA DE MATCHING -- SIN SKU ASIGNADO A PROPÓSITO: ver nota idéntica en 'veltron-ep'. Los SKUs 'VELTRON ISO VG 150/220/320/460/680' de la lista de precios no distinguen EP de Synth."
+    }
+  ]
+}

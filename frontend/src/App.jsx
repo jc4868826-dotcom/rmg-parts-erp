@@ -46,6 +46,7 @@ import ChileCompraPage from '@pages/ChileCompraPage'
 import CompraAgilPage  from '@pages/CompraAgilPage'
 import EvaluadorPage   from '@pages/EvaluadorPage'
 import CotizadorPage   from '@pages/CotizadorPage'
+import CotizadorManualPage from '@pages/CotizadorManualPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -135,6 +136,14 @@ export default function App() {
                   para reemplazar el uso diario de Evaluador (ver notas en
                   cotizadorController.js sobre las 3 fallas reales que la motivaron). */}
               <Route path="cotizador"         element={<CotizadorPage />} />
+              {/* 2026-09-15 — Cotizador Manual: flujo B2B privado (mesón/
+                  teléfono/WhatsApp), NO viene de Mercado Público — usa el
+                  tagging técnico Vistony + el mismo motor de matching contra
+                  lista_precios, y genera una cotización real reutilizando
+                  cotizacionesController._insertCotizacion. Fuera del menú
+                  "Canal Estatal" en el sidebar (ver Layout.jsx) porque no
+                  tiene nada que ver con Mercado Público. */}
+              <Route path="cotizador-manual"  element={<CotizadorManualPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

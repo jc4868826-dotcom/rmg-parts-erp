@@ -279,4 +279,13 @@ const remove = (req, res) => {
   }
 }
 
-module.exports = { getAll, getOne, create, createPublica, createDesdeLanding, update, aprobar, generarPDF, enviarWhatsApp, enviarEmail, remove, vincularItemOC }
+module.exports = {
+  getAll, getOne, create, createPublica, createDesdeLanding, update, aprobar,
+  generarPDF, enviarWhatsApp, enviarEmail, remove, vincularItemOC,
+  // 2026-09-15 — expuesto para cotizadorManualController.js (Cotizador
+  // Manual): reutiliza tal cual la misma función que arma número correlativo
+  // + fila `cotizaciones` + `cotizacion_items`, para no duplicar esa lógica
+  // (numeración con reintento ante choque, trazabilidad oc_item_id, etc.) en
+  // un segundo lugar.
+  _insertCotizacion,
+}

@@ -120,6 +120,12 @@ app.use('/api/evaluador',           require('./routes/evaluador'));   // Submen�
 // viejo desincronizado) y hay un "sin match" real bajo un piso de confianza
 // en vez de forzar un SKU cualquiera. Ver cotizadorController.js.
 app.use('/api/cotizador',           require('./routes/cotizador'));
+// 2026-09-15 — Cotizador Manual: flujo B2B privado (mesón/teléfono/WhatsApp),
+// NO viene de Mercado Público — usa la base de conocimiento técnica tageada
+// (productos_tagging.json) + el mismo motor de matching contra lista_precios
+// para proponer SKU/precio, y genera una cotización real reutilizando
+// cotizacionesController._insertCotizacion. Ver cotizadorManualController.js.
+app.use('/api/cotizador-manual',    require('./routes/cotizadorManual'));
 app.use('/api/utilitarios',         require('./routes/utilitarios')); // Librería de fichas técnicas (scrape Vistony)
 
 // ─── Health check ───────────────────────────────────────────
