@@ -120,11 +120,15 @@ app.use('/api/evaluador',           require('./routes/evaluador'));   // Submen�
 // viejo desincronizado) y hay un "sin match" real bajo un piso de confianza
 // en vez de forzar un SKU cualquiera. Ver cotizadorController.js.
 app.use('/api/cotizador',           require('./routes/cotizador'));
-// 2026-09-15 — Cotizador Manual: flujo B2B privado (mesón/teléfono/WhatsApp),
-// NO viene de Mercado Público — usa la base de conocimiento técnica tageada
-// (productos_tagging.json) + el mismo motor de matching contra lista_precios
-// para proponer SKU/precio, y genera una cotización real reutilizando
-// cotizacionesController._insertCotizacion. Ver cotizadorManualController.js.
+// 2026-09-15 — Cotizador Manual: subir el PDF/imagen/Word de una solicitud de
+// Compra Ágil/ChileCompra que JC ya tiene descargada (fallback cuando la API
+// oficial no la trae o no puede leerla) — reutiliza tal cual
+// compraAgilAnalisis.importarCompraAgilManual (misma IA que lee anexos de
+// licitaciones, mismo cruce contra lista_precios) con fuente='cotizador_manual',
+// y encima agrega la alerta técnica del tagging Vistony (productos_tagging.json)
+// sobre el SKU que el cruce ya eligió. Entrega el mismo Excel de
+// Cotizador/Evaluador — no crea nada nuevo en Cotizaciones. Ver
+// cotizadorManualController.js.
 app.use('/api/cotizador-manual',    require('./routes/cotizadorManual'));
 app.use('/api/utilitarios',         require('./routes/utilitarios')); // Librería de fichas técnicas (scrape Vistony)
 

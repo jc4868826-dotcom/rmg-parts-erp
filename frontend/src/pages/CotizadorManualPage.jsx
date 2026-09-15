@@ -1,106 +1,75 @@
 /**
- * RMG Parts — Cotizador Manual (2026-09-15)
+ * RMG Parts — Cotizador Manual (2026-09-15, v2)
  *
- * Flujo B2B privado: el usuario escribe a mano lo que el cliente pidió
- * (mesón, teléfono, WhatsApp) → Analizar propone SKU/precio/alertas por
- * línea, combinando el tagging técnico Vistony (30 fichas verificadas por
- * JC) con el mismo motor de matching que usan Cotizador/Evaluador/ChileCompra
- * → el usuario corrige a mano lo que haga falta y "Volver a analizar" →
- * Generar cotización crea una cotización real (misma tabla que todo el ERP).
- *
- * Deliberadamente simple: sin Kanban, sin historial de solicitudes — cada
- * visita a esta pantalla parte de una lista en blanco (ver notas en
- * cotizadorManualController.js).
+ * Sube el PDF (o imagen/Word) de una solicitud de Compra Ágil/ChileCompra que
+ * ya tienes descargada — junto con su código — y el sistema lo lee con IA,
+ * extrae el requerimiento, lo cruza con el catálogo RMG + el conocimiento
+ * técnico Vistony ya tageado, y entrega el Excel con la propuesta. Fallback
+ * directo cuando la API oficial no trae o no puede leer un código puntual
+ * (ver Cotizador/Evaluador, que sí consultan la API sola).
  */
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '@utils/api'
-import { Calculator, Plus, Trash2, RefreshCw, FileText, AlertTriangle, Search } from 'lucide-react'
-
-const LINEA_VACIA = { descripcion: '', cantidad: 1 }
+import { Calculator, Upload, Download, Trash2, AlertTriangle, FileText } from 'lucide-react'
 
 export default function CotizadorManualPage() {
-  const navigate = useNavigate()
-  const [lineas, setLineas] = useState([{ ...LINEA_VACIA }])
-  const [resultado, setResultado] = useState(null) // items analizados, editables
-  const [clienteId, setClienteId] = useState('')
-  const [clienteNombre, setClienteNombre] = useState('')
-  const [condicionPago, setCondicionPago] = useState('Contado')
+  const queryClient = useQueryClient()
+  const [codigo, setCodigo] = useState('')
+  const [archivos, setArchivos] = useState([])
+  const [seleccionada, setSeleccionada] = useState(null)
 
-  const { data: clientes } = useQuery({
-    queryKey: ['clientes-cotizador-manual'],
-    queryFn: () => api.get('/clientes').then(r => r.data),
-    staleTime: 60_000,
+  const { data: lista } = useQuery({
+    queryKey: ['cotizador-manual'],
+    queryFn: () => api.get('/cotizador-manual').then(r => r.data),
   })
 
-  const analizarMut = useMutation({
-    mutationFn: (items) => api.post('/cotizador-manual/analizar', { items }).then(r => r.data),
-    onSuccess: (data) => {
-      setResultado(data.items)
-      const alertas = data.items.filter(it => it.alerta_tipo_base || it.alerta_sku || it.sin_match).length
-      if (alertas > 0) {
-        toast(`${alertas} línea(s) con alerta — revisa antes de generar la cotización`, { icon: '⚠️' })
-      } else {
-        toast.success('Análisis listo')
-      }
+  const subirMut = useMutation({
+    mutationFn: () => {
+      const fd = new FormData()
+      fd.append('codigo', codigo.trim())
+      archivos.forEach(f => fd.append('documentos', f))
+      return api.post('/cotizador-manual/subir', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }).then(r => r.data)
+    },
+    onSuccess: (op) => {
+      queryClient.invalidateQueries({ queryKey: ['cotizador-manual'] })
+      setSeleccionada(op)
+      setCodigo('')
+      setArchivos([])
+      const alertas = op.items.filter(it => it.observacion?.includes('⚠')).length
+      toast.success(alertas > 0 ? `Analizado — ${alertas} ítem(s) con alerta técnica` : 'Analizado')
     },
     onError: (err) => toast.error(err.response?.data?.error || 'Error al analizar'),
   })
 
-  const generarMut = useMutation({
-    mutationFn: (payload) => api.post('/cotizador-manual/generar', payload).then(r => r.data),
-    onSuccess: (cot) => {
-      toast.success(`Cotización ${cot.numero} generada`)
-      navigate(`/cotizaciones/${cot.id}`)
+  const eliminarMut = useMutation({
+    mutationFn: (id) => api.delete(`/cotizador-manual/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cotizador-manual'] })
+      setSeleccionada(null)
+      toast.success('Eliminado')
     },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al generar la cotización'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar'),
   })
 
-  const agregarLinea = () => setLineas([...lineas, { ...LINEA_VACIA }])
-  const quitarLinea = (idx) => setLineas(lineas.filter((_, i) => i !== idx))
-  const actualizarLinea = (idx, campo, valor) => {
-    const copia = [...lineas]
-    copia[idx] = { ...copia[idx], [campo]: valor }
-    setLineas(copia)
+  const descargarExcel = async (op) => {
+    const res = await api.get(`/cotizador-manual/${op.id}/excel`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `CotizadorManual_${op.codigo_externo}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const analizar = () => {
-    const items = lineas.filter(l => l.descripcion.trim())
-    if (!items.length) return toast.error('Escribe al menos una línea con descripción')
-    analizarMut.mutate(items)
+    if (!codigo.trim()) return toast.error('Escribe el código de la Compra Ágil/ChileCompra')
+    if (!archivos.length) return toast.error('Sube al menos un PDF/imagen/Word del requerimiento')
+    subirMut.mutate()
   }
-
-  const actualizarResultado = (idx, campo, valor) => {
-    const copia = [...resultado]
-    copia[idx] = { ...copia[idx], [campo]: valor }
-    setResultado(copia)
-  }
-
-  const generar = () => {
-    if (!resultado?.length) return
-    if (!clienteId && !clienteNombre.trim()) {
-      return toast.error('Selecciona un cliente o escribe su nombre')
-    }
-    const items = resultado.filter(it => it.sku_rmg || it.descripcion)
-    generarMut.mutate({
-      cliente_id: clienteId || null,
-      cliente: clienteId ? null : clienteNombre.trim(),
-      condicion_pago: condicionPago,
-      items: items.map(it => ({
-        descripcion: it.descripcion_sku || it.descripcion,
-        codigo: it.sku_rmg,
-        cantidad: it.cantidad,
-        precio_unitario: it.precio_unitario || 0,
-        costo_unitario: it.costo_unitario || 0,
-      })),
-    })
-  }
-
-  const totalEstimado = resultado
-    ? resultado.reduce((a, it) => a + (it.cantidad * (it.precio_unitario || 0)), 0)
-    : 0
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -111,105 +80,75 @@ export default function CotizadorManualPage() {
         <div>
           <h1 className="text-xl font-bold" style={{ color: 'var(--rmg-text)' }}>Cotizador Manual</h1>
           <p className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
-            Escribe lo que el cliente pidió — el sistema propone SKU, precio y alertas técnicas por línea.
+            Sube el código + el PDF de una solicitud de Compra Ágil/ChileCompra que ya tengas descargada — la IA extrae el requerimiento y lo cruza con el catálogo y el conocimiento técnico Vistony.
           </p>
         </div>
       </div>
 
-      {/* Paso 1 — lista de productos */}
+      {/* Subir */}
       <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: 'var(--rmg-border)', background: 'var(--rmg-surface)' }}>
-        <div className="text-sm font-semibold" style={{ color: 'var(--rmg-text)' }}>1. ¿Qué pidió el cliente?</div>
-        {lineas.map((l, idx) => (
-          <div key={idx} className="flex gap-2 items-center">
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="text"
+            placeholder="Código (ej. 1493-495-COT26)"
+            value={codigo}
+            onChange={e => setCodigo(e.target.value)}
+            className="px-3 py-2 rounded-lg border text-sm w-56"
+            style={{ borderColor: 'var(--rmg-border)' }}
+          />
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer flex-1 min-w-[240px]" style={{ borderColor: 'var(--rmg-border)', color: 'var(--rmg-muted)' }}>
+            <Upload size={14} />
+            {archivos.length ? `${archivos.length} archivo(s) seleccionado(s)` : 'Adjuntar PDF / imagen / Word'}
             <input
-              type="text"
-              placeholder="Ej. Forza Plus 15W40 balde 20L"
-              value={l.descripcion}
-              onChange={e => actualizarLinea(idx, 'descripcion', e.target.value)}
-              className="flex-1 px-3 py-2 rounded-lg border text-sm"
-              style={{ borderColor: 'var(--rmg-border)' }}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,image/*"
+              className="hidden"
+              onChange={e => setArchivos(Array.from(e.target.files || []))}
             />
-            <input
-              type="number"
-              min={1}
-              value={l.cantidad}
-              onChange={e => actualizarLinea(idx, 'cantidad', e.target.value)}
-              className="w-20 px-3 py-2 rounded-lg border text-sm text-center"
-              style={{ borderColor: 'var(--rmg-border)' }}
-            />
-            <button onClick={() => quitarLinea(idx)} className="p-2 rounded-lg hover:bg-red-500/10" style={{ color: 'var(--rmg-red, #c00)' }}>
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ))}
-        <div className="flex gap-2">
-          <button onClick={agregarLinea} className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-black/5" style={{ color: 'var(--rmg-blue)' }}>
-            <Plus size={14} /> Agregar línea
-          </button>
+          </label>
           <button
             onClick={analizar}
-            disabled={analizarMut.isPending}
-            className="flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-lg text-white ml-auto disabled:opacity-50"
+            disabled={subirMut.isPending}
+            className="text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-50"
             style={{ background: 'var(--rmg-blue)' }}
           >
-            <Search size={14} /> {analizarMut.isPending ? 'Analizando…' : 'Analizar'}
+            {subirMut.isPending ? 'Analizando…' : 'Analizar'}
           </button>
         </div>
       </div>
 
-      {/* Paso 2 — resultado del cruce, editable */}
-      {resultado && (
+      {/* Resultado recién analizado o seleccionado de la lista */}
+      {seleccionada && (
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--rmg-border)', background: 'var(--rmg-surface)' }}>
           <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--rmg-border)' }}>
-            <div className="text-sm font-semibold" style={{ color: 'var(--rmg-text)' }}>2. Revisa el cruce — corrige lo que haga falta</div>
-            <button onClick={analizar} className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}>
-              <RefreshCw size={12} /> Volver a analizar
+            <div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--rmg-text)' }}>{seleccionada.codigo_externo} — {seleccionada.organismo_nombre || seleccionada.nombre}</div>
+              <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{seleccionada.items?.length || 0} ítem(s)</div>
+            </div>
+            <button onClick={() => descargarExcel(seleccionada)} className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: 'var(--rmg-teal)' }}>
+              <Download size={14} /> Descargar Excel
             </button>
           </div>
           <div className="divide-y" style={{ borderColor: 'var(--rmg-border)' }}>
-            {resultado.map((it, idx) => {
-              const tieneAlerta = it.alerta_tipo_base || it.alerta_sku || it.sin_match
+            {(seleccionada.items || []).map((it, idx) => {
+              const tieneAlerta = it.observacion?.includes('⚠')
               return (
-                <div key={idx} className="px-4 py-3 space-y-1.5" style={tieneAlerta ? { background: 'rgba(192,0,0,0.04)' } : undefined}>
+                <div key={idx} className="px-4 py-3 space-y-1" style={tieneAlerta ? { background: 'rgba(192,0,0,0.04)' } : undefined}>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium flex-1 min-w-[200px]" style={{ color: 'var(--rmg-text)' }}>{it.descripcion}</span>
-                    <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>x{it.cantidad}</span>
+                    <span className="text-sm font-medium flex-1 min-w-[200px]" style={{ color: 'var(--rmg-text)' }}>{it.descripcion_solicitada}</span>
+                    <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>x{it.cantidad ?? '—'} {it.unidad || ''}</span>
                     {tieneAlerta && (
                       <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#FFC7CE', color: '#9C0006' }}>
-                        <AlertTriangle size={11} /> {it.sin_match ? 'Sin match' : 'Revisar'}
+                        <AlertTriangle size={11} /> Alerta técnica
                       </span>
                     )}
                   </div>
-                  {it.tipo_base && (
-                    <div className="text-xs" style={{ color: it.alerta_tipo_base ? '#9C0006' : 'var(--rmg-muted)' }}>
-                      Tipo de base: {it.tipo_base}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <input
-                      type="text"
-                      placeholder="SKU RMG"
-                      value={it.sku_rmg || ''}
-                      onChange={e => actualizarResultado(idx, 'sku_rmg', e.target.value)}
-                      className="w-32 px-2 py-1 rounded-lg border text-xs font-mono"
-                      style={{ borderColor: 'var(--rmg-border)' }}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Precio neto"
-                      value={it.precio_unitario ?? ''}
-                      onChange={e => actualizarResultado(idx, 'precio_unitario', Number(e.target.value))}
-                      className="w-32 px-2 py-1 rounded-lg border text-xs"
-                      style={{ borderColor: 'var(--rmg-border)' }}
-                    />
-                    {it.confianza != null && (
-                      <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
-                        Confianza matching: {Math.round(it.confianza * 100)}%
-                      </span>
-                    )}
+                  <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                    SKU propuesto: {it.sku_match || 'sin coincidencia'} {it.precio_venta_sugerido ? `· $${Number(it.precio_venta_sugerido).toLocaleString('es-CL')}` : ''}
                   </div>
                   {it.observacion && (
-                    <div className="text-xs italic" style={{ color: '#9C0006' }}>{it.observacion}</div>
+                    <div className="text-xs italic" style={{ color: tieneAlerta ? '#9C0006' : 'var(--rmg-muted)' }}>{it.observacion}</div>
                   )}
                 </div>
               )
@@ -218,58 +157,27 @@ export default function CotizadorManualPage() {
         </div>
       )}
 
-      {/* Paso 3 — cliente y generar */}
-      {resultado && (
-        <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: 'var(--rmg-border)', background: 'var(--rmg-surface)' }}>
-          <div className="text-sm font-semibold" style={{ color: 'var(--rmg-text)' }}>3. Cliente y generar cotización</div>
-          <div className="flex gap-2 flex-wrap">
-            <select
-              value={clienteId}
-              onChange={e => setClienteId(e.target.value)}
-              className="px-3 py-2 rounded-lg border text-sm flex-1 min-w-[200px]"
-              style={{ borderColor: 'var(--rmg-border)' }}
-            >
-              <option value="">— Cliente nuevo (escribir nombre) —</option>
-              {(clientes || []).map(c => (
-                <option key={c.id} value={c.id}>{c.razon_social}</option>
-              ))}
-            </select>
-            {!clienteId && (
-              <input
-                type="text"
-                placeholder="Nombre del cliente nuevo"
-                value={clienteNombre}
-                onChange={e => setClienteNombre(e.target.value)}
-                className="px-3 py-2 rounded-lg border text-sm flex-1 min-w-[200px]"
-                style={{ borderColor: 'var(--rmg-border)' }}
-              />
-            )}
-            <select
-              value={condicionPago}
-              onChange={e => setCondicionPago(e.target.value)}
-              className="px-3 py-2 rounded-lg border text-sm"
-              style={{ borderColor: 'var(--rmg-border)' }}
-            >
-              <option>Contado</option>
-              <option>Crédito 30 días</option>
-              <option>Crédito 60 días</option>
-            </select>
-          </div>
-          <div className="flex items-center justify-between pt-2">
-            <div className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
-              Total estimado (neto): <span className="font-bold" style={{ color: 'var(--rmg-text)' }}>${totalEstimado.toLocaleString('es-CL')}</span>
+      {/* Lista de análisis anteriores */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--rmg-border)', background: 'var(--rmg-surface)' }}>
+        <div className="px-4 py-3 border-b text-sm font-semibold" style={{ borderColor: 'var(--rmg-border)', color: 'var(--rmg-text)' }}>Analizados</div>
+        <div className="divide-y" style={{ borderColor: 'var(--rmg-border)' }}>
+          {(lista || []).length === 0 && (
+            <div className="px-4 py-6 text-sm text-center" style={{ color: 'var(--rmg-muted)' }}>Nada analizado todavía</div>
+          )}
+          {(lista || []).map(op => (
+            <div key={op.id} className="px-4 py-3 flex items-center justify-between">
+              <button onClick={() => api.get(`/cotizador-manual/${op.id}`).then(r => setSeleccionada(r.data))} className="text-left flex items-center gap-2">
+                <FileText size={14} style={{ color: 'var(--rmg-blue)' }} />
+                <span className="text-sm font-medium" style={{ color: 'var(--rmg-text)' }}>{op.codigo_externo}</span>
+                <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{op.organismo_nombre || op.nombre}</span>
+              </button>
+              <button onClick={() => eliminarMut.mutate(op.id)} className="p-1.5 rounded-lg hover:bg-red-500/10" style={{ color: 'var(--rmg-muted)' }}>
+                <Trash2 size={14} />
+              </button>
             </div>
-            <button
-              onClick={generar}
-              disabled={generarMut.isPending}
-              className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-50"
-              style={{ background: 'var(--rmg-teal)' }}
-            >
-              <FileText size={16} /> {generarMut.isPending ? 'Generando…' : 'Generar cotización'}
-            </button>
-          </div>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   )
 }

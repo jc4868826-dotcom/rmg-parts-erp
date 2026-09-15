@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark, Calculator
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark, Calculator, FileUp
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -30,12 +30,6 @@ const NAV_SECTIONS = [
     label: 'Ventas',
     items: [
       { to: '/cotizaciones', icon: FileText,        label: 'Cotizaciones',    badge: '2' },
-      // 2026-09-15 — "Cotizador Manual": pedido de JC — pestaña para armar
-      // cotizaciones B2B a mano (mesón/teléfono/WhatsApp) con ayuda del
-      // tagging técnico Vistony + el mismo motor de matching de precios que
-      // usa el resto del ERP. Va en "Ventas" (no en "Canal Estatal", que es
-      // solo Mercado Público) porque genera cotizaciones reales del día a día.
-      { to: '/cotizador-manual', icon: Calculator,  label: 'Cotizador Manual', badge: null },
       { to: '/pedidos',      icon: ShoppingCart,    label: 'Pedidos',         badge: null },
       { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: null },
       { to: '/cuentas-corrientes', icon: Wallet,    label: 'Cuentas Corrientes', badge: null },
@@ -69,6 +63,14 @@ const NAV_SECTIONS = [
       // se genera al vuelo, siempre igual a lo que se ve en pantalla. Ver
       // cotizadorController.js para el detalle de las 3 fallas que la motivaron.
       { to: '/cotizador',    icon: Calculator,      label: '↳ Cotizador',    badge: null },
+      // 2026-09-15 — "Cotizador Manual": subir el PDF/imagen/Word de una
+      // solicitud de Compra Ágil/ChileCompra que JC ya tiene descargada
+      // (fallback cuando la API oficial no la trae o no puede leerla) — la
+      // IA la analiza, cruza con el catálogo + el tagging técnico Vistony, y
+      // entrega el Excel. Va acá (Canal Estatal), no en Ventas: sigue siendo
+      // Mercado Público, solo que el documento lo sube el humano en vez de
+      // esperar a la API. Ver cotizadorManualController.js.
+      { to: '/cotizador-manual', icon: FileUp,       label: '↳ Cotizador Manual', badge: null },
     ],
   },
   {

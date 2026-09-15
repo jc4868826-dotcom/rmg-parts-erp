@@ -556,7 +556,7 @@ function mapearExtraccionAAgil(extraccion, codigo) {
  *          sin duplicar nada del resto del pipeline (mismo guardado, mismo
  *          cruce, mismos scores).
  */
-async function importarCompraAgilManual({ codigo, texto, documentos, user, tipoEventoBase = 'compra_agil_manual' }) {
+async function importarCompraAgilManual({ codigo, texto, documentos, user, tipoEventoBase = 'compra_agil_manual', fuente = 'compra_agil' }) {
   if (!codigo?.trim()) throw new Error('importarCompraAgilManual: falta el código de la Compra Ágil')
   if (!texto?.trim() && !documentos?.length) {
     throw new Error('importarCompraAgilManual: pega el texto de la publicación o sube al menos un documento (PDF/imagen/Word)')
@@ -571,7 +571,11 @@ async function importarCompraAgilManual({ codigo, texto, documentos, user, tipoE
     throw new Error('La IA no encontró ningún ítem/producto solicitado en el texto o documento entregado — revisa que efectivamente sea una solicitud de cotización.')
   }
 
-  return guardarYProcesarOportunidad(codigo.trim(), detalle, user, tipoEventoBase)
+  // fuente (2026-09-15): por defecto sigue siendo 'compra_agil' (compatibilidad
+  // con el llamador existente de Compra Ágil); Cotizador Manual pasa
+  // 'cotizador_manual' para que quede en su propia lista, sin mezclarse con
+  // las oportunidades de Compra Ágil detectadas por el scraper.
+  return guardarYProcesarOportunidad(codigo.trim(), detalle, user, tipoEventoBase, fuente)
 }
 
 /**
