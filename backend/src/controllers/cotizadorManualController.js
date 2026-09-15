@@ -27,6 +27,17 @@
  * detectado como ambiguo, ej. Veltron EP vs Synth), esa alerta se agrega a
  * la observación del ítem — visible en la misma columna "Observación" que ya
  * exporta el Excel.
+ *
+ * FIX 2026-09-15 (mismo día, tras revisión de JC — "mira los P×Q"): el
+ * primer Excel real mostró costo/precio/P×Q completos en ítems con solo
+ * 36-37% de confianza de match — matches de respaldo por categoría
+ * (cruzarItemsConCatalogo, "sin señal textual", ver chilecompraScoring.js),
+ * no coincidencias reales. Cotizador (cotizadorController.js) YA resuelve
+ * esto con un piso de confianza real (UMBRAL_CONFIANZA=0.55): por debajo de
+ * eso, limpia el sku_match y deja el ítem "SIN MATCH — revisar
+ * manualmente" en vez de mostrar números que parecen confiables sin serlo.
+ * Se me había olvidado copiar ese mismo piso acá — corregido: limpiarMatchesDebiles
+ * corre SIEMPRE después del cruce, idéntico criterio y mensaje que Cotizador.
  */
 const { db } = require('../../config/database')
 const { importarCompraAgilManual } = require('../services/compraAgilAnalisis')
@@ -34,6 +45,35 @@ const { generarExcelCruce } = require('../services/chilecompraExcelExport')
 const { alertaParaSku } = require('../services/taggingTecnico')
 
 const FUENTE = 'cotizador_manual'
+
+// Mismo piso de confianza y mismo criterio que cotizadorController.js — por
+// debajo de esto, NUNCA se entrega un SKU/costo/precio como si fuera una
+// recomendación válida.
+const UMBRAL_CONFIANZA = 0.55
+
+function limpiarMatchesDebiles(oportunidadId) {
+  const items = db.prepare(
+    'SELECT id, sku_match, match_confianza, observacion FROM oportunidad_chilecompra_items WHERE oportunidad_id = ?'
+  ).all(oportunidadId)
+
+  const upd = db.prepare(`
+    UPDATE oportunidad_chilecompra_items
+    SET sku_match = NULL, costo_unitario_rmg = NULL, precio_venta_sugerido = NULL,
+        margen_pct_estimado = NULL, cubierto = 0, observacion = ?
+    WHERE id = ?
+  `)
+
+  let limpiados = 0
+  for (const it of items) {
+    const confianza = it.match_confianza != null ? Number(it.match_confianza) : null
+    if (it.sku_match && (confianza == null || confianza < UMBRAL_CONFIANZA)) {
+      const pct = confianza != null ? Math.round(confianza * 100) : 0
+      upd.run(`SIN MATCH — revisar manualmente (el emparejador solo llegó a ${pct}% de confianza, bajo el piso mínimo de ${Math.round(UMBRAL_CONFIANZA * 100)}%)`, it.id)
+      limpiados++
+    }
+  }
+  return limpiados
+}
 
 function withItems(op) {
   if (!op) return null
@@ -117,6 +157,11 @@ const subir = async (req, res) => {
       codigo, documentos, user: req.user,
       tipoEventoBase: 'cotizador_manual', fuente: FUENTE,
     })
+
+    const limpiados = limpiarMatchesDebiles(op.id)
+    if (limpiados > 0) {
+      console.log(`ℹ️ Cotizador Manual ${codigo}: ${limpiados} ítem(s) bajo el piso de confianza (${Math.round(UMBRAL_CONFIANZA * 100)}%) quedaron marcados SIN MATCH en vez de forzar un SKU.`)
+    }
 
     const marcados = agregarAlertasTagging(op.id)
     if (marcados > 0) {
