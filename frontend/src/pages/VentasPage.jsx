@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
 import { formatCLP, formatFecha, calcularIVA, totalConIVA } from '@utils/format'
-import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard, User, Upload, Check, ShieldAlert } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard, User, Upload, Check, ShieldAlert, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 // La fecha de venta (v.fecha) es solo día. La hora real de emisión viene de
@@ -144,6 +144,20 @@ export default function VentasPage() {
     mutationFn: ({ id, aprobado, motivo }) => api.post(`/ventas/${id}/validar-pago`, { aprobado, motivo }).then(r => r.data),
     onSuccess: (_, vars) => { invalidate(); toast.success(vars.aprobado ? 'Pago validado — ingreso confirmado en flujo de caja' : 'Pago rechazado') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al validar el pago'),
+  })
+
+  // Trazabilidad cotización↔OC (2026-09-15): si la línea de la cotización se
+  // vinculó a su OC DESPUÉS de convertir a venta, el costo quedó con el valor
+  // genérico de lista_precios — este botón trae el costo negociado de la OC.
+  const recalcularCostoMut = useMutation({
+    mutationFn: (id) => api.post(`/ventas/${id}/recalcular-costo-oc`).then(r => r.data),
+    onSuccess: (data) => {
+      invalidate()
+      toast.success(data.lineas_actualizadas > 0
+        ? `Costo recalculado — ${data.lineas_actualizadas} línea(s) actualizada(s) desde la OC`
+        : 'Sin cambios — ninguna línea de esta venta tiene una línea de OC vinculada')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al recalcular el costo'),
   })
 
   const handleRechazarPago = (id) => {
@@ -448,7 +462,17 @@ export default function VentasPage() {
                     )}
                   </div>
                 </div>
-                <button onClick={() => setDetalleVenta(null)} className="p-1.5 rounded-lg hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+                <div className="flex items-center gap-1">
+                  {v.cotizacion_id && (
+                    <button onClick={() => recalcularCostoMut.mutate(v.id)} disabled={recalcularCostoMut.isPending}
+                      title="Recalcular costo desde la OC vinculada a la cotización"
+                      className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+                      style={{ background: 'rgba(244,162,60,0.12)', color: 'var(--rmg-gold)' }}>
+                      <RefreshCw size={13}/> {recalcularCostoMut.isPending ? 'Recalculando...' : 'Recalcular costo desde OC'}
+                    </button>
+                  )}
+                  <button onClick={() => setDetalleVenta(null)} className="p-1.5 rounded-lg hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+                </div>
               </div>
 
               <div className="p-5 space-y-5">
@@ -622,6 +646,12 @@ export default function VentasPage() {
                               ) : (
                                 <span title="Esperando validación de gerente" className="p-1.5" style={{ color: 'var(--rmg-blue)' }}><ShieldAlert size={13}/></span>
                               )
+                            )}
+                            {v.cotizacion_id && (
+                              <button onClick={() => recalcularCostoMut.mutate(v.id)} disabled={recalcularCostoMut.isPending}
+                                title="Recalcular costo desde la OC vinculada a la cotización" className="p-1.5 rounded hover:bg-black/5 disabled:opacity-50" style={{ color: 'var(--rmg-gold)' }}>
+                                <RefreshCw size={13}/>
+                              </button>
                             )}
                             <button onClick={() => setDocsVenta(v)} title="Documentos" className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-blue)' }}><Paperclip size={13}/></button>
                             <button onClick={() => setEditando({ ...v })} className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><Pencil size={13}/></button>

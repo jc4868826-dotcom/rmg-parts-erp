@@ -233,6 +233,51 @@ const createFromCotizacion = (req, res) => {
   }
 }
 
+// Recalcula el costo_unitario de los venta_items de una venta ya creada,
+// tomando el precio negociado de la línea de OC vinculada en la cotización
+// de origen (cotizacion_items.oc_item_id → oc_items.precio_unitario).
+//
+// Por qué existe (2026-09-15, caso real de JC): createFromCotizacion() ya
+// usa ese costo negociado — pero solo si la línea de la cotización YA estaba
+// vinculada a su OC en el momento de "Convertir a venta". Si la vinculación
+// se hace después (o la OC se crea después de convertir), la venta queda con
+// el costo genérico de lista_precios y no se autocorrige sola. Este endpoint
+// vuelve a mirar la cotización de origen y trae el costo correcto para cada
+// línea que sí esté vinculada; las que no lo estén quedan como están.
+const recalcularCostoOC = (req, res) => {
+  try {
+    const venta = db.prepare('SELECT * FROM ventas WHERE id = ?').get(req.params.id)
+    if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
+    if (!venta.cotizacion_id) return res.status(400).json({ error: 'Esta venta no viene de una cotización — no hay OC que recalcular' })
+
+    const cotItems = db.prepare('SELECT * FROM cotizacion_items WHERE cotizacion_id = ?').all(venta.cotizacion_id)
+    const ventaItems = db.prepare('SELECT * FROM venta_items WHERE venta_id = ?').all(venta.id)
+
+    let actualizadas = 0
+    const doUpdate = db.transaction(() => {
+      for (const vi of ventaItems) {
+        // Empareja por código de SKU — venta_items no guarda el id de la línea
+        // de cotización de la que vino, así que el código es el único puente.
+        const ci = cotItems.find(c => c.codigo === vi.sku)
+        if (!ci || !ci.oc_item_id) continue
+        const ocItem = db.prepare('SELECT precio_unitario FROM oc_items WHERE id = ?').get(ci.oc_item_id)
+        if (!ocItem) continue
+        const nuevoCosto = Number(ocItem.precio_unitario) || 0
+        if (nuevoCosto === vi.costo_unitario) continue
+        db.prepare('UPDATE venta_items SET costo_unitario = ? WHERE id = ?').run(nuevoCosto, vi.id)
+        actualizadas++
+      }
+      const costo_total = db.prepare('SELECT COALESCE(SUM(costo_unitario * cantidad),0) as s FROM venta_items WHERE venta_id = ?').get(venta.id).s
+      db.prepare('UPDATE ventas SET costo_total = ? WHERE id = ?').run(costo_total, venta.id)
+    })
+    doUpdate()
+
+    res.json({ ...withItems(db.prepare('SELECT * FROM ventas WHERE id = ?').get(venta.id)), lineas_actualizadas: actualizadas })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 const createFromPedido = (req, res) => {
   try {
     const pedId = req.params.pedidoId
@@ -484,4 +529,5 @@ module.exports = {
   ESTADOS_LOGISTICOS,
   getAll, getOne, create, createFromCotizacion, createFromPedido,
   update, cambiarEstadoLogistico, registrarPago, subirComprobantePago, validarPago, remove,
+  recalcularCostoOC,
 }
