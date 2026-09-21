@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import DocumentosPanel from '@components/DocumentosPanel'
 import ProductoSearch from '@components/ProductoSearch'
 import CantidadPresentacion from '@components/CantidadPresentacion'
+import CruceMargenCard from '@components/CruceMargenCard'
 
 export default function CotizacionForm() {
   const { id } = useParams()
@@ -343,6 +344,9 @@ export default function CotizacionForm() {
               </div>
             </div>
           </div>
+
+          {/* Cruce OC↔Cotización (venta calzada): totales de la(s) OC y margen — valores guardados */}
+          {isEdit && <CruceMargenCard cruce={cotizacion?.cruce_oc} />}
 
           {/* Notas */}
           <div className="rmg-card p-5">

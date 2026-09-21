@@ -1,4 +1,5 @@
 const { db, uuidv4 } = require('../../config/database')
+const { cruceParaCotizacion } = require('../services/cruceOcCotizacion')
 
 // Enriquece cada línea con la presentación/pack del SKU (lista_precios), solo
 // para referencia visual — la cantidad guardada siempre está en unidades.
@@ -44,7 +45,8 @@ const getOne = (req, res) => {
   try {
     const c = db.prepare('SELECT * FROM cotizaciones WHERE id = ? OR numero = ?').get(req.params.id, req.params.id)
     if (!c) return res.status(404).json({ error: 'Cotización no encontrada' })
-    res.json(withItems(c))
+    // Cruce OC↔Cotización (2026-09-21): totales de la(s) OC calzadas y margen.
+    res.json({ ...withItems(c), cruce_oc: cruceParaCotizacion(c.id) })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

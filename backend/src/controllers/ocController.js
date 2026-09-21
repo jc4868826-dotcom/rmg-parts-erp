@@ -7,6 +7,7 @@
  */
 const { db, uuidv4 } = require('../../config/database')
 const nodemailer = require('nodemailer')
+const { cruceParaCotizacion } = require('../services/cruceOcCotizacion')
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -154,7 +155,8 @@ const getOC = (req, res) => {
   try {
     const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
-    res.json(withDetails(oc))
+    // Cruce OC↔Cotización (2026-09-21): totales de la venta calzada y margen.
+    res.json({ ...withDetails(oc), cruce_cotizacion: cruceParaCotizacion(oc.cotizacion_id) })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

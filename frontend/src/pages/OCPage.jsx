@@ -12,6 +12,7 @@ import toast from 'react-hot-toast'
 import { useAuth } from '@context/AuthContext'
 import DocumentosPanel from '@components/DocumentosPanel'
 import CantidadPresentacion from '@components/CantidadPresentacion'
+import CruceMargenCard from '@components/CruceMargenCard'
 
 const HOY = new Date().toISOString().split('T')[0]
 const MEDIO_PAGO = ['Contado', 'Crédito 30 días', 'Crédito 60 días', 'Crédito 90 días']
@@ -310,7 +311,7 @@ export default function OCPage() {
       setSearchParams({}, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchParams]) // también al navegar entre OCs desde el cruce OC↔Cotización
 
   const abrirEdicion = (oc) => {
     setForm({
@@ -775,6 +776,9 @@ export default function OCPage() {
               <div className="text-base font-black" style={{ color: 'var(--rmg-gold)', fontFamily: 'Inter Tight, sans-serif' }}>Total: {formatCLP(total)}</div>
             </div>
           </div>
+
+          {/* Cruce OC↔Cotización (venta calzada): totales de la cotización y margen */}
+          <CruceMargenCard cruce={oc.cruce_cotizacion} ocActualId={oc.id} />
 
           {/* recibida_total: stock ya actualizado, falta registrar la factura */}
           {estado === 'recibida_total' && !facturaActiva && (
