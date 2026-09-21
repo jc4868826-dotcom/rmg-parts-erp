@@ -69,6 +69,7 @@ export default function BackupsPage() {
   const backups     = data?.backups     || []
   const nextBackup  = data?.next_backup || null
   const diskUsage   = data?.disk_usage  || '—'
+  const disco       = data?.disco       || null
   const lastBackup  = backups[0]
 
   const crearMut = useMutation({
@@ -93,6 +94,15 @@ export default function BackupsPage() {
     },
   })
 
+  const eliminarMut = useMutation({
+    mutationFn: (filename) => api.delete(`/backup/${filename}`).then(r => r.data),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['backups'] })
+      toast.success(`Liberado ${res.liberado}${res.guardado ? '' : ' · la DB aún no se pudo guardar, libera más espacio'}`)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar backup'),
+  })
+
   const handleDownloadCurrent = async () => {
     try {
       await downloadBlob('/backup/download-current', 'rmg_parts_live.db')
@@ -109,6 +119,20 @@ export default function BackupsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
 
+      {/* Alerta de disco (incidente ENOSPC 2026-09-21) */}
+      {disco && (disco.alerta || disco.errorGuardado) && (
+        <div className="rounded-lg p-4 flex gap-3" style={{ background: 'rgba(224,90,78,0.1)', border: '1px solid rgba(224,90,78,0.35)' }}>
+          <AlertTriangle size={18} style={{ color: 'var(--rmg-red)', flexShrink: 0 }} />
+          <div className="text-sm" style={{ color: 'var(--rmg-off)' }}>
+            <strong style={{ color: 'var(--rmg-red)' }}>
+              {disco.errorGuardado ? 'La base de datos NO se está guardando en disco.' : 'Espacio en disco crítico.'}
+            </strong>{' '}
+            Libre: {disco.libreHuman} · DB: {disco.dbHuman}. Descarga y elimina respaldos antiguos para liberar espacio
+            {disco.errorGuardado ? ' — al liberar, lo que está en memoria se guarda automáticamente. No reinicies el servidor antes.' : '.'}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
@@ -116,7 +140,7 @@ export default function BackupsPage() {
             <Shield size={22} style={{ color: 'var(--rmg-blt)' }} /> Respaldos del sistema
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
-            Backup automático cada 2 horas · últimos {backups.length} disponibles
+            Backup automático cada 6 horas · últimos {backups.length} disponibles
           </p>
         </div>
         <div className="flex gap-2">
@@ -195,6 +219,13 @@ export default function BackupsPage() {
                         style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'rgba(244,162,60,0.1)', color: '#f4a23c', border: '0.5px solid rgba(244,162,60,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                       >
                         <RefreshCw size={10} /> Restaurar
+                      </button>
+                      <button
+                        onClick={() => { if (window.confirm(`¿Eliminar el respaldo ${b.filename}? Descárgalo antes si lo necesitas.`)) eliminarMut.mutate(b.filename) }}
+                        disabled={eliminarMut.isPending}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'rgba(224,90,78,0.1)', color: 'var(--rmg-red)', border: '0.5px solid rgba(224,90,78,0.25)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <X size={10} /> Eliminar
                       </button>
                     </div>
                   </td>

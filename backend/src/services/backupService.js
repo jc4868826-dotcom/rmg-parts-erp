@@ -76,12 +76,26 @@ function createBackup(prefix = 'rmg_backup') {
   const stat = fs.statSync(DB_PATH)
   if (stat.size < 100) throw new Error('Export inválido: archivo DB demasiado pequeño')
 
+  // 2026-09-21 (incidente ENOSPC): no respaldar si no queda espacio para la copia
+  // + margen para que la DB se siga guardando. Antes el intento fallido dejaba un
+  // .db.tmp parcial que listBackups ignora y pruneOldBackups nunca borraba: cada
+  // reinicio/intervalo sumaba basura hasta llenar el disco.
+  const libre = espacioLibre()
+  if (libre !== null && libre < stat.size * 3) {
+    throw new Error(`Espacio insuficiente para respaldar: libre ${formatSize(libre)}, DB ${formatSize(stat.size)}`)
+  }
+
   const filename = `${prefix}_${getTimestamp()}.db`
   const filepath = path.join(BACKUP_DIR, filename)
 
   const tmp = filepath + '.tmp'
-  fs.copyFileSync(DB_PATH, tmp)
-  fs.renameSync(tmp, filepath)
+  try {
+    fs.copyFileSync(DB_PATH, tmp)
+    fs.renameSync(tmp, filepath)
+  } catch (e) {
+    try { fs.unlinkSync(tmp) } catch (_) {}
+    throw e
+  }
 
   const sizeKB = Math.round(stat.size / 1024)
   console.log(`✅ Backup creado: ${filename} (${sizeKB} KB)`)
@@ -92,9 +106,47 @@ function createBackup(prefix = 'rmg_backup') {
   return { filename, filepath, size: stat.size, sizeHuman: formatSize(stat.size), date: new Date().toISOString() }
 }
 
+// ─── espacio en disco / limpieza de temporales ───────────────────────────────
+
+function espacioLibre() {
+  try {
+    const st = fs.statfsSync(path.dirname(DB_PATH))   // Node >= 18.15
+    return st.bavail * st.bsize
+  } catch { return null }
+}
+
+// Borra .tmp huérfanos de copias/guardados fallidos (backups y DB).
+function limpiarTemporales() {
+  let liberado = 0
+  const candidatos = []
+  try { fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.tmp')).forEach(f => candidatos.push(path.join(BACKUP_DIR, f))) } catch (_) {}
+  candidatos.push(DB_PATH + '.tmp')
+  for (const f of candidatos) {
+    try {
+      const size = fs.statSync(f).size
+      fs.unlinkSync(f)
+      liberado += size
+      console.log(`🧹 Temporal huérfano eliminado: ${path.basename(f)} (${formatSize(size)})`)
+    } catch (_) {}
+  }
+  return liberado
+}
+
+function estadoDisco() {
+  const libre = espacioLibre()
+  const dbSize = (() => { try { return fs.statSync(DB_PATH).size } catch { return 0 } })()
+  return {
+    libre, libreHuman: libre === null ? 'desconocido' : formatSize(libre),
+    db: dbSize, dbHuman: formatSize(dbSize),
+    alerta: libre !== null && libre < dbSize * 3,
+    errorGuardado: _db?.errorGuardado || null,
+  }
+}
+
 // ─── pruneOldBackups ─────────────────────────────────────────────────────────
 
 function pruneOldBackups() {
+  limpiarTemporales()
   const all = listBackups()
   for (const b of all.slice(MAX_BACKUPS)) {
     try {
@@ -138,6 +190,16 @@ function init(dbInstance, sqlConstructor) {
 
   ensureDir()
 
+  // Libera temporales huérfanos antes de cualquier otra escritura y avisa si el disco está al límite.
+  const liberado = limpiarTemporales()
+  const disco = estadoDisco()
+  console.log(`💾 Disco: libre ${disco.libreHuman} · DB ${disco.dbHuman}${liberado ? ` · liberado ${formatSize(liberado)} en temporales` : ''}`)
+  if (disco.alerta) console.warn('⚠️ ESPACIO EN DISCO CRÍTICO — borrar respaldos antiguos o ampliar el disco en Render')
+  // Si el arranque no pudo guardar (disco lleno) y la limpieza liberó espacio, persistir ya.
+  if (_db?.errorGuardado) {
+    try { _db._save(); } catch (e) { console.warn('⚠️ Sigue sin poder guardar la DB:', e.message) }
+  }
+
   // Backup inicial 10 segundos después de arrancar
   setTimeout(() => {
     try {
@@ -162,5 +224,5 @@ function getNextBackupTime() { return _nextBackupTime }
 
 module.exports = {
   init, createBackup, listBackups, restoreFromBackup,
-  formatSize, getNextBackupTime, BACKUP_DIR,
+  formatSize, getNextBackupTime, BACKUP_DIR, estadoDisco, limpiarTemporales,
 }

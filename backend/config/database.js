@@ -32,9 +32,22 @@ class SQLiteWrapper {
     try {
       fs.writeFileSync(tmp, data)
       fs.renameSync(tmp, DB_PATH)
+      if (this.errorGuardado) console.log('✅ DB guardada en disco nuevamente (se recuperó del error anterior)')
+      this.errorGuardado = null
     } catch (e) {
       console.error('⚠️ Error guardando DB:', e.message)
       try { fs.unlinkSync(tmp) } catch (_) {}
+      // 2026-09-21: antes el error se tragaba y la API respondía OK con el dato
+      // solo en memoria — al reiniciar (deploy) se perdía todo lo no escrito
+      // (incidente ENOSPC: disco lleno). Ahora la petición falla visible (500).
+      // El dato queda en memoria: el próximo guardado exitoso escribe la DB
+      // completa, así que liberar espacio SIN reiniciar recupera todo.
+      this.errorGuardado = { mensaje: e.message, code: e.code, fecha: new Date().toISOString() }
+      if (!this._booting) {
+        const err = new Error(`No se pudo guardar en disco (${e.code || e.message}). El cambio NO quedó guardado — avisar a soporte.`)
+        err.status = 507
+        throw err
+      }
     }
   }
 
@@ -2960,6 +2973,7 @@ function ensureAppSettings() {
 
 // ─── Init async (sql.js requiere carga WASM) ──────────────────────────────────
 async function initDB() {
+  db._booting = true
   const SQL = await initSqlJs({
     locateFile: file => path.join(path.dirname(require.resolve('sql.js')), file),
   })
@@ -3005,6 +3019,7 @@ async function initDB() {
   ensureAppSettings()
   seedData()
 
+  db._booting = false
   // Inicializar servicio de backup con acceso a la DB y al constructor SQL
   backupSvc.init(db, SQL)
 }
