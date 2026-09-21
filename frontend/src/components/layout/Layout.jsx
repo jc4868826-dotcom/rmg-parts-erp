@@ -245,7 +245,7 @@ export default function Layout() {
                 </div>
               )}
               <div className="space-y-0.5">
-                {section.items.filter(item => !item.adminOnly || user?.rol === 'admin').map(({ to, icon: Icon, label, badge }) => {
+                {section.items.filter(item => !item.adminOnly || ['admin', 'gerente', 'administrador'].includes(user?.rol)).map(({ to, icon: Icon, label, badge }) => {
                   const badgeValue = badge === 'prospeccion'
                     ? (prospeccionCount !== null ? String(prospeccionCount) : null)
                     : badge === 'oc'
