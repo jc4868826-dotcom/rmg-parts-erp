@@ -2965,6 +2965,48 @@ function runMigrations() {
       console.error('❌ Migración purga_compra_agil_v1 falló:', e.message)
     }
   }
+
+  // 2026-09-22 — Facturación de ventas: rol "facturador" (acceso de administrador) y
+  // estado de facturación en ventas. Una venta que nace de una cotización queda
+  // "por_facturar" hasta que el facturador registra el N° de factura SII; recién ahí
+  // entra al flujo de pago de siempre (comprobante → validación gerente → Pagado,
+  // o Cuentas por Cobrar si aún no hay pago). No cambia `ventas.estado`.
+  const mFacturacion = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('ventas_facturacion_v1')
+  if (!mFacturacion) {
+    try {
+      const raw = db._db
+      // 1) rol facturador: SQLite no permite alterar un CHECK → se reconstruye la tabla
+      //    con su mismo SQL (conserva columnas agregadas después) + el rol nuevo.
+      const sqlUsuarios = raw.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='usuarios'")[0]?.values[0][0] || ''
+      if (sqlUsuarios && !sqlUsuarios.includes("'facturador'")) {
+        const nuevoSql = sqlUsuarios
+          .replace(/'vendedor'\s*\)/, "'vendedor','facturador')")
+          .replace(/^CREATE TABLE\s+["'`]?usuarios["'`]?/i, 'CREATE TABLE usuarios_facturador_v1')
+        if (!nuevoSql.includes("'facturador'")) throw new Error('No se encontró el CHECK de rol en usuarios')
+        const cols = raw.exec('PRAGMA table_info(usuarios)')[0].values.map(c => `"${c[1]}"`).join(', ')
+        raw.run('PRAGMA foreign_keys = OFF')
+        try {
+          raw.run(nuevoSql)
+          raw.run(`INSERT INTO usuarios_facturador_v1 (${cols}) SELECT ${cols} FROM usuarios`)
+          raw.run('DROP TABLE usuarios')
+          raw.run('ALTER TABLE usuarios_facturador_v1 RENAME TO usuarios')
+        } finally {
+          raw.run('PRAGMA foreign_keys = ON')
+        }
+      }
+      // 2) columnas de facturación en ventas
+      const vCols = raw.exec('PRAGMA table_info(ventas)')[0].values.map(c => c[1])
+      for (const [col, tipo] of [['estado_facturacion', 'TEXT'], ['numero_factura', 'TEXT'], ['fecha_factura', 'TEXT'],
+                                 ['facturada_por', 'TEXT'], ['facturada_at', 'TEXT']]) {
+        if (!vCols.includes(col)) raw.run(`ALTER TABLE ventas ADD COLUMN ${col} ${tipo}`)
+      }
+      raw.run("INSERT INTO _migrations (id) VALUES ('ventas_facturacion_v1')")
+      db._save()
+      console.log('✅ Migración ventas_facturacion_v1 — rol facturador + estado de facturación en ventas')
+    } catch (e) {
+      console.error('❌ Migración ventas_facturacion_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

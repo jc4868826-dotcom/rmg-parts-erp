@@ -63,6 +63,11 @@ export default function VentasPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const esGerente = user?.rol === 'gerente'
+  // Facturación (2026-09-22): el facturador registra el N° de factura SII (gerente/administrador también pueden).
+  const puedeFacturar = ['facturador', 'gerente', 'administrador'].includes(user?.rol)
+  const [verPorFacturar, setVerPorFacturar] = useState(false)
+  const [facturarModal, setFacturarModal] = useState(null)   // venta a facturar, o null
+  const [factura, setFactura] = useState({ numero_factura: '', fecha_factura: HOY })
   const [mes, setMes]             = useState(MES_ACTUAL)
   const [showForm, setShowForm]   = useState(false)
   const [editando, setEditando]   = useState(null)
@@ -71,8 +76,14 @@ export default function VentasPage() {
   const qc = useQueryClient()
 
   const { data: ventas = [], isLoading } = useQuery({
-    queryKey: ['ventas', mes],
-    queryFn: () => api.get('/ventas', { params: { mes } }).then(r => r.data),
+    queryKey: ['ventas', verPorFacturar ? 'por_facturar' : mes],
+    queryFn: () => api.get('/ventas', { params: verPorFacturar ? { estado_facturacion: 'por_facturar' } : { mes } }).then(r => r.data),
+  })
+  // Bandeja del facturador: ventas enviadas a facturación, de cualquier mes.
+  const { data: porFacturar = [] } = useQuery({
+    queryKey: ['ventas', 'por_facturar', 'conteo'],
+    queryFn: () => api.get('/ventas', { params: { estado_facturacion: 'por_facturar' } }).then(r => r.data),
+    staleTime: 30_000,
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['ventas'] })
@@ -104,6 +115,16 @@ export default function VentasPage() {
 
   const [pagoModal, setPagoModal] = useState(null)   // venta seleccionada, o null
   const [pago, setPago] = useState(PAGO_INIT)
+
+  const facturarMut = useMutation({
+    mutationFn: ({ id, data }) => api.post(`/ventas/${id}/facturar`, data).then(r => r.data),
+    onSuccess: (v) => {
+      invalidate(); qc.invalidateQueries({ queryKey: ['cxc-ventas'] }); qc.invalidateQueries({ queryKey: ['cxc-pendientes-badge'] })
+      toast.success(`Factura N° ${v.numero_factura} registrada — venta facturada`)
+      setFacturarModal(null)
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar la factura'),
+  })
 
   const pagoMut = useMutation({
     mutationFn: ({ id, data }) => api.post(`/ventas/${id}/pago`, data).then(r => r.data),
@@ -387,6 +408,45 @@ export default function VentasPage() {
       )}
 
       {/* Modal registrar pago */}
+      {facturarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-bold">Registrar factura SII</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                  {facturarModal.numero_documento || `Venta #${facturarModal.id}`} · {facturarModal.cliente_nombre || '—'} · Neto {formatCLP(facturarModal.total)} · c/IVA {formatCLP(totalConIVA(facturarModal.total))}
+                </p>
+              </div>
+              <button onClick={() => setFacturarModal(null)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>N° de factura (SII)</label>
+                <input className="rmg-input" autoFocus placeholder="Ej: 1543" value={factura.numero_factura}
+                  onChange={e => setFactura(f => ({ ...f, numero_factura: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Fecha de emisión</label>
+                <input type="date" className="rmg-input" value={factura.fecha_factura}
+                  onChange={e => setFactura(f => ({ ...f, fecha_factura: e.target.value }))} />
+              </div>
+              <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
+                Al guardar la venta queda <strong>Facturada</strong>. Si aún no hay pago, aparece en Cuentas por Cobrar.
+              </p>
+              <div className="flex gap-3 justify-end pt-2">
+                <button onClick={() => setFacturarModal(null)} className="btn-secondary">Cancelar</button>
+                <button onClick={() => facturarMut.mutate({ id: facturarModal.id, data: factura })}
+                  disabled={facturarMut.isPending || !factura.numero_factura.trim()}
+                  className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                  <FileText size={14}/> {facturarMut.isPending ? 'Guardando...' : 'Marcar facturada'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pagoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
           <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
@@ -455,6 +515,14 @@ export default function VentasPage() {
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{ESTADO_LABEL[v.estado] || v.estado}</span>
                     <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.tipo_documento}</span>
+                    {v.estado_facturacion === 'por_facturar' && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)' }}>Enviada a facturación</span>
+                    )}
+                    {v.estado_facturacion === 'facturada' && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
+                        Factura N° {v.numero_factura}{v.fecha_factura ? ` · ${formatFecha(v.fecha_factura)}` : ''}
+                      </span>
+                    )}
                     {(v.cotizacion_id || v.pedido_id) && (
                       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}>
                         {v.cotizacion_id ? 'desde cotización' : 'desde pedido'}
@@ -565,7 +633,14 @@ export default function VentasPage() {
       {/* Tabla */}
       <div className="rmg-card overflow-hidden">
         <div className="px-5 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-          <span className="font-bold text-sm">{ventas.length} ventas · {mes}</span>
+          <span className="font-bold text-sm">{ventas.length} ventas · {verPorFacturar ? 'enviadas a facturación (todos los meses)' : mes}</span>
+          <button onClick={() => setVerPorFacturar(x => !x)}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+            style={verPorFacturar
+              ? { background: 'var(--rmg-gold)', color: '#fff' }
+              : { background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)' }}>
+            <FileText size={13}/> {verPorFacturar ? 'Ver todas' : `Por facturar (${porFacturar.length})`}
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -615,6 +690,12 @@ export default function VentasPage() {
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.costo_total)}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{ESTADO_LABEL[v.estado] || v.estado}</span>
+                          {v.estado_facturacion === 'por_facturar' && (
+                            <div className="mt-1"><span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)' }}>Enviada a facturación</span></div>
+                          )}
+                          {v.estado_facturacion === 'facturada' && (
+                            <div className="text-[10px] mt-1 font-semibold" style={{ color: 'var(--rmg-teal)' }}>Facturada · N° {v.numero_factura}</div>
+                          )}
                           {v.motivo_rechazo_pago && v.estado === 'Pendiente' && (
                             <div className="text-[10px] mt-1" style={{ color: 'var(--rmg-red)' }} title={v.motivo_rechazo_pago}>Pago rechazado: {v.motivo_rechazo_pago}</div>
                           )}
@@ -631,11 +712,16 @@ export default function VentasPage() {
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.forma_pago}</td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1 items-center">
-                            {v.estado === 'Pendiente' && (
-                              <>
-                                <button onClick={() => { setPagoModal(v); setPago(PAGO_INIT) }} title="Registrar pago (directo — sin validación)" className="p-1.5 rounded hover:bg-black/5" style={{ color: 'var(--rmg-teal)' }}><DollarSign size={13}/></button>
-                                <button onClick={() => abrirSelectorComprobante(v.id)} disabled={comprobanteMut.isPending} title="Adjuntar comprobante de depósito/transferencia" className="p-1.5 rounded hover:bg-black/5 disabled:opacity-50" style={{ color: 'var(--rmg-blue)' }}><Upload size={13}/></button>
-                              </>
+                            {v.estado_facturacion === 'por_facturar' && v.estado !== 'Anulado' && puedeFacturar && (
+                              <button onClick={() => { setFacturarModal(v); setFactura({ numero_factura: '', fecha_factura: HOY }) }}
+                                title="Registrar N° de factura SII" className="text-[11px] font-semibold px-2 py-1 rounded-lg flex items-center gap-1"
+                                style={{ background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)' }}>
+                                <FileText size={12}/> Facturar
+                              </button>
+                            )}
+                            {/* Pago directo solo desde Cuentas por Cobrar (gerente). Acá solo datos de pago → validación. */}
+                            {v.estado === 'Pendiente' && v.estado_facturacion !== 'por_facturar' && (
+                              <button onClick={() => abrirSelectorComprobante(v.id)} disabled={comprobanteMut.isPending} title="Adjuntar comprobante de pago — pasa a validación del gerente" className="p-1.5 rounded hover:bg-black/5 disabled:opacity-50" style={{ color: 'var(--rmg-blue)' }}><Upload size={13}/></button>
                             )}
                             {v.estado === 'en_validacion_pago' && (
                               esGerente ? (

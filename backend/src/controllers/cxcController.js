@@ -135,10 +135,12 @@ const crearFactura = (req, res) => {
 const getVentasPendientes = (req, res) => {
   try {
     const rows = db.prepare(`
-      SELECT id, numero_documento, cliente_nombre, cliente_id, total, fecha, forma_pago, estado, motivo_rechazo_pago
+      SELECT id, numero_documento, cliente_nombre, cliente_id, total, fecha, forma_pago, estado, motivo_rechazo_pago,
+             estado_facturacion, numero_factura, fecha_factura
       FROM ventas
       WHERE estado = 'en_validacion_pago'
-         OR (estado = 'Pendiente' AND forma_pago LIKE 'Crédito%')
+         OR (estado = 'Pendiente' AND COALESCE(estado_facturacion, '') != 'por_facturar'
+             AND (forma_pago LIKE 'Crédito%' OR estado_facturacion = 'facturada'))
       ORDER BY CASE estado WHEN 'en_validacion_pago' THEN 0 ELSE 1 END, fecha ASC
     `).all()
 
@@ -161,7 +163,9 @@ const getVentasPendientes = (req, res) => {
         fecha_vencimiento = venc.toISOString().split('T')[0]
         dias_vencida = Math.round((hoy - venc) / (1000 * 60 * 60 * 24))
       }
-      const tipo = v.estado === 'en_validacion_pago' ? 'validacion' : 'credito'
+      // 'facturada': facturada sin datos de pago aún (2026-09-22) — cae acá hasta que se pague.
+      const tipo = v.estado === 'en_validacion_pago' ? 'validacion'
+        : (String(v.forma_pago || '').startsWith('Crédito') ? 'credito' : 'facturada')
       const comprobante = tipo === 'validacion' ? getComprobante.get(v.id) : null
       return {
         ...v, tipo, fecha_vencimiento, dias_vencida,

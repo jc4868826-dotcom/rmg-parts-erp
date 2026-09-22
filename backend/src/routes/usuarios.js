@@ -7,7 +7,7 @@ const { body } = require('express-validator')
 const c = require('../controllers/usuariosController')
 const { authenticate, requireRole } = require('../middleware/auth')
 
-const gestionUsuarios = [authenticate, requireRole(['gerente', 'administrador'])]
+const gestionUsuarios = [authenticate, requireRole(['gerente', 'administrador', 'facturador'])]
 
 router.get('/',      ...gestionUsuarios, c.getAll)
 router.get('/:id',   ...gestionUsuarios, c.getOne)

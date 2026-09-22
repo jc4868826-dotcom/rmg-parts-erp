@@ -22,27 +22,29 @@ const ESTADO_STYLES = {
   pendiente: { color: 'rgba(90,143,168,0.9)', bg: 'rgba(15, 35, 60,0.08)', label: '○ No configurado' },
 }
 // 3 perfiles: gerente (acceso total + autorizaciones) · administrador (acceso total, sin autorizaciones) · vendedor (resto)
-const ROLES = ['gerente', 'administrador', 'vendedor']
-const ROL_LABEL = { gerente: 'Gerente', administrador: 'Administrador', vendedor: 'Vendedor' }
+const ROLES = ['gerente', 'administrador', 'facturador', 'vendedor']
+const ROL_LABEL = { gerente: 'Gerente', administrador: 'Administrador', facturador: 'Facturador', vendedor: 'Vendedor' }
 const ROL_STYLES = {
   gerente:       { bg: 'rgba(159,90,253,0.12)', color: 'var(--rmg-purple)' },
   administrador: { bg: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blt)'    },
+  facturador:    { bg: 'rgba(244,162,60,0.12)', color: 'var(--rmg-gold)'   },
   vendedor:      { bg: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)'   },
 }
 const PERMISOS = [
-  { modulo: 'Dashboard',      gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Catálogo',       gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Clientes',       gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Pipeline CRM',   gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Cotizaciones',   gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Pedidos',        gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Inventario',     gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Agenda',         gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Bot WhatsApp',   gerente: true,  administrador: true,  vendedor: true  },
-  { modulo: 'Gastos',         gerente: true,  administrador: true,  vendedor: false },
-  { modulo: 'Reportes',       gerente: true,  administrador: true,  vendedor: false },
-  { modulo: 'Configuración',  gerente: true,  administrador: true,  vendedor: false },
-  { modulo: 'Autorizaciones (OC / cotizaciones)', gerente: true, administrador: false, vendedor: false },
+  { modulo: 'Dashboard',      gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Catálogo',       gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Clientes',       gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Pipeline CRM',   gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Cotizaciones',   gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Pedidos',        gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Inventario',     gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Agenda',         gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Bot WhatsApp',   gerente: true,  administrador: true, facturador: true,  vendedor: true  },
+  { modulo: 'Gastos',         gerente: true,  administrador: true, facturador: true,  vendedor: false },
+  { modulo: 'Reportes',       gerente: true,  administrador: true, facturador: true,  vendedor: false },
+  { modulo: 'Configuración',  gerente: true,  administrador: true, facturador: true,  vendedor: false },
+  { modulo: 'Facturación SII (N° factura en ventas)', gerente: true, administrador: true, facturador: true, vendedor: false },
+  { modulo: 'Autorizaciones (OC / cotizaciones)', gerente: true, administrador: false, facturador: false, vendedor: false },
 ]
 const FORM_INIT = { nombre: '', email: '', password: '', telefono: '', rol: 'vendedor' }
 

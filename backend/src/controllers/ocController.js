@@ -93,7 +93,7 @@ const ROLES_REQUERIDOS = {
   autorizada:       ['gerente'],
   rechazada:        ['gerente'],
   pago_autorizado:  ['gerente'],
-  anulada:          ['gerente', 'administrador'],
+  anulada:          ['gerente', 'administrador', 'facturador'],
 }
 
 const TIPO_EVENTO = {

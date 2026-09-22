@@ -371,7 +371,7 @@ export default function CotizacionesPage() {
     mutationFn: (id) => api.post(`/ventas/desde-cotizacion/${id}`).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cotizaciones'] })
-      toast.success('Venta generada desde la cotización')
+      toast.success('Venta generada — enviada a facturación')
       navigate('/ventas')
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al generar la venta'),

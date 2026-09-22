@@ -31,7 +31,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/cotizaciones', icon: FileText,        label: 'Cotizaciones',    badge: '2' },
       { to: '/pedidos',      icon: ShoppingCart,    label: 'Pedidos',         badge: null },
-      { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: null },
+      { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: 'facturar' },
       { to: '/cuentas-corrientes', icon: Wallet,    label: 'Cuentas Corrientes', badge: null },
       { to: '/facturas',     icon: BookOpen,        label: 'Imprimir Nota de Venta', badge: null },
       { to: '/cxc',          icon: DollarSign,      label: 'CxC · Cobrar',    badge: 'cxc' },
@@ -156,6 +156,17 @@ export default function Layout() {
   const chcBadgeCount = Array.isArray(chcDetectadas) ? chcDetectadas.length : null
 
 
+  // Ventas enviadas a facturación (2026-09-22) — badge para quien factura.
+  const puedeFacturar = ['facturador', 'gerente', 'administrador'].includes(user?.rol)
+  const { data: porFacturar } = useQuery({
+    queryKey: ['ventas', 'por_facturar', 'conteo'],
+    queryFn: () => api.get('/ventas', { params: { estado_facturacion: 'por_facturar' } }).then(r => r.data),
+    staleTime: 60_000,
+    retry: false,
+    enabled: puedeFacturar,
+  })
+  const facturarBadgeCount = puedeFacturar && Array.isArray(porFacturar) ? porFacturar.length : null
+
   const handleLogout = async () => {
     await logout()
     navigate('/login')
@@ -205,7 +216,7 @@ export default function Layout() {
                 </div>
               )}
               <div className="space-y-0.5">
-                {section.items.filter(item => !item.adminOnly || ['admin', 'gerente', 'administrador'].includes(user?.rol)).map(({ to, icon: Icon, label, badge }) => {
+                {section.items.filter(item => !item.adminOnly || ['admin', 'gerente', 'administrador', 'facturador'].includes(user?.rol)).map(({ to, icon: Icon, label, badge }) => {
                   const badgeValue = badge === 'prospeccion'
                     ? (prospeccionCount !== null ? String(prospeccionCount) : null)
                     : badge === 'oc'
@@ -214,6 +225,8 @@ export default function Layout() {
                     ? (cxpBadgeCount > 0 ? String(cxpBadgeCount) : null)
                     : badge === 'cxc'
                     ? (cxcBadgeCount > 0 ? String(cxcBadgeCount) : null)
+                    : badge === 'facturar'
+                    ? (facturarBadgeCount > 0 ? String(facturarBadgeCount) : null)
                     : badge === 'chilecompra'
                     ? (chcBadgeCount > 0 ? String(chcBadgeCount) : null)
                     : badge

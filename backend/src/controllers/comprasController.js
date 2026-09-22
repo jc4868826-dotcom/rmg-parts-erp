@@ -126,7 +126,7 @@ const deleteCxP = (req, res) => {
     // caja_movimientos, así que borrarla (lo que también revierte ese egreso,
     // abajo) queda reservado a gerente/administrador — para limpiar registros
     // erróneos, no para que cualquiera borre historial de pagos reales.
-    if (f.estado === 'pagada' && !['gerente', 'administrador'].includes(req.user?.rol)) {
+    if (f.estado === 'pagada' && !['gerente', 'administrador', 'facturador'].includes(req.user?.rol)) {
       return res.status(403).json({ error: 'Solo gerente o administrador pueden eliminar una factura ya pagada' })
     }
     db.prepare('DELETE FROM caja_movimientos WHERE origen_tabla = ? AND origen_id = ?')

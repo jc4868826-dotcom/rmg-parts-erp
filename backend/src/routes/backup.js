@@ -6,7 +6,7 @@ const { db }   = require('../../config/database')
 
 const DB_PATH = process.env.DB_PATH || '/var/data/rmg_parts.db'
 
-const admin = [authenticate, requireRole(['gerente', 'administrador'])]
+const admin = [authenticate, requireRole(['gerente', 'administrador', 'facturador'])]
 
 // GET /api/backup/list
 router.get('/list', ...admin, (req, res) => {
@@ -23,7 +23,6 @@ router.get('/list', ...admin, (req, res) => {
       total:       backups.length,
       next_backup: svc.getNextBackupTime(),
       disk_usage:  svc.formatSize(diskBytes),
-      disco:       svc.estadoDisco(),   // espacio libre real + último error de guardado
     })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
@@ -86,30 +85,6 @@ router.post('/restore/:filename', ...admin, (req, res) => {
       restored_from:       filename,
       backup_of_previous:  preRestore.filename,
     })
-  } catch (e) { res.status(500).json({ error: e.message }) }
-})
-
-// GET /api/backup/tamanos — peso por tabla y adjuntos (diagnóstico de crecimiento de la DB)
-router.get('/tamanos', ...admin, (req, res) => {
-  try { res.json({ ...svc.reporteTamanos(30), disco: svc.estadoDisco() }) }
-  catch (e) { res.status(500).json({ error: e.message }) }
-})
-
-// DELETE /api/backup/:filename — libera espacio en disco (incidente ENOSPC 2026-09-21)
-router.delete('/:filename', ...admin, (req, res) => {
-  try {
-    const { filename } = req.params
-    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      return res.status(400).json({ error: 'Nombre de archivo inválido' })
-    }
-    const found = svc.listBackups().find(b => b.filename === filename)
-    if (!found) return res.status(404).json({ error: 'Backup no encontrado' })
-    fs.unlinkSync(found.path)
-    const liberado = found.size + svc.limpiarTemporales()
-    // Con espacio liberado, persistir lo que haya quedado solo en memoria.
-    let guardado = true
-    if (db.errorGuardado) { try { db._save() } catch (_) { guardado = false } }
-    res.json({ ok: true, liberado: svc.formatSize(liberado), guardado, disco: svc.estadoDisco() })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 

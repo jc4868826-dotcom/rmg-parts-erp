@@ -10,6 +10,8 @@ const { db, uuidv4 } = require('../../config/database')
 const { tipoDeDocumento } = require('../middleware/documentos')
 
 const ESTADOS_LOGISTICOS = ['en_proceso', 'despachada', 'recibida_cliente']
+// Facturación (2026-09-22): quién puede registrar el N° de factura SII.
+const ROLES_FACTURAN = ['facturador', 'gerente', 'administrador']
 
 const hoy = () => new Date().toISOString().split('T')[0]
 
@@ -96,6 +98,7 @@ const getAll = (req, res) => {
     const where = [], params = []
     if (mes)              { where.push('v.fecha LIKE ?');            params.push(`${mes}%`) }
     if (estado_logistico) { where.push('v.estado_logistico = ?');    params.push(estado_logistico) }
+    if (req.query.estado_facturacion) { where.push('v.estado_facturacion = ?'); params.push(req.query.estado_facturacion) }
     if (cliente_id)       { where.push('v.cliente_id = ?');          params.push(cliente_id) }
     if (cotizacion_id)    { where.push('v.cotizacion_id = ?');       params.push(cotizacion_id) }
     if (pedido_id)         { where.push('v.pedido_id = ?');           params.push(pedido_id) }
@@ -227,7 +230,10 @@ const createFromCotizacion = (req, res) => {
     })
 
     db.prepare("UPDATE cotizaciones SET estado = 'aprobada', updated_at = datetime('now') WHERE id = ?").run(cotId)
-    res.status(201).json(venta)
+    // Facturación (2026-09-22): la venta nace "enviada a facturación" — el pago no
+    // se gestiona hasta que el facturador registre el N° de factura SII.
+    db.prepare("UPDATE ventas SET estado_facturacion = 'por_facturar' WHERE id = ?").run(venta.id)
+    res.status(201).json({ ...venta, estado_facturacion: 'por_facturar' })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -398,12 +404,43 @@ const cambiarEstadoLogistico = (req, res) => {
   }
 }
 
-// Marca la venta como pagada (equivalente a lo que antes hacía notas_venta.registrarPago)
+// Registra el N° de factura SII (rol facturador; también gerente/administrador).
+// por_facturar → facturada. Desde ahí sigue el flujo de pago normal.
+const facturar = (req, res) => {
+  try {
+    if (!ROLES_FACTURAN.includes(req.user?.rol)) {
+      return res.status(403).json({ error: 'Solo el facturador (o gerente/administrador) puede registrar la factura' })
+    }
+    const venta = db.prepare('SELECT * FROM ventas WHERE id = ?').get(req.params.id)
+    if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
+    if (venta.estado === 'Anulado') return res.status(400).json({ error: 'La venta está anulada' })
+    const numero = String(req.body?.numero_factura || '').trim()
+    if (!numero) return res.status(400).json({ error: 'Ingresa el N° de factura emitida en el SII' })
+    const dup = db.prepare('SELECT numero_documento FROM ventas WHERE numero_factura = ? AND id != ?').get(numero, venta.id)
+    if (dup) return res.status(400).json({ error: `La factura N° ${numero} ya está registrada en la venta ${dup.numero_documento}` })
+
+    db.prepare(`UPDATE ventas SET estado_facturacion = 'facturada', numero_factura = ?, fecha_factura = ?,
+                facturada_por = ?, facturada_at = datetime('now'), tipo_documento = 'Factura' WHERE id = ?`)
+      .run(numero, req.body?.fecha_factura || hoy(), req.user?.id || null, venta.id)
+    res.json(withItems(db.prepare('SELECT * FROM ventas WHERE id = ?').get(venta.id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// Marca la venta como pagada directo (sin comprobante). 2026-09-22: solo gerente,
+// y solo se ofrece desde Cuentas por Cobrar — el resto usa comprobante + validación.
 const registrarPago = (req, res) => {
   try {
+    if (req.user?.rol !== 'gerente') {
+      return res.status(403).json({ error: 'Solo gerente puede marcar una venta como pagada directamente' })
+    }
     const venta = db.prepare('SELECT * FROM ventas WHERE id = ?').get(req.params.id)
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
     if (venta.estado === 'Pagado') return res.status(400).json({ error: 'La venta ya está pagada' })
+    if (venta.estado_facturacion === 'por_facturar') {
+      return res.status(400).json({ error: 'La venta aún no está facturada' })
+    }
 
     const { cuenta_bancaria, fecha_pago, metodo_pago, notas } = req.body
     const descripcion = [
@@ -439,6 +476,9 @@ const subirComprobantePago = (req, res) => {
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
     if (venta.estado !== 'Pendiente') {
       return res.status(400).json({ error: `Solo se puede adjuntar comprobante desde estado Pendiente (estado actual: ${venta.estado})` })
+    }
+    if (venta.estado_facturacion === 'por_facturar') {
+      return res.status(400).json({ error: 'La venta está enviada a facturación — el pago se ingresa una vez facturada' })
     }
     if (!req.file) return res.status(400).json({ error: 'Adjunta el comprobante (PDF o imagen)' })
 
@@ -525,7 +565,7 @@ const remove = (req, res) => {
   }
 }
 
-module.exports = {
+module.exports = { facturar,
   ESTADOS_LOGISTICOS,
   getAll, getOne, create, createFromCotizacion, createFromPedido,
   update, cambiarEstadoLogistico, registrarPago, subirComprobantePago, validarPago, remove,

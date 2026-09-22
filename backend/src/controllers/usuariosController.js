@@ -5,7 +5,7 @@
 const bcrypt = require('bcryptjs')
 const { db, uuidv4 } = require('../../config/database')
 
-const ROLES = ['gerente', 'administrador', 'vendedor']
+const ROLES = ['gerente', 'administrador', 'facturador', 'vendedor']
 
 const publicRow = (u) => {
   if (!u) return u

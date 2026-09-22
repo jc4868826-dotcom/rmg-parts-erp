@@ -152,7 +152,7 @@ export default function CotizacionForm() {
     setConvirtiendo(true)
     try {
       await api.post(`/ventas/desde-cotizacion/${id}`)
-      toast.success('Venta generada desde esta cotización')
+      toast.success('Venta generada — enviada a facturación')
       navigate('/ventas')
     } catch (e) {
       toast.error(e.response?.data?.error || 'Error al generar la venta')
