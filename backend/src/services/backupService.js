@@ -13,7 +13,8 @@ const DB_PATH     = process.env.DB_PATH || '/var/data/rmg_parts.db'
 // ~114MB. Si crece la base de datos, este disco vuelve a ajustarse en la
 // misma proporción — avisar si hace falta más historial (subir MAX_BACKUPS)
 // o menos disco todavía (bajar más el intervalo).
-const MAX_BACKUPS = 8
+// 2026-09-21: bajado a 3 — con la DB en ~530MB, 8 respaldos llenaban el disco (ENOSPC).
+const MAX_BACKUPS = 3
 const BACKUP_INTERVAL = 6 * 60 * 60 * 1000   // 6 horas → 4 respaldos/día
 
 let _db  = null   // SQLiteWrapper instance
@@ -132,6 +133,48 @@ function limpiarTemporales() {
   return liberado
 }
 
+// Si no hay espacio para guardar la DB (necesita una copia .tmp completa), borra
+// respaldos del más antiguo al más nuevo, conservando siempre `conservar`.
+function liberarEspacioConRespaldos(conservar = 1) {
+  const dbSize = (() => { try { return fs.statSync(DB_PATH).size } catch { return 0 } })()
+  const objetivo = dbSize * 2.5   // guardar (1x) + margen de crecimiento
+  const eliminados = []
+  const backups = listBackups()   // más nuevo primero
+  for (const b of backups.slice(conservar).reverse()) {
+    const libre = espacioLibre()
+    if (libre === null || libre >= objetivo) break
+    try {
+      fs.unlinkSync(b.path)
+      eliminados.push(`${b.filename} (${b.sizeHuman})`)
+      console.log(`🗑️ Respaldo eliminado por falta de espacio: ${b.filename} (${b.sizeHuman})`)
+    } catch (_) {}
+  }
+  return eliminados
+}
+
+// Peso aproximado por tabla (suma de LENGTH de todas sus columnas) — diagnóstico de crecimiento.
+function reporteTamanos(top = 12) {
+  if (!_db) return []
+  const tablas = _db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(t => t.name)
+  const out = []
+  for (const t of tablas) {
+    try {
+      const cols = _db.prepare(`PRAGMA table_info("${t}")`).all().map(c => `COALESCE(LENGTH("${c.name}"),0)`)
+      if (!cols.length) continue
+      const r = _db.prepare(`SELECT COUNT(*) AS n, SUM(${cols.join('+')}) AS bytes FROM "${t}"`).get()
+      out.push({ tabla: t, filas: r.n, bytes: r.bytes || 0, peso: formatSize(r.bytes || 0) })
+    } catch (_) {}
+  }
+  out.sort((a, b) => b.bytes - a.bytes)
+  // desglose de adjuntos (sospechosos habituales del crecimiento)
+  const detalle = []
+  try {
+    detalle.push(..._db.prepare(`SELECT 'documentos_adjuntos' AS tabla, entidad || '/' || tipo AS grupo, COUNT(*) AS n,
+      SUM(LENGTH(contenido_base64)) AS bytes FROM documentos_adjuntos GROUP BY entidad, tipo ORDER BY bytes DESC`).all())
+  } catch (_) {}
+  return { tablas: out.slice(0, top), adjuntos: detalle.map(d => ({ ...d, peso: formatSize(d.bytes || 0) })) }
+}
+
 function estadoDisco() {
   const libre = espacioLibre()
   const dbSize = (() => { try { return fs.statSync(DB_PATH).size } catch { return 0 } })()
@@ -192,6 +235,10 @@ function init(dbInstance, sqlConstructor) {
 
   // Libera temporales huérfanos antes de cualquier otra escritura y avisa si el disco está al límite.
   const liberado = limpiarTemporales()
+  // Sin espacio para guardar la DB = cada cambio se pierde al reiniciar. Los respaldos
+  // antiguos son prescindibles frente a eso: se liberan automáticamente (queda el más nuevo).
+  const pre = estadoDisco()
+  if (pre.libre !== null && pre.libre < pre.db * 2.5) liberarEspacioConRespaldos(1)
   const disco = estadoDisco()
   console.log(`💾 Disco: libre ${disco.libreHuman} · DB ${disco.dbHuman}${liberado ? ` · liberado ${formatSize(liberado)} en temporales` : ''}`)
   if (disco.alerta) console.warn('⚠️ ESPACIO EN DISCO CRÍTICO — borrar respaldos antiguos o ampliar el disco en Render')
@@ -199,6 +246,15 @@ function init(dbInstance, sqlConstructor) {
   if (_db?.errorGuardado) {
     try { _db._save(); } catch (e) { console.warn('⚠️ Sigue sin poder guardar la DB:', e.message) }
   }
+
+  // Diagnóstico de tamaño (qué tablas pesan) — una vez por arranque, diferido para no frenar el boot.
+  setTimeout(() => {
+    try {
+      const rep = reporteTamanos()
+      console.log('📊 Peso por tabla:', rep.tablas.map(t => `${t.tabla}=${t.peso} (${t.filas})`).join(' · '))
+      if (rep.adjuntos.length) console.log('📎 Adjuntos:', rep.adjuntos.map(a => `${a.grupo}=${a.peso} (${a.n})`).join(' · '))
+    } catch (e) { console.warn('⚠️ Reporte de tamaños falló:', e.message) }
+  }, 5_000)
 
   // Backup inicial 10 segundos después de arrancar
   setTimeout(() => {
@@ -217,7 +273,7 @@ function init(dbInstance, sqlConstructor) {
     _nextBackupTime = new Date(Date.now() + BACKUP_INTERVAL)
   }, BACKUP_INTERVAL)
 
-  console.log('🔄 Backup automático activado: cada 6 horas (4/día), últimos 8 respaldos')
+  console.log(`🔄 Backup automático activado: cada 6 horas (4/día), últimos ${MAX_BACKUPS} respaldos`)
 }
 
 function getNextBackupTime() { return _nextBackupTime }
@@ -225,4 +281,5 @@ function getNextBackupTime() { return _nextBackupTime }
 module.exports = {
   init, createBackup, listBackups, restoreFromBackup,
   formatSize, getNextBackupTime, BACKUP_DIR, estadoDisco, limpiarTemporales,
+  liberarEspacioConRespaldos, reporteTamanos,
 }

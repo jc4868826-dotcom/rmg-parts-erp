@@ -89,6 +89,12 @@ router.post('/restore/:filename', ...admin, (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+// GET /api/backup/tamanos — peso por tabla y adjuntos (diagnóstico de crecimiento de la DB)
+router.get('/tamanos', ...admin, (req, res) => {
+  try { res.json({ ...svc.reporteTamanos(30), disco: svc.estadoDisco() }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 // DELETE /api/backup/:filename — libera espacio en disco (incidente ENOSPC 2026-09-21)
 router.delete('/:filename', ...admin, (req, res) => {
   try {
