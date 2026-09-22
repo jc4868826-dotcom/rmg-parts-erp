@@ -112,24 +112,7 @@ app.use('/api/usuarios',            require('./routes/usuarios'));    // Usuario
 // iniciarCron() del cron ChileCompra, después de reducir el tamaño de
 // /var/data/rmg_parts.db (ver interruptor chilecompra_enabled en app_settings).
 // app.use('/api/chilecompra',      require('./routes/chilecompra')); // Asistente de oportunidades ChileCompra
-app.use('/api/compra-agil',         require('./routes/compraAgil'));  // Submenú Compra Ágil (importar código, benchmarks, fundamento IA)
-app.use('/api/evaluador',           require('./routes/evaluador'));   // Submenú Evaluador (ingresar código puntual → busca solo esa solicitud)
-// 2026-09-13 — Cotizador: pestaña nueva y deliberadamente simple, sin nada
-// del Kanban/checklist/historial de Evaluador — "Buscar" siempre relee fresco
-// desde Mercado Público, el Excel se genera al vuelo (nunca queda un archivo
-// viejo desincronizado) y hay un "sin match" real bajo un piso de confianza
-// en vez de forzar un SKU cualquiera. Ver cotizadorController.js.
-app.use('/api/cotizador',           require('./routes/cotizador'));
-// 2026-09-15 — Cotizador Manual: subir el PDF/imagen/Word de una solicitud de
-// Compra Ágil/ChileCompra que JC ya tiene descargada (fallback cuando la API
-// oficial no la trae o no puede leerla) — reutiliza tal cual
-// compraAgilAnalisis.importarCompraAgilManual (misma IA que lee anexos de
-// licitaciones, mismo cruce contra lista_precios) con fuente='cotizador_manual',
-// y encima agrega la alerta técnica del tagging Vistony (productos_tagging.json)
-// sobre el SKU que el cruce ya eligió. Entrega el mismo Excel de
-// Cotizador/Evaluador — no crea nada nuevo en Cotizaciones. Ver
-// cotizadorManualController.js.
-app.use('/api/cotizador-manual',    require('./routes/cotizadorManual'));
+// 2026-09-22 — Compra Ágil, Evaluador, Cotizador y Cotizador Manual retirados (rutas, crons y datos: purga_compra_agil_v1).
 app.use('/api/utilitarios',         require('./routes/utilitarios')); // Librería de fichas técnicas (scrape Vistony)
 
 // ─── Health check ───────────────────────────────────────────
@@ -161,9 +144,6 @@ initDB()
   .then(() => {
     // AISLADO 2026-09-11 — ver nota junto al require de routes/chilecompra arriba.
     // require('./jobs/chilecompraCron').iniciarCron();
-    require('./jobs/compraAgilDatosAbiertosCron').iniciarCron();
-    require('./jobs/compraAgilApiPollerCron').iniciarCron(); // detección automática Compra Ágil (API oficial v2)
-    require('./jobs/compraAgilSyncEstadoCron').iniciarCron(); // estado real ChileCompra (adjudicada/OC) de lo ya importado
     app.listen(PORT, () => {
       console.log(`
   ╔══════════════════════════════════════╗

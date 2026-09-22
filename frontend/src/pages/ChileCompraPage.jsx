@@ -23,23 +23,6 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// 2026-09-09 — caso real que expuso el hueco: "2428-1262-COT26" (Quilpué)
-// nunca quedó guardado como registro real en este sistema — solo existía como
-// referencia en comentarios del código de un ejercicio manual anterior. Esta
-// función (traída de la página separada "/compra-agil", ya sacada del
-// sidebar) es la única forma de meter a mano una Compra Ágil que el detector
-// automático no encontró — lee un File del navegador como base64 puro (sin el
-// prefijo "data:...;base64,"), mismo formato que espera
-// chilecompraDocReader.leerAnexos en el backend.
-function archivoABase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 const REGIONES = [
   'Arica y Parinacota', 'Tarapacá', 'Antofagasta', 'Atacama', 'Coquimbo',
   'Valparaíso', 'Metropolitana de Santiago', "Libertador General Bernardo O'Higgins",
@@ -205,121 +188,6 @@ export default function ChileCompraPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al ejecutar el análisis'),
   })
 
-  // 2026-09-09 — el detector de Compra Ágil (API oficial) y la sincronización
-  // de estado real de ChileCompra ya corren solas (cron cada 15 min / cada
-  // 2h). Estos dos botones las disparan ya mismo, sin depender de la página
-  // separada "/compra-agil" que el usuario pidió sacar del sidebar — todo el
-  // flujo de gestión vive en este único menú.
-  //
-  // 2026-09-09 (corregido) — el usuario preguntó "¿dónde veo el progreso?"
-  // tras quedarse con el toast de "ya hay una búsqueda en curso" sin ninguna
-  // señal de avance ni de cuándo termina. La versión anterior era
-  // fire-and-forget puro (un toast y un invalidate a ciegas a los 8s), lo que
-  // dejaba al usuario sin saber si seguía corriendo, si terminó, o si se
-  // trabó — más grave ahora que el detector trae TODO el país sin filtro de
-  // palabras (puede tardar bastante más que antes). Portado de la página
-  // separada CompraAgilPage.jsx (que ya tenía este polling resuelto):
-  // GET /scraper-estado y /sincronizar-estado-estado cada 4s mientras la
-  // corrida está activa, hasta que `corriendo` vuelva a false.
-  const [buscandoCompraAgil, setBuscandoCompraAgil] = useState(false)
-  const ultimoResumenBuscarVisto = useRef(null)
-
-  const { data: scraperEstado } = useQuery({
-    queryKey: ['chilecompra', 'compra-agil-scraper-estado'],
-    queryFn: () => api.get('/compra-agil/scraper-estado').then(r => r.data),
-    refetchInterval: buscandoCompraAgil ? 4000 : false,
-  })
-
-  useEffect(() => {
-    if (!scraperEstado) return
-    if (scraperEstado.corriendo) { setBuscandoCompraAgil(true); return }
-    if (!buscandoCompraAgil) return // no era nuestra corrida (ej. la del cron) — no avisar nada
-    setBuscandoCompraAgil(false)
-    const resumen = scraperEstado.ultimoResumen
-    if (!resumen || resumen === ultimoResumenBuscarVisto.current) return
-    ultimoResumenBuscarVisto.current = resumen
-    qc.invalidateQueries({ queryKey: ['chilecompra'] })
-    if (resumen.importadas?.length) {
-      toast.success(`${resumen.importadas.length} oportunidad(es) nueva(s) de Compra Ágil detectada(s) e importada(s).`)
-    } else {
-      toast(`Sin oportunidades nuevas por ahora (${resumen.codigosVistos ?? 0} código(s) revisado(s) a nivel nacional).`, { icon: '🔎' })
-    }
-    if (resumen.errores?.length) {
-      toast.error(`${resumen.errores.length} error(es) durante la búsqueda: ${resumen.errores[0]}`, { duration: 12000 })
-    }
-  }, [scraperEstado, buscandoCompraAgil, qc])
-
-  const compraAgilBuscarMut = useMutation({
-    mutationFn: () => api.post('/compra-agil/scrapear-ahora').then(r => r.data),
-    onSuccess: (r) => {
-      toast(r.iniciado === false ? (r.mensaje || 'Ya hay una búsqueda en curso.') : 'Buscando Compra Ágil (todo el país, últimas 24h)…', { icon: '⚡' })
-      setBuscandoCompraAgil(true)
-    },
-    onError: (e) => toast.error(e.response?.data?.error || e.message),
-  })
-
-  const [sincronizandoEstadoReal, setSincronizandoEstadoReal] = useState(false)
-  const ultimoResumenSyncVisto = useRef(null)
-
-  const { data: syncEstadoData } = useQuery({
-    queryKey: ['chilecompra', 'compra-agil-sync-estado-estado'],
-    queryFn: () => api.get('/compra-agil/sincronizar-estado-estado').then(r => r.data),
-    refetchInterval: sincronizandoEstadoReal ? 4000 : false,
-  })
-
-  useEffect(() => {
-    if (!syncEstadoData) return
-    if (syncEstadoData.corriendo) { setSincronizandoEstadoReal(true); return }
-    if (!sincronizandoEstadoReal) return
-    setSincronizandoEstadoReal(false)
-    const resumen = syncEstadoData.ultimoResumen
-    if (!resumen || resumen === ultimoResumenSyncVisto.current) return
-    ultimoResumenSyncVisto.current = resumen
-    qc.invalidateQueries({ queryKey: ['chilecompra'] })
-    if (resumen.cambiosDetectados?.length) {
-      toast.success(`${resumen.cambiosDetectados.length} oportunidad(es) cambiaron de estado en ChileCompra.`, { duration: 8000 })
-    } else {
-      toast(`Sin cambios de estado (${resumen.revisadas ?? 0} revisada(s)).`, { icon: '🔄' })
-    }
-    if (resumen.errores?.length) {
-      toast.error(`${resumen.errores.length} error(es) sincronizando estado: ${resumen.errores[0]}`, { duration: 10000 })
-    }
-  }, [syncEstadoData, sincronizandoEstadoReal, qc])
-
-  const compraAgilSyncMut = useMutation({
-    mutationFn: () => api.post('/compra-agil/sincronizar-estado-ahora').then(r => r.data),
-    onSuccess: (r) => {
-      toast(r.iniciado === false ? (r.mensaje || 'Ya hay una sincronización en curso.') : 'Actualizando estado real desde ChileCompra…', { icon: '🔄' })
-      setSincronizandoEstadoReal(true)
-    },
-    onError: (e) => toast.error(e.response?.data?.error || e.message),
-  })
-
-  // ── Agregar una puntual a mano (2026-09-09, traído de la página separada)
-  // Caso real: "2428-1262-COT26" (Quilpué) nunca quedó guardada — el detector
-  // automático solo cubre RM y palabras clave del rubro; esto es lo único que
-  // permite meter a mano una que se escapó (otra región, ya cerrada, etc.).
-  const [mostrarManual, setMostrarManual] = useState(false)
-  const [codigoManual, setCodigoManual] = useState('')
-  const [textoManual, setTextoManual] = useState('')
-  const [archivosManual, setArchivosManual] = useState([]) // File[]
-
-  const importarManualMut = useMutation({
-    mutationFn: async ({ codigo: cod, texto, archivos }) => {
-      const documentos = await Promise.all(archivos.map(async (f) => ({
-        base64: await archivoABase64(f), mediaType: f.type, nombre: f.name,
-      })))
-      return api.post('/compra-agil/importar-manual', { codigo: cod, texto, documentos }).then(r => r.data)
-    },
-    onSuccess: (op) => {
-      toast.success(`Importada: ${op.nombre || op.codigo_externo}`)
-      qc.invalidateQueries({ queryKey: ['chilecompra'] })
-      setSeleccionId(op.id)
-      setCodigoManual(''); setTextoManual(''); setArchivosManual([]); setMostrarManual(false)
-    },
-    onError: (e) => toast.error(e.response?.data?.error || e.message),
-  })
-
   // 2026-09-09 — botón "Extraer rubro RMG": filtro EN EL NAVEGADOR sobre lo
   // que la API ya devolvió (ver aviso de KEYWORDS_RUBRO_RMG arriba) — se
   // aplica acá, antes de repartir por estado, para que afecte tanto al
@@ -394,45 +262,8 @@ export default function ChileCompraPage() {
             <RefreshCw size={15} className={analisisMut.isPending ? 'animate-spin' : ''} />
             {analisisMut.isPending ? 'Analizando…' : 'Hacer análisis ahora'}
           </button>
-          {/* 2026-09-09 — acciones de Compra Ágil movidas acá (ver nota arriba) */}
-          <button onClick={() => compraAgilBuscarMut.mutate()} disabled={buscandoCompraAgil || compraAgilBuscarMut.isPending}
-            title="Trae TODAS las Compra Ágil publicadas en todo el país (últimas 24h), sin filtro de palabras — filtra después con los filtros de esta página"
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
-            style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
-            {(buscandoCompraAgil || compraAgilBuscarMut.isPending) ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
-            {buscandoCompraAgil
-              ? `Buscando… (${scraperEstado?.ultimoResumen?.codigosVistos ?? 0} vistos)`
-              : 'Compra Ágil ahora'}
-          </button>
-          <button onClick={() => compraAgilSyncMut.mutate()} disabled={sincronizandoEstadoReal || compraAgilSyncMut.isPending}
-            title="Consulta si alguna Compra Ágil ya importada se adjudicó/cerró en ChileCompra"
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
-            style={{ background: 'rgba(15,35,60,0.05)', color: 'var(--rmg-off)' }}>
-            {(sincronizandoEstadoReal || compraAgilSyncMut.isPending) ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-            {sincronizandoEstadoReal ? 'Actualizando…' : 'Estado real'}
-          </button>
         </div>
       </div>
-
-      {/* 2026-09-09 — línea de progreso: antes el único indicador era un toast
-          que desaparecía a los pocos segundos, dejando al usuario sin forma
-          de saber si la búsqueda (ahora nacional, sin filtro) seguía corriendo
-          o ya terminó. Esta línea vive mientras cualquiera de las dos corridas
-          esté activa y se actualiza sola cada 4s con el polling de arriba. */}
-      {(buscandoCompraAgil || sincronizandoEstadoReal) && (
-        <div className="flex items-center gap-2 -mt-2 px-1 text-xs" style={{ color: 'var(--rmg-muted)' }}>
-          <Loader2 size={12} className="animate-spin" />
-          {buscandoCompraAgil && (
-            <span>
-              Buscando Compra Ágil en todo el país… {scraperEstado?.ultimoResumen?.codigosVistos ?? 0} código(s) revisado(s),{' '}
-              {scraperEstado?.ultimoResumen?.importadas?.length ?? 0} nueva(s) importada(s) hasta ahora.
-            </span>
-          )}
-          {sincronizandoEstadoReal && (
-            <span>Sincronizando estado real desde ChileCompra…</span>
-          )}
-        </div>
-      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
@@ -472,7 +303,6 @@ export default function ChileCompraPage() {
           style={{ background: 'rgba(15,35,60,0.03)', border: '1px solid rgba(15,35,60,0.08)', color: 'var(--rmg-off)' }}>
           <option value="">Todos los tipos</option>
           <option value="licitacion">Licitación</option>
-          <option value="compra_agil">Compra Ágil</option>
         </select>
         {/* 2026-09-09 — región pasa a ser acumulable (pedido explícito: "mas
             de una"). Un <select multiple> nativo es incómodo (hay que
@@ -552,68 +382,6 @@ export default function ChileCompraPage() {
           }} className="text-xs px-2.5 py-2 rounded-lg font-medium" style={{ color: 'var(--rmg-muted)' }}>
             Limpiar filtros
           </button>
-        )}
-      </div>
-
-      {/* Agregar una puntual a mano — para lo que el detector automático no
-          encuentra (otra región, ya cerrada, fuera de las palabras clave del
-          rubro, etc.). Colapsado por defecto. */}
-      <div className="rmg-card p-0 overflow-hidden">
-        <button
-          onClick={() => setMostrarManual(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium"
-        >
-          <span className="flex items-center gap-2">
-            <ClipboardPaste size={15} style={{ color: 'var(--rmg-muted)' }} /> Agregar una puntual a mano (no la encontró el detector automático)
-          </span>
-          <ChevronDown size={16} style={{ transform: mostrarManual ? 'rotate(180deg)' : 'none', color: 'var(--rmg-muted)' }} />
-        </button>
-        {mostrarManual && (
-          <div className="px-4 pb-4 space-y-3">
-            <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
-              Abre la publicación en <a href="https://buscador.mercadopublico.cl" target="_blank" rel="noreferrer" style={{ color: 'var(--rmg-teal)' }}>buscador.mercadopublico.cl</a> o
-              en el portal de Compra Ágil, copia el código y el texto de lo que piden (o descarga el PDF si trae anexo) y pégalo/súbelo acá — una IA lee lo que sea (texto plano o PDF) y extrae los ítems.
-            </p>
-            <input
-              value={codigoManual}
-              onChange={e => setCodigoManual(e.target.value)}
-              placeholder="Código de la publicación (ej. 2428-1262-COT26)"
-              className="w-full px-3 py-2 rounded-lg text-sm"
-              style={{ border: '1px solid rgba(15,35,60,0.15)' }}
-            />
-            <textarea
-              value={textoManual}
-              onChange={e => setTextoManual(e.target.value)}
-              placeholder="Pega acá el texto de lo que piden (opcional si subes un PDF)…"
-              rows={4}
-              className="w-full px-3 py-2 rounded-lg text-sm"
-              style={{ border: '1px solid rgba(15,35,60,0.15)' }}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer" style={{ border: '1px solid rgba(15,35,60,0.15)' }}>
-                <Paperclip size={14} /> Adjuntar PDF/imagen/Word
-                <input
-                  type="file" multiple hidden accept=".pdf,.doc,.docx,image/*"
-                  onChange={e => setArchivosManual(prev => [...prev, ...Array.from(e.target.files || [])])}
-                />
-              </label>
-              {archivosManual.map((f, i) => (
-                <span key={i} className="text-xs px-2 py-1 rounded-lg flex items-center gap-1" style={{ background: 'rgba(15,35,60,0.04)' }}>
-                  {f.name}
-                  <button onClick={() => setArchivosManual(prev => prev.filter((_, j) => j !== i))}><X size={12} /></button>
-                </span>
-              ))}
-            </div>
-            <button
-              disabled={!codigoManual.trim() || (!textoManual.trim() && !archivosManual.length) || importarManualMut.isPending}
-              onClick={() => importarManualMut.mutate({ codigo: codigoManual.trim(), texto: textoManual.trim(), archivos: archivosManual })}
-              className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 text-white disabled:opacity-50"
-              style={{ background: 'var(--rmg-teal)' }}
-            >
-              {importarManualMut.isPending ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              Leer con IA e importar
-            </button>
-          </div>
         )}
       </div>
 
@@ -766,12 +534,6 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
   // keyed por item.id, solo mientras el usuario edita antes de guardar.
   const [notaEdit, setNotaEdit] = useState({})
   const [itemAbierto, setItemAbierto] = useState(null)
-  // 2026-09-09 — "y la parte de benchmark??? se perdió?": vivía solo en la
-  // página separada "/compra-agil" (ya sacada del sidebar); se trae acá para
-  // que quede en el único menú que el usuario usa. Los endpoints no dependen
-  // de la fuente (licitación o Compra Ágil) — funcionan igual para ambas.
-  const [keywordBenchmark, setKeywordBenchmark] = useState('')
-  const [panelBenchmark, setPanelBenchmark] = useState(null) // 'solicitante' | 'mercado' | null
 
   const { data: op, isLoading } = useQuery({
     queryKey: ['chilecompra-detalle', id],
@@ -875,27 +637,6 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
   // vuelve a pedirle el detalle a la API oficial de Compra Ágil para ESTE
   // código puntual — con la descarga de adjuntos ya corregida, esta vez sí
   // queda guardado el PDF como anexo real.
-  const reimportarApiMut = useMutation({
-    mutationFn: () => api.post('/compra-agil/importar', { codigo: op.codigo_externo }).then(r => r.data),
-    onSuccess: () => { invalidar(); toast.success('Vuelto a traer desde ChileCompra — revisa "Anexos de la licitación" y reintenta el análisis.') },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al volver a traer desde ChileCompra'),
-  })
-
-  // 2026-09-13 — BUG real (código 3877-474-COT26, sin adjuntos, texto técnico
-  // completo solo en la página pública): la solicitud ya quedó guardada con
-  // el dato viejo antes de corregir `mapearDetalle` (compraAgilApiClient.js),
-  // y "Buscar" nunca relee un código ya ingresado. Este botón es el
-  // equivalente de "Volver a traer desde ChileCompra" pero para Evaluador —
-  // NO reusa `/compra-agil/importar` (ese endpoint no recibe `fuente` y
-  // asume 'compra_agil', lo que crearía una fila DUPLICADA en vez de
-  // actualizar esta oportunidad) — pega contra `/evaluador/:id/reingestar`,
-  // que reingesta el MISMO código ya guardado con fuente='evaluador'.
-  const reingestarEvaluadorMut = useMutation({
-    mutationFn: () => api.post(`/${basePath}/${id}/reingestar`).then(r => r.data),
-    onSuccess: () => { invalidar(); toast.success('Solicitud re-ingestada desde Mercado Público — ítems y cruce recalculados.') },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al reingestar desde Mercado Público'),
-  })
-
   // Corregir un ítem cuyo match salió mal — pedido real: "si el match de
   // excel salió mal, debemos agregar observaciones para que lo vuelva a
   // calcular". Un solo campo de texto: "SKU:<codigo>" fija el producto
@@ -907,24 +648,6 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
     onSuccess: () => { invalidar(); toast.success('Corrección guardada — cruce recalculado') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al guardar la corrección'),
   })
-
-  const { data: benchmarkSolicitante, isFetching: cargandoBenchSol, refetch: refetchBenchSol } = useQuery({
-    queryKey: ['chilecompra', id, 'benchmark-solicitante', keywordBenchmark],
-    queryFn: () => api.get(`/compra-agil/${id}/benchmark-solicitante`, { params: { keyword: keywordBenchmark } }).then(r => r.data),
-    enabled: false,
-  })
-  const { data: benchmarkMercado, isFetching: cargandoBenchMer, refetch: refetchBenchMer } = useQuery({
-    queryKey: ['chilecompra', 'benchmark-mercado', keywordBenchmark],
-    queryFn: () => api.get('/compra-agil/benchmark-mercado', { params: { keyword: keywordBenchmark } }).then(r => r.data),
-    enabled: false,
-  })
-
-  const dispararBenchmark = (tipo) => {
-    if (!keywordBenchmark.trim()) return toast.error('Escribe una palabra clave (ej. "aceite motor 5w30")')
-    setPanelBenchmark(tipo)
-    if (tipo === 'solicitante') refetchBenchSol()
-    else refetchBenchMer()
-  }
 
   const handleDescartar = () => {
     const motivo = window.prompt('Motivo del descarte (obligatorio):')
@@ -1180,46 +903,6 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
             </div>
           )}
 
-          {/* Benchmark de precios — de vuelta acá (ver nota arriba) */}
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--rmg-muted)' }}>
-              Benchmark de precios
-            </div>
-            <div className="rmg-card p-3 space-y-2">
-              <input
-                value={keywordBenchmark}
-                onChange={e => setKeywordBenchmark(e.target.value)}
-                placeholder='Palabra clave (ej. "aceite motor 5w30")'
-                className="w-full px-3 py-2 rounded-lg text-sm border"
-                style={{ borderColor: 'var(--rmg-border)' }}
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => dispararBenchmark('solicitante')}
-                  className="flex-1 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 border"
-                  style={{ borderColor: 'var(--rmg-border)' }}
-                >
-                  {cargandoBenchSol ? <Loader2 size={14} className="animate-spin" /> : <Building2 size={14} />}
-                  ¿Este organismo ya lo compró?
-                </button>
-                <button
-                  onClick={() => dispararBenchmark('mercado')}
-                  className="flex-1 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 border"
-                  style={{ borderColor: 'var(--rmg-border)' }}
-                >
-                  {cargandoBenchMer ? <Loader2 size={14} className="animate-spin" /> : <Globe2 size={14} />}
-                  Precio de mercado
-                </button>
-              </div>
-              {panelBenchmark && (
-                <BenchmarkResultado
-                  resultado={panelBenchmark === 'solicitante' ? benchmarkSolicitante : benchmarkMercado}
-                  tipo={panelBenchmark}
-                />
-              )}
-            </div>
-          </div>
-
           {/* Checklist */}
           {(verChecklist || op.estado === 'preparando_postulacion') && checklistData?.checklist && (
             <div>
@@ -1453,14 +1136,6 @@ export function DetalleModal({ id, onClose, basePath = 'chilecompra' }) {
               <ActionBtn onClick={handleDescartar} busy={cambiarEstadoMut.isPending} icon={Ban} label="Descartar" color="var(--rmg-red)" bg="rgba(224,90,78,0.08)" />
               <ActionBtn onClick={() => handleVolver('detectada')} busy={cambiarEstadoMut.isPending} icon={Undo2} label="Volver a detectada" color="var(--rmg-muted)" bg="rgba(15,35,60,0.05)" />
               <ActionBtn onClick={handleLimpiarHistorial} busy={limpiarHistorialMut.isPending} icon={Eraser} label="Limpiar historial y reintentar" color="var(--rmg-red)" bg="rgba(224,90,78,0.08)" />
-              {op.fuente === 'compra_agil' && (
-                <ActionBtn onClick={() => reimportarApiMut.mutate()} busy={reimportarApiMut.isPending}
-                  icon={Zap} label="Volver a traer desde ChileCompra (incluye adjuntos)" color="var(--rmg-teal)" bg="rgba(45,201,138,0.12)" />
-              )}
-              {op.fuente === 'evaluador' && (
-                <ActionBtn onClick={() => reingestarEvaluadorMut.mutate()} busy={reingestarEvaluadorMut.isPending}
-                  icon={Zap} label="Reingestar desde Mercado Público (ítems + cruce)" color="var(--rmg-teal)" bg="rgba(45,201,138,0.12)" />
-              )}
             </>
           )}
           {op.estado === 'preparando_postulacion' && (
@@ -1541,38 +1216,3 @@ function ActionBtn({ onClick, busy, icon: Icon, label, color, bg }) {
   )
 }
 
-// 2026-09-09 — traído de la página separada "/compra-agil" (ver nota en
-// DetalleModal): mismos dos botones de benchmark, mismo componente de
-// resultado, sin cambios de lógica — solo cambia dónde vive.
-function BenchmarkResultado({ resultado, tipo }) {
-  if (!resultado) return null
-  if (resultado.advertencia) {
-    return <div className="text-xs p-3 rounded-lg" style={{ background: 'rgba(224,90,78,0.08)', color: 'var(--rmg-red)' }}>{resultado.advertencia}</div>
-  }
-  const ordenes = resultado.ordenes || []
-  const est = resultado.estadisticas || {}
-  return (
-    <div className="text-xs space-y-2">
-      {est.n > 0 ? (
-        <div className="p-2 rounded-lg" style={{ background: 'rgba(45,201,138,0.08)' }}>
-          {est.n} orden(es) últimos 6 meses · min {formatCLP(est.min)} · promedio {formatCLP(est.promedio)} · max {formatCLP(est.max)}
-          {resultado.desdeCache ? ' · (cache)' : ''}
-        </div>
-      ) : (
-        <div className="p-2 rounded-lg" style={{ background: 'rgba(15,35,60,0.04)' }}>Sin resultados para esa palabra clave en los últimos 6 meses.</div>
-      )}
-      {ordenes.slice(0, 8).map((o, i) => (
-        <div key={i} className="flex items-center justify-between px-2 py-1.5" style={{ borderTop: '1px solid rgba(15,35,60,0.06)' }}>
-          <div className="truncate flex-1">
-            <span className="font-medium">{o.descripcion}</span>
-            {tipo === 'mercado' && <span style={{ color: 'var(--rmg-muted)' }}> — {o.organismo_nombre}</span>}
-          </div>
-          <div className="shrink-0 ml-2 text-right">
-            {o.precio_unitario ? formatCLP(o.precio_unitario) : '—'}
-            {o.url_portal && <a href={o.url_portal} target="_blank" rel="noreferrer" className="ml-1" style={{ color: 'var(--rmg-teal)' }}><ExternalLink size={11} className="inline" /></a>}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}

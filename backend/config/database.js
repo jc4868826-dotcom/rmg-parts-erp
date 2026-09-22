@@ -2931,6 +2931,40 @@ function runMigrations() {
       console.error('❌ Migración cotizacion_oc_trazabilidad_v1 falló:', e.message)
     }
   }
+
+  // 2026-09-22 — Retiro total de Compra Ágil / Evaluador / Cotizador / Cotizador Manual
+  // (pedido de JC tras el incidente ENOSPC: la DB llegó a 532 MB, ~340 MB en adjuntos
+  // PDF/Excel de oportunidades). Se borran sus oportunidades con ítems, historial y
+  // adjuntos, las tablas compra_agil_*, y se compacta con VACUUM. Las licitaciones
+  // (fuente='licitacion') no se tocan. Todo con _db.run directo: una sola escritura a
+  // disco al final (cada db.exec/run reescribiría el archivo completo).
+  const mPurgaCA = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('purga_compra_agil_v1')
+  if (!mPurgaCA) {
+    try {
+      const raw = db._db
+      const fuentes = "('compra_agil','evaluador','cotizador','cotizador_manual')"
+      const sub = `SELECT id FROM oportunidades_chilecompra WHERE fuente IN ${fuentes}`
+      const antes = raw.exec(`SELECT COUNT(*) FROM oportunidades_chilecompra WHERE fuente IN ${fuentes}`)[0]?.values[0][0] || 0
+      raw.run(`DELETE FROM documentos_adjuntos WHERE entidad = 'oportunidad_chilecompra' AND entidad_id IN (${sub})`)
+      const adj = raw.getRowsModified()
+      raw.run(`DELETE FROM oportunidad_chilecompra_items WHERE oportunidad_id IN (${sub})`)
+      raw.run(`DELETE FROM oportunidad_chilecompra_historial WHERE oportunidad_id IN (${sub})`)
+      raw.run(`DELETE FROM oportunidades_chilecompra WHERE fuente IN ${fuentes}`)
+      // adjuntos huérfanos de oportunidades ya inexistentes
+      raw.run(`DELETE FROM documentos_adjuntos WHERE entidad = 'oportunidad_chilecompra'
+               AND entidad_id NOT IN (SELECT id FROM oportunidades_chilecompra)`)
+      const huerfanos = raw.getRowsModified()
+      for (const t of ['compra_agil_benchmark_cache', 'compra_agil_cotizaciones_historicas', 'compra_agil_datos_abiertos_meses']) {
+        raw.run(`DROP TABLE IF EXISTS ${t}`)
+      }
+      raw.run("INSERT INTO _migrations (id) VALUES ('purga_compra_agil_v1')")
+      raw.run('VACUUM')
+      db._save()
+      console.log(`✅ Migración purga_compra_agil_v1 — ${antes} oportunidades, ${adj + huerfanos} adjuntos y tablas compra_agil_* eliminados; DB compactada`)
+    } catch (e) {
+      console.error('❌ Migración purga_compra_agil_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

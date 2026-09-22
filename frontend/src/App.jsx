@@ -43,10 +43,6 @@ import CampanasPage from '@pages/CampanasPage'
 import BackupsPage   from '@pages/BackupsPage'
 import AsesorProductos from '@pages/AsesorProductos'
 import ChileCompraPage from '@pages/ChileCompraPage'
-import CompraAgilPage  from '@pages/CompraAgilPage'
-import EvaluadorPage   from '@pages/EvaluadorPage'
-import CotizadorPage   from '@pages/CotizadorPage'
-import CotizadorManualPage from '@pages/CotizadorManualPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -125,25 +121,7 @@ export default function App() {
               <Route path="backups"           element={<BackupsPage />} />
               <Route path="asesor-productos" element={<AsesorProductos />} />
               <Route path="chilecompra"       element={<ChileCompraPage />} />
-              {/* 2026-09-09 — CompraAgilPage.jsx existía pero NUNCA estuvo montada
-                  acá ni en el sidebar (ver Layout.jsx): explica en parte el "no veo
-                  cómo verlo" del usuario — el flujo de Compra Ágil solo era
-                  alcanzable escribiendo la URL a mano, si es que se llegaba a
-                  desplegar. Corregido junto con el resto del esquema aprobado. */}
-              <Route path="compra-agil"       element={<CompraAgilPage />} />
-              <Route path="evaluador"         element={<EvaluadorPage />} />
-              {/* 2026-09-13 — Cotizador: pestaña nueva, deliberadamente simple,
-                  para reemplazar el uso diario de Evaluador (ver notas en
-                  cotizadorController.js sobre las 3 fallas reales que la motivaron). */}
-              <Route path="cotizador"         element={<CotizadorPage />} />
-              {/* 2026-09-15 — Cotizador Manual: flujo B2B privado (mesón/
-                  teléfono/WhatsApp), NO viene de Mercado Público — usa el
-                  tagging técnico Vistony + el mismo motor de matching contra
-                  lista_precios, y genera una cotización real reutilizando
-                  cotizacionesController._insertCotizacion. Fuera del menú
-                  "Canal Estatal" en el sidebar (ver Layout.jsx) porque no
-                  tiene nada que ver con Mercado Público. */}
-              <Route path="cotizador-manual"  element={<CotizadorManualPage />} />
+              {/* 2026-09-22 — Compra Ágil, Evaluador, Cotizador y Cotizador Manual retirados (ver purga_compra_agil_v1). */}
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

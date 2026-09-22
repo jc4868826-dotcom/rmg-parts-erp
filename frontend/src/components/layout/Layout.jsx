@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark, Calculator, FileUp
+  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -41,36 +41,7 @@ const NAV_SECTIONS = [
     label: 'Canal Estatal',
     items: [
       { to: '/chilecompra',  icon: Landmark,        label: 'ChileCompra',     badge: 'chilecompra' },
-      // 2026-09-09 — hubo una pestaña separada "/compra-agil" (Zap) acá; el
-      // usuario pidió explícitamente sacarla ("te pedí una pestaña nueva para
-      // evitar enredos y fue peor") porque dependía de una llamada en vivo a
-      // la API de ChileCompra que podía demorar/fallar, mientras que ESTE
-      // menú (ChileCompra) siempre carga sin problema al leer solo de la base
-      // local. La ruta /compra-agil sigue existiendo (App.jsx) por si hace
-      // falta para depurar, pero ya no se enlaza desde el sidebar — todo el
-      // flujo de Compra Ágil vive ahora acá, con el filtro de tipo de abajo.
-      //
-      // 2026-09-11 — "Evaluador": pedido explícito del usuario, pestaña bajo
-      // ChileCompra donde el humano ingresa a mano el código de UNA solicitud
-      // puntual (no barre todo el sitio como las de arriba). Vive en su
-      // propia ruta /api/evaluador (independiente del router /api/chilecompra,
-      // que está apagado de emergencia — ver app.js) para no depender de que
-      // ese módulo esté reactivado.
-      { to: '/evaluador',    icon: Search,          label: '↳ Evaluador',    badge: 'evaluador' },
-      // 2026-09-13 — "Cotizador": pestaña nueva y deliberadamente simple para
-      // reemplazar el uso diario de Evaluador — sin Kanban/checklist/historial,
-      // "Buscar" siempre relee fresco (nunca dice "ya ingresada") y el Excel
-      // se genera al vuelo, siempre igual a lo que se ve en pantalla. Ver
-      // cotizadorController.js para el detalle de las 3 fallas que la motivaron.
-      { to: '/cotizador',    icon: Calculator,      label: '↳ Cotizador',    badge: null },
-      // 2026-09-15 — "Cotizador Manual": subir el PDF/imagen/Word de una
-      // solicitud de Compra Ágil/ChileCompra que JC ya tiene descargada
-      // (fallback cuando la API oficial no la trae o no puede leerla) — la
-      // IA la analiza, cruza con el catálogo + el tagging técnico Vistony, y
-      // entrega el Excel. Va acá (Canal Estatal), no en Ventas: sigue siendo
-      // Mercado Público, solo que el documento lo sube el humano en vez de
-      // esperar a la API. Ver cotizadorManualController.js.
-      { to: '/cotizador-manual', icon: FileUp,       label: '↳ Cotizador Manual', badge: null },
+      // 2026-09-22 — Compra Ágil, Evaluador, Cotizador y Cotizador Manual retirados.
     ],
   },
   {
@@ -184,17 +155,6 @@ export default function Layout() {
   })
   const chcBadgeCount = Array.isArray(chcDetectadas) ? chcDetectadas.length : null
 
-  // Evaluador — solicitudes recién ingresadas por el humano, aún sin
-  // revisar. A diferencia del badge de ChileCompra de arriba, ESTE sí
-  // funciona hoy: pega contra /api/evaluador, que está montado (no depende
-  // del router /api/chilecompra, apagado de emergencia — ver app.js).
-  const { data: evalDetectadas } = useQuery({
-    queryKey: ['evaluador-detectadas-badge'],
-    queryFn: () => api.get('/evaluador', { params: { estado: 'detectada' } }).then(r => r.data),
-    staleTime: 60_000,
-    retry: false,
-  })
-  const evalBadgeCount = Array.isArray(evalDetectadas) ? evalDetectadas.length : null
 
   const handleLogout = async () => {
     await logout()
@@ -256,8 +216,6 @@ export default function Layout() {
                     ? (cxcBadgeCount > 0 ? String(cxcBadgeCount) : null)
                     : badge === 'chilecompra'
                     ? (chcBadgeCount > 0 ? String(chcBadgeCount) : null)
-                    : badge === 'evaluador'
-                    ? (evalBadgeCount > 0 ? String(evalBadgeCount) : null)
                     : badge
                   return (
                   <NavLink
