@@ -3007,6 +3007,31 @@ function runMigrations() {
       console.error('❌ Migración ventas_facturacion_v1 falló:', e.message)
     }
   }
+
+  // Backfill: las ventas que ya existían quedaron con estado_facturacion NULL, así que
+  // el flujo nuevo no se veía en pantalla. Las ventas pendientes nacidas de una cotización
+  // y sin pago registrado entran a "por facturar"; el resto (pagadas, en validación,
+  // anuladas o cargadas a mano) se marcan "facturada" para no bloquear su flujo de pago.
+  const mBackfill = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('ventas_facturacion_backfill_v1')
+  if (!mBackfill) {
+    try {
+      const raw = db._db
+      const vCols = raw.exec('PRAGMA table_info(ventas)')[0].values.map(c => c[1])
+      if (!vCols.includes('estado_facturacion')) throw new Error('Falta la columna estado_facturacion (¿falló ventas_facturacion_v1?)')
+      raw.run(`UPDATE ventas SET estado_facturacion = 'por_facturar'
+               WHERE COALESCE(estado_facturacion, '') = ''
+                 AND estado = 'Pendiente'
+                 AND cotizacion_id IS NOT NULL
+                 AND COALESCE(fecha_pago, '') = ''`)
+      raw.run("UPDATE ventas SET estado_facturacion = 'facturada' WHERE COALESCE(estado_facturacion, '') = ''")
+      const porFacturar = raw.exec("SELECT COUNT(*) FROM ventas WHERE estado_facturacion = 'por_facturar'")[0].values[0][0]
+      raw.run("INSERT INTO _migrations (id) VALUES ('ventas_facturacion_backfill_v1')")
+      db._save()
+      console.log(`✅ Migración ventas_facturacion_backfill_v1 — ${porFacturar} ventas quedaron en "por facturar"`)
+    } catch (e) {
+      console.error('❌ Migración ventas_facturacion_backfill_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
