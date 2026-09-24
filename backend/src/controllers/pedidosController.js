@@ -48,6 +48,10 @@ const ocsDelPedido = (pedidoId) =>
 // Detalle completo: ítems, OCs, adjuntos, venta generada y margen estimado.
 const withDetalle = (p) => {
   if (!p) return null
+  if (!String(p.cliente || '').trim() && p.cliente_id) {
+    const cl = db.prepare('SELECT razon_social, contacto_nombre FROM clientes WHERE id = ?').get(p.cliente_id)
+    p = { ...p, cliente: cl?.razon_social || cl?.contacto_nombre || '' }
+  }
   const items = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(p.id)
   const ocs = ocsDelPedido(p.id)
   const vigentes = ocs.filter(o => ESTADOS_OC_VIGENTES.includes(o.estado))
@@ -79,12 +83,18 @@ const withDetalle = (p) => {
 const getAll = (req, res) => {
   try {
     const { estado, cotizacion_id, q } = req.query
-    let sql = 'SELECT * FROM pedidos WHERE 1=1'
+    // El nombre del cliente puede venir vacío si el documento se creó solo con
+    // cliente_id — se resuelve desde el maestro para que la lista nunca quede en blanco.
+    let sql = `SELECT p.*,
+                      COALESCE(NULLIF(TRIM(p.cliente), ''), cl.razon_social, cl.contacto_nombre, '—') AS cliente
+                 FROM pedidos p
+                 LEFT JOIN clientes cl ON cl.id = p.cliente_id
+                WHERE 1=1`
     const params = []
-    if (estado) { sql += ' AND estado = ?'; params.push(estado) }
-    if (cotizacion_id) { sql += ' AND cotizacion_id = ?'; params.push(cotizacion_id) }
-    if (q) { sql += ' AND (numero LIKE ? OR LOWER(cliente) LIKE LOWER(?))'; params.push(`%${q}%`, `%${q}%`) }
-    sql += ' ORDER BY created_at DESC'
+    if (estado) { sql += ' AND p.estado = ?'; params.push(estado) }
+    if (cotizacion_id) { sql += ' AND p.cotizacion_id = ?'; params.push(cotizacion_id) }
+    if (q) { sql += ' AND (p.numero LIKE ? OR LOWER(COALESCE(p.cliente, cl.razon_social, \'\')) LIKE LOWER(?))'; params.push(`%${q}%`, `%${q}%`) }
+    sql += ' ORDER BY p.created_at DESC'
     const pedidos = db.prepare(sql).all(...params).map(p => ({
       ...p,
       ocs: ocsDelPedido(p.id).map(o => ({ id: o.id, numero: o.numero, estado: o.estado })),
@@ -194,7 +204,9 @@ const previewDesdeCotizacion = (req, res) => {
     res.json({
       cotizacion: { id: cot.id, numero: cot.numero, estado: cot.estado },
       numero_sugerido: siguienteNumero(),
-      cliente: cot.cliente, cliente_id: cot.cliente_id,
+      cliente: String(cot.cliente || '').trim()
+        || (cot.cliente_id ? (db.prepare('SELECT razon_social, contacto_nombre FROM clientes WHERE id = ?').get(cot.cliente_id)?.razon_social || '') : ''),
+      cliente_id: cot.cliente_id,
       condicion_pago: cot.condicion_pago || 'Contado',
       plazo_entrega: cot.plazo_entrega || null,
       direccion_entrega: cot.direccion_entrega || null,
@@ -253,6 +265,12 @@ const createFromCotizacion = (req, res) => {
 
     const numero = siguienteNumero()
     const id = uuidv4()
+    const nombreCliente = String(cot.cliente || '').trim()
+      || (cot.cliente_id
+          ? (db.prepare('SELECT razon_social, contacto_nombre FROM clientes WHERE id = ?').get(cot.cliente_id)?.razon_social
+             || db.prepare('SELECT razon_social, contacto_nombre FROM clientes WHERE id = ?').get(cot.cliente_id)?.contacto_nombre
+             || null)
+          : null)
     const neto = cotItems.reduce((a, i) => a + (Number(i.subtotal) || 0), 0) || Number(cot.neto) || 0
     const iva = Math.round(neto * IVA)
 
@@ -261,7 +279,7 @@ const createFromCotizacion = (req, res) => {
         (id,numero,cotizacion_id,cliente_id,cliente,estado,neto,iva,total,condicion_pago,notas,
          vendedor_id,oc_cliente_doc_id,origen_costos,direccion_entrega)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-      ).run(id, numero, cotId, cot.cliente_id || null, cot.cliente || null, 'pendiente',
+      ).run(id, numero, cotId, cot.cliente_id || null, nombreCliente, 'pendiente',
         neto, iva, neto + iva,
         req.body?.condicion_pago || cot.condicion_pago || 'Contado', req.body?.notas || null,
         req.user?.id || null, ocDoc.id, origen_costos, req.body?.direccion_entrega || null)

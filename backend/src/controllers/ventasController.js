@@ -87,6 +87,7 @@ const getAll = (req, res) => {
     const { mes, estado_logistico, cliente_id, cotizacion_id, pedido_id } = req.query
     let sql = `
       SELECT v.*, c.rut as cliente_rut, u.nombre as vendedor_nombre,
+        COALESCE(NULLIF(TRIM(v.cliente_nombre), ''), c.razon_social, c.contacto_nombre, '—') AS cliente_nombre,
         (SELECT json_group_array(json_object(
           'id', i.id, 'sku', i.sku, 'descripcion', i.descripcion,
           'cantidad', i.cantidad, 'precio_unitario', i.precio_unitario,

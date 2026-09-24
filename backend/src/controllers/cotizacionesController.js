@@ -28,13 +28,21 @@ const withItems = (cot) => {
   return { ...cot, items, cliente_rut, cliente_email, cliente_telefono, cliente_direccion }
 }
 
+// 2026-09-24 — La columna `cotizaciones.cliente` queda vacía cuando la
+// cotización se creó eligiendo el cliente del maestro (solo se guardó
+// cliente_id), y la lista mostraba la columna CLIENTE en blanco. Se resuelve
+// el nombre desde `clientes` cuando falta, sin tocar lo guardado.
 const getAll = (req, res) => {
   try {
     const { estado } = req.query
-    let sql = 'SELECT * FROM cotizaciones'
+    let sql = `SELECT c.*,
+                      COALESCE(NULLIF(TRIM(c.cliente), ''), cl.razon_social, cl.contacto_nombre, '—') AS cliente,
+                      cl.rut AS cliente_rut
+                 FROM cotizaciones c
+                 LEFT JOIN clientes cl ON cl.id = c.cliente_id`
     const params = []
-    if (estado) { sql += ' WHERE estado = ?'; params.push(estado) }
-    sql += ' ORDER BY created_at DESC'
+    if (estado) { sql += ' WHERE c.estado = ?'; params.push(estado) }
+    sql += ' ORDER BY c.created_at DESC'
     res.json(db.prepare(sql).all(...params))
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -45,6 +53,10 @@ const getOne = (req, res) => {
   try {
     const c = db.prepare('SELECT * FROM cotizaciones WHERE id = ? OR numero = ?').get(req.params.id, req.params.id)
     if (!c) return res.status(404).json({ error: 'Cotización no encontrada' })
+    if (!String(c.cliente || '').trim() && c.cliente_id) {
+      const cl = db.prepare('SELECT razon_social, contacto_nombre FROM clientes WHERE id = ?').get(c.cliente_id)
+      c.cliente = cl?.razon_social || cl?.contacto_nombre || ''
+    }
     // Cruce OC↔Cotización (2026-09-21): totales de la(s) OC calzadas y margen.
     res.json({ ...withItems(c), cruce_oc: cruceParaCotizacion(c.id) })
   } catch (err) {
@@ -75,13 +87,22 @@ const _insertCotizacion = (body, extra = {}) => {
   const { cliente_id, cliente, estado, condicion_pago, canal_origen, notas,
           neto, iva, total, items } = { ...body, ...extra }
 
+  // Si solo vino cliente_id (el caso normal al elegir del maestro), se guarda
+  // también la razón social: así la lista, el PDF y la nota de venta siempre
+  // muestran a quién se le cotizó, sin depender de un join.
+  let nombreCliente = String(cliente || '').trim()
+  if (!nombreCliente && cliente_id) {
+    const cl = db.prepare('SELECT razon_social, contacto_nombre FROM clientes WHERE id = ?').get(cliente_id)
+    nombreCliente = cl?.razon_social || cl?.contacto_nombre || ''
+  }
+
   let numero = extra.numero || nextCotizacionNumero()
   for (let intento = 0; ; intento++) {
     try {
       db.prepare(`INSERT INTO cotizaciones
         (id,numero,cliente_id,cliente,estado,neto,iva,total,condicion_pago,canal_origen,notas)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-      ).run(id, numero, cliente_id || null, cliente || null, estado || 'borrador',
+      ).run(id, numero, cliente_id || null, nombreCliente || null, estado || 'borrador',
         neto || 0, iva || 0, total || 0,
         condicion_pago || 'Contado', canal_origen || null, notas || null)
       break
@@ -139,6 +160,14 @@ const update = (req, res) => {
       const set = fields.map(f => `${f} = ?`).join(', ')
       db.prepare(`UPDATE cotizaciones SET ${set}, updated_at = datetime('now') WHERE id = ?`)
         .run(...fields.map(f => req.body[f]), req.params.id)
+    }
+    // Mantiene el nombre del cliente sincronizado con el maestro cuando se
+    // cambia o cuando quedó vacío en documentos antiguos.
+    const actual = db.prepare('SELECT cliente, cliente_id FROM cotizaciones WHERE id = ?').get(req.params.id)
+    if (actual?.cliente_id && !String(actual.cliente || '').trim()) {
+      const cl = db.prepare('SELECT razon_social, contacto_nombre FROM clientes WHERE id = ?').get(actual.cliente_id)
+      const nombre = cl?.razon_social || cl?.contacto_nombre
+      if (nombre) db.prepare('UPDATE cotizaciones SET cliente = ? WHERE id = ?').run(nombre, req.params.id)
     }
     if (Array.isArray(req.body.items)) {
       db.prepare('DELETE FROM cotizacion_items WHERE cotizacion_id = ?').run(req.params.id)
