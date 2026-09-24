@@ -24,9 +24,10 @@ import DocumentosPanel from '@components/DocumentosPanel'
 const ESTADO_STYLES = {
   pendiente:       { label: 'Nota de venta creada',      bg: 'rgba(90,143,168,0.12)',  color: 'rgba(90,143,168,0.95)' },
   oc_emitida:      { label: 'OC emitida',       bg: 'rgba(244,162,60,0.12)',  color: 'var(--rmg-gold)' },
-  oc_validada:     { label: 'OC validada',      bg: 'rgba(56,182,255,0.12)',  color: 'var(--rmg-blt)' },
+  oc_validada:     { label: 'OC validada · venta generada', bg: 'rgba(45,201,138,0.14)', color: 'var(--rmg-teal)' },
   en_autorizacion: { label: 'En autorización',  bg: 'rgba(123,97,196,0.14)',  color: 'var(--rmg-purple)' },
   autorizado:      { label: 'Autorizada',       bg: 'rgba(45,201,138,0.14)',  color: 'var(--rmg-teal)' },
+  oc_validada_lbl: { label: 'Venta generada',   bg: 'rgba(45,201,138,0.14)',  color: 'var(--rmg-teal)' },
   rechazado:       { label: 'Rechazada',        bg: 'rgba(224,90,78,0.12)',   color: 'var(--rmg-red)' },
   confirmado:      { label: 'Confirmado',       bg: 'rgba(56,182,255,0.12)',  color: 'var(--rmg-blt)' },
   en_preparacion:  { label: 'En preparación',   bg: 'rgba(244,162,60,0.12)',  color: 'var(--rmg-gold)' },
@@ -40,11 +41,12 @@ const LOGISTICOS = ['confirmado', 'en_preparacion', 'despachado', 'entregado', '
 
 const FILTROS = [
   { key: '', label: 'Todas' },
-  { key: 'pendiente', label: 'Sin OC proveedor' },
-  { key: 'oc_emitida', label: 'OC emitida' },
-  { key: 'oc_validada', label: 'OC validada' },
+  { key: 'pendiente', label: 'Por autorizar' },
   { key: 'en_autorizacion', label: 'En autorización' },
   { key: 'autorizado', label: 'Autorizadas' },
+  { key: 'oc_emitida', label: 'OC emitida' },
+  { key: 'oc_validada', label: 'Venta generada' },
+  { key: 'rechazado', label: 'Rechazadas' },
 ]
 
 const OC_INIT = { proveedor: '', proveedor_id: '', fecha_requerida: '', medio_pago: 'Contado', notas: '' }
@@ -53,7 +55,8 @@ export default function PedidosPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { user } = useAuth()
-  const puedeAutorizar = ['gerente', 'administrador'].includes(user?.rol)
+  // La autorización de la nota de venta es del administrador (2026-09-24).
+  const puedeAutorizar = user?.rol === 'administrador'
 
   const [estadoFiltro, setFiltro] = useState('')
   const [expandido, setExpandido] = useState({})
@@ -113,25 +116,41 @@ export default function PedidosPage() {
   // Paso 7 — el proveedor confirmó precio y plazo.
   const validarMut = useMutation({
     mutationFn: (id) => api.post(`/pedidos/${id}/validar-oc`).then(r => r.data),
-    onSuccess: () => { refrescar(); toast.success('OC validada — lista para autorización') },
+    onSuccess: (data) => {
+      refrescar()
+      qc.invalidateQueries({ queryKey: ['ventas'] })
+      toast.success(data?.venta?.numero_documento
+        ? `OC validada — venta ${data.venta.numero_documento} enviada a facturación`
+        : 'OC validada')
+    },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al validar la OC'),
   })
 
   const enviarAutorizacionMut = useMutation({
     mutationFn: (id) => api.post(`/pedidos/${id}/enviar-autorizacion`).then(r => r.data),
-    onSuccess: () => { refrescar(); toast.success('Enviada a autorización de gerencia') },
+    onSuccess: () => { refrescar(); toast.success('Enviada a autorización del administrador') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al enviar a autorización'),
   })
 
   // Paso 8 — gerencia aprueba el margen: nace la venta "por facturar".
   const autorizarMut = useMutation({
     mutationFn: (id) => api.post(`/pedidos/${id}/autorizar`).then(r => r.data),
+    onSuccess: () => {
+      refrescar()
+      toast.success('Autorizada — ya se puede emitir la OC al proveedor')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al autorizar'),
+  })
+
+  // Venta con stock propio: autorizada y sin compra al proveedor.
+  const sinOcMut = useMutation({
+    mutationFn: (id) => api.post(`/pedidos/${id}/cerrar-sin-oc`).then(r => r.data),
     onSuccess: (data) => {
       refrescar()
       qc.invalidateQueries({ queryKey: ['ventas'] })
-      toast.success(`Autorizada — venta ${data.venta?.numero_documento || ''} enviada a facturación`)
+      toast.success(`Venta ${data.venta?.numero_documento || ''} generada — enviada a facturación`)
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al autorizar'),
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al generar la venta'),
   })
 
   const rechazarMut = useMutation({
@@ -156,12 +175,11 @@ export default function PedidosPage() {
   const netoPedidos = pedidos.reduce((s, p) => s + (p.neto || 0), 0)
   const porAutorizar = pedidos.filter(p => p.estado === 'en_autorizacion').length
 
-  // Acción principal según el punto del flujo en que está la nota.
+  // Acción principal según el punto del flujo (2026-09-24):
+  // creada → enviar a autorización → (admin) autoriza → OC al proveedor →
+  // validar OC → nace la venta "por facturar".
   const AccionFlujo = ({ p }) => {
-    if (p.estado === 'rechazado') {
-      return <span className="text-xs" style={{ color: 'var(--rmg-red)' }}>Rechazada</span>
-    }
-    if (p.venta_id || p.estado === 'autorizado') {
+    if (p.venta_id) {
       return (
         <button onClick={() => navigate('/ventas')}
           className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
@@ -171,40 +189,27 @@ export default function PedidosPage() {
         </button>
       )
     }
+    if (p.estado === 'rechazado') {
+      return puedeAutorizar ? (
+        <button onClick={() => enviarAutorizacionMut.mutate(p.id)} disabled={enviarAutorizacionMut.isPending}
+          className="btn-secondary text-xs px-2 py-1 flex items-center gap-1 disabled:opacity-50"
+          title="Volver a enviar a autorización">
+          <ShieldCheck size={11}/> Reenviar
+        </button>
+      ) : <span className="text-xs" style={{ color: 'var(--rmg-red)' }}>Rechazada</span>
+    }
+    // 1) recién creada → a autorización
     if (['pendiente', 'confirmado'].includes(p.estado)) {
       return (
-        <button onClick={() => { setOcModal(p); setOcForm(OC_INIT) }}
-          className="btn-secondary text-xs px-2 py-1 flex items-center gap-1"
-          title="Emitir la orden de compra al proveedor">
-          <Truck size={11}/> OC proveedor
-        </button>
-      )
-    }
-    if (p.estado === 'oc_emitida') {
-      return (
-        <button onClick={() => validarMut.mutate(p.id)} disabled={validarMut.isPending}
-          className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold disabled:opacity-50"
-          style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}
-          title="El proveedor confirmó precio y plazo">
-          <Check size={11}/> Validar OC
-        </button>
-      )
-    }
-    if (p.estado === 'oc_validada') {
-      return puedeAutorizar ? (
-        <button onClick={() => autorizarMut.mutate(p.id)} disabled={autorizarMut.isPending}
-          className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold disabled:opacity-50"
-          style={{ background: 'rgba(45,201,138,0.14)', color: 'var(--rmg-teal)' }}
-          title="Autorizar el negocio y generar la venta">
-          <ShieldCheck size={11}/> Autorizar
-        </button>
-      ) : (
         <button onClick={() => enviarAutorizacionMut.mutate(p.id)} disabled={enviarAutorizacionMut.isPending}
-          className="btn-secondary text-xs px-2 py-1 flex items-center gap-1 disabled:opacity-50">
-          <ShieldCheck size={11}/> A autorización
+          className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold disabled:opacity-50"
+          style={{ background: 'rgba(123,97,196,0.12)', color: 'var(--rmg-purple)' }}
+          title="Enviar a autorización del administrador">
+          <ShieldCheck size={11}/> Enviar a autorización
         </button>
       )
     }
+    // 2) el administrador autoriza o rechaza
     if (p.estado === 'en_autorizacion') {
       return puedeAutorizar ? (
         <div className="flex gap-1.5">
@@ -220,7 +225,37 @@ export default function PedidosPage() {
           </button>
         </div>
       ) : (
-        <span className="text-xs" style={{ color: 'var(--rmg-purple)' }}>Esperando gerencia</span>
+        <span className="text-xs" style={{ color: 'var(--rmg-purple)' }}>Esperando al administrador</span>
+      )
+    }
+    // 3) autorizada → recién ahora se puede emitir la OC al proveedor
+    if (p.estado === 'autorizado') {
+      return (
+        <div className="flex gap-1.5">
+          <button onClick={() => { setOcModal(p); setOcForm(OC_INIT) }}
+            className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
+            style={{ background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)' }}
+            title="Emitir la orden de compra al proveedor">
+            <Truck size={11}/> OC proveedor
+          </button>
+          <button onClick={() => { if (confirm('¿Generar la venta sin OC al proveedor? Se despacha con stock propio.')) sinOcMut.mutate(p.id) }}
+            disabled={sinOcMut.isPending}
+            className="btn-secondary text-xs px-2 py-1 flex items-center gap-1 disabled:opacity-50"
+            title="Venta con stock propio, sin compra al proveedor">
+            Sin OC
+          </button>
+        </div>
+      )
+    }
+    // 4) OC emitida → validar; al validar nace la venta
+    if (p.estado === 'oc_emitida') {
+      return (
+        <button onClick={() => validarMut.mutate(p.id)} disabled={validarMut.isPending}
+          className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold disabled:opacity-50"
+          style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}
+          title="El proveedor confirmó precio y plazo — genera la venta">
+          <Check size={11}/> Validar OC
+        </button>
       )
     }
     return null
@@ -234,7 +269,7 @@ export default function PedidosPage() {
         <div>
           <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Notas de Venta</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
-            Cotización aprobada + OC del cliente → OC al proveedor → autorización → venta
+            Cotización aprobada + OC del cliente → autorización → OC al proveedor → venta
           </p>
         </div>
         <div className="flex items-center gap-3">

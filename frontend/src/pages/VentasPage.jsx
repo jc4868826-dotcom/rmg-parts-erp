@@ -161,9 +161,23 @@ export default function VentasPage() {
 
   // Solo gerente: confirma que el depósito realmente llegó (genera el ingreso
   // en caja) o rechaza (la venta vuelve a Pendiente para reintentar).
+  // Validación de pago (2026-09-24): un solo botón, visible solo para el gerente,
+  // con tres resultados — pagada / pendiente / validación rechazada.
+  const [validarModal, setValidarModal] = useState(null)
+  const [validar, setValidar] = useState({ resultado: 'pagada', motivo: '' })
+
   const validarMut = useMutation({
-    mutationFn: ({ id, aprobado, motivo }) => api.post(`/ventas/${id}/validar-pago`, { aprobado, motivo }).then(r => r.data),
-    onSuccess: (_, vars) => { invalidate(); toast.success(vars.aprobado ? 'Pago validado — ingreso confirmado en flujo de caja' : 'Pago rechazado') },
+    mutationFn: ({ id, resultado, motivo }) =>
+      api.post(`/ventas/${id}/validar-pago`, { resultado, motivo }).then(r => r.data),
+    onSuccess: (_, vars) => {
+      invalidate()
+      setValidarModal(null)
+      setValidar({ resultado: 'pagada', motivo: '' })
+      toast.success(
+        vars.resultado === 'pagada' ? 'Pago validado — ingreso confirmado en flujo de caja'
+        : vars.resultado === 'pendiente' ? 'Queda pendiente — la venta vuelve a cobranza'
+        : 'Validación rechazada — la venta vuelve a Pendiente con el motivo')
+    },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al validar el pago'),
   })
 
@@ -180,13 +194,6 @@ export default function VentasPage() {
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al recalcular el costo'),
   })
-
-  const handleRechazarPago = (id) => {
-    const motivo = window.prompt('Motivo del rechazo (ej: el depósito no aparece en la cuenta corriente):')
-    if (motivo === null) return
-    if (!motivo.trim()) { toast.error('Indica un motivo'); return }
-    validarMut.mutate({ id, aprobado: false, motivo: motivo.trim() })
-  }
 
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { ...ITEM_INIT }] }))
   const removeItem = (idx) => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))
@@ -725,10 +732,13 @@ export default function VentasPage() {
                             )}
                             {v.estado === 'en_validacion_pago' && (
                               esGerente ? (
-                                <>
-                                  <button onClick={() => validarMut.mutate({ id: v.id, aprobado: true })} disabled={validarMut.isPending} title="Aprobar — confirmar que el depósito llegó" className="p-1.5 rounded hover:bg-black/5 disabled:opacity-50" style={{ color: 'var(--rmg-teal)' }}><Check size={13}/></button>
-                                  <button onClick={() => handleRechazarPago(v.id)} disabled={validarMut.isPending} title="Rechazar pago" className="p-1.5 rounded hover:bg-red-500/10 disabled:opacity-50" style={{ color: 'var(--rmg-red)' }}><X size={13}/></button>
-                                </>
+                                <button
+                                  onClick={() => { setValidarModal(v); setValidar({ resultado: 'pagada', motivo: '' }) }}
+                                  className="text-xs px-2 py-1 rounded-lg font-semibold flex items-center gap-1 whitespace-nowrap"
+                                  style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}
+                                  title="Validar el pago de esta venta">
+                                  <ShieldAlert size={12}/> Validar pago
+                                </button>
                               ) : (
                                 <span title="Esperando validación de gerente" className="p-1.5" style={{ color: 'var(--rmg-blue)' }}><ShieldAlert size={13}/></span>
                               )
@@ -769,6 +779,58 @@ export default function VentasPage() {
           </div>
         )}
       </div>
+
+      {/* Validación de pago — solo gerente. Tres resultados posibles. */}
+      {validarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,35,60,0.45)' }}>
+          <div className="rmg-card w-full max-w-md p-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Validar pago</h2>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                {validarModal.numero_documento} · {validarModal.cliente_nombre} · {formatCLP(totalConIVA(validarModal.total))}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {[
+                { key: 'pagada',    label: 'Pagada',                 desc: 'El depósito llegó. Ingresa a caja y la venta queda pagada.', color: 'var(--rmg-teal)' },
+                { key: 'pendiente', label: 'Pendiente',              desc: 'Todavía no se confirma. Vuelve a cobranza sin marcar rechazo.', color: 'var(--rmg-gold)' },
+                { key: 'rechazada', label: 'Validación rechazada',   desc: 'El pago no corresponde. Vuelve a Pendiente con el motivo.', color: 'var(--rmg-red)' },
+              ].map(op => (
+                <label key={op.key} className="flex gap-2.5 items-start rounded-lg px-3 py-2.5 cursor-pointer"
+                  style={{ border: `1px solid ${validar.resultado === op.key ? op.color : 'rgba(15,35,60,0.12)'}`,
+                           background: validar.resultado === op.key ? 'rgba(15,35,60,0.02)' : 'transparent' }}>
+                  <input type="radio" name="resultado-validacion" className="mt-1"
+                    checked={validar.resultado === op.key}
+                    onChange={() => setValidar(f => ({ ...f, resultado: op.key }))} />
+                  <span>
+                    <span className="block text-sm font-semibold" style={{ color: op.color }}>{op.label}</span>
+                    <span className="block text-xs" style={{ color: 'var(--rmg-muted)' }}>{op.desc}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {validar.resultado === 'rechazada' && (
+              <div>
+                <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Motivo del rechazo</label>
+                <input className="rmg-input" autoFocus placeholder="Ej: el depósito no aparece en la cuenta corriente"
+                  value={validar.motivo} onChange={e => setValidar(f => ({ ...f, motivo: e.target.value }))} />
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end pt-1">
+              <button type="button" onClick={() => setValidarModal(null)} className="btn-secondary">Cancelar</button>
+              <button type="button"
+                disabled={validarMut.isPending || (validar.resultado === 'rechazada' && !validar.motivo.trim())}
+                onClick={() => validarMut.mutate({ id: validarModal.id, resultado: validar.resultado, motivo: validar.motivo.trim() })}
+                className="btn-primary disabled:opacity-40">
+                {validarMut.isPending ? 'Guardando…' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

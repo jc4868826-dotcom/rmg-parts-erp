@@ -557,10 +557,25 @@ const validarPago = (req, res) => {
       return res.status(403).json({ error: 'Solo gerente puede validar el pago' })
     }
 
-    const { aprobado, motivo, cuenta_bancaria, fecha_pago } = req.body
+    // Tres resultados posibles (2026-09-24):
+    //   'pagada'    → el depósito llegó: la venta queda Pagada e ingresa a caja.
+    //   'pendiente' → todavía no se confirma: vuelve a Pendiente, sin marcar rechazo.
+    //   'rechazada' → el pago no corresponde: vuelve a Pendiente con el motivo.
+    // Se mantiene `aprobado` (booleano) por compatibilidad con clientes antiguos.
+    const { motivo, cuenta_bancaria, fecha_pago } = req.body
+    let { resultado } = req.body
+    if (!resultado) resultado = req.body.aprobado ? 'pagada' : 'rechazada'
+    if (!['pagada', 'pendiente', 'rechazada'].includes(resultado)) {
+      return res.status(400).json({ error: `Resultado de validación no válido: ${resultado}` })
+    }
     const fechaFinal = fecha_pago || hoy()
 
-    if (aprobado) {
+    if (resultado === 'pendiente') {
+      db.prepare("UPDATE ventas SET estado = 'Pendiente', motivo_rechazo_pago = NULL WHERE id = ?").run(venta.id)
+      return res.json(withItems(db.prepare('SELECT * FROM ventas WHERE id = ?').get(venta.id)))
+    }
+
+    if (resultado === 'pagada') {
       const doAprobar = db.transaction(() => {
         db.prepare("UPDATE ventas SET estado = 'Pagado', fecha_pago = ?, motivo_rechazo_pago = NULL WHERE id = ?")
           .run(fechaFinal, venta.id)

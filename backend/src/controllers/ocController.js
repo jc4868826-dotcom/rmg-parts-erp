@@ -248,6 +248,14 @@ const createOCDesdePedido = (req, res) => {
     if (['rechazado', 'anulado'].includes(pedido.estado)) {
       return res.status(400).json({ error: `No se puede emitir una OC de una nota de venta ${pedido.estado}` })
     }
+    // Compuerta (2026-09-24): la OC al proveedor recién se habilita cuando el
+    // administrador autorizó la nota de venta.
+    if (!['autorizado', 'oc_emitida', 'oc_validada'].includes(pedido.estado)) {
+      return res.status(400).json({
+        codigo: 'NO_AUTORIZADA',
+        error: 'La nota de venta debe estar autorizada por el administrador antes de emitir la OC al proveedor.',
+      })
+    }
 
     const { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas } = req.body || {}
     if (!proveedor) return res.status(400).json({ error: 'Proveedor requerido' })
@@ -272,7 +280,7 @@ const createOCDesdePedido = (req, res) => {
     const jsonOriginal = res.json.bind(res)
     res.json = (payload) => {
       try {
-        if (payload?.id && ['pendiente', 'confirmado'].includes(pedido.estado)) {
+        if (payload?.id && pedido.estado === 'autorizado') {
           db.prepare("UPDATE pedidos SET estado = 'oc_emitida', updated_at = datetime('now') WHERE id = ?").run(pedido.id)
         }
       } catch { /* no bloquear la creación de la OC por esto */ }

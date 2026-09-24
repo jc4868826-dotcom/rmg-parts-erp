@@ -16,6 +16,8 @@ router.post('/:id/validar-oc',                authenticate, ctrl.validarOC)
 router.post('/:id/enviar-autorizacion',       authenticate, ctrl.enviarAutorizacion)
 router.post('/:id/autorizar',                 authenticate, ctrl.autorizar)
 router.post('/:id/rechazar',                  authenticate, ctrl.rechazar)
+// Venta con stock propio: autorizada y sin OC al proveedor.
+router.post('/:id/cerrar-sin-oc',             authenticate, ctrl.cerrarSinOC)
 router.delete('/:id',                         authenticate, ctrl.remove)
 
 module.exports = router

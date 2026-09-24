@@ -20,7 +20,9 @@ const { db, uuidv4 } = require('../../config/database')
 const { crearVentaDesdePedido } = require('./ventasController')
 
 const IVA = 0.19
-const ROLES_AUTORIZAN = ['gerente', 'administrador']
+// La autorización de la nota de venta es del ADMINISTRADOR (2026-09-24, JC).
+// El gerente valida pagos, no autoriza notas de venta.
+const ROLES_AUTORIZAN = ['administrador']
 const ESTADOS_OC_VIGENTES = ['borrador', 'enviada', 'confirmada', 'recibida']
 
 // Costo de lista para un SKU — mismo criterio que ventasController.getLp.
@@ -357,7 +359,20 @@ const cambiarEstado = (req, res) => {
   }
 }
 
-/** Paso 7 — el proveedor confirmó precio y plazo: la OC queda validada. */
+// Genera la venta desde la nota de venta y deja el pedido ligado a ella.
+// Se llama al validar la OC (o al cerrar una nota sin OC al proveedor).
+function _generarVenta(p, user) {
+  const items = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(p.id)
+  if (!items.length) throw new Error('La nota de venta no tiene ítems')
+  const venta = crearVentaDesdePedido(p, items, user)
+  db.prepare('UPDATE pedidos SET venta_id = ? WHERE id = ?').run(String(venta.id), p.id)
+  return venta
+}
+
+/**
+ * Paso 5 — el proveedor confirmó precio y plazo: la OC queda validada y con eso
+ * nace la venta en "por facturar". Es el último paso del abastecimiento.
+ */
 const validarOC = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
@@ -368,19 +383,29 @@ const validarOC = (req, res) => {
     }
     db.prepare(`UPDATE pedidos SET estado = 'oc_validada', validado_por = ?, validado_at = datetime('now'),
       updated_at = datetime('now') WHERE id = ?`).run(req.user?.id || null, p.id)
-    res.json(withDetalle(db.prepare('SELECT * FROM pedidos WHERE id = ?').get(p.id)))
+
+    let venta = null
+    if (!p.venta_id) venta = _generarVenta(db.prepare('SELECT * FROM pedidos WHERE id = ?').get(p.id), req.user)
+
+    res.json({ ...withDetalle(db.prepare('SELECT * FROM pedidos WHERE id = ?').get(p.id)), venta })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 }
 
-/** Paso 8a — a la bandeja de gerencia. */
+/**
+ * Paso 3 — la nota de venta va a autorización. Es el paso previo obligatorio:
+ * sin autorización no se puede emitir la OC al proveedor.
+ */
 const enviarAutorizacion = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
     if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
-    if (p.estado !== 'oc_validada') {
-      return res.status(400).json({ error: 'La OC al proveedor debe estar validada antes de pedir autorización', codigo: 'OC_NO_VALIDADA' })
+    if (!['pendiente', 'confirmado', 'rechazado'].includes(p.estado)) {
+      return res.status(400).json({ error: `La nota de venta ya pasó la autorización (estado actual: ${p.estado})` })
+    }
+    if (!p.oc_cliente_doc_id) {
+      return res.status(400).json({ error: 'Falta la OC del cliente adjunta', codigo: 'FALTA_OC_CLIENTE' })
     }
     db.prepare("UPDATE pedidos SET estado = 'en_autorizacion', motivo_rechazo = NULL, updated_at = datetime('now') WHERE id = ?").run(p.id)
     res.json(withDetalle(db.prepare('SELECT * FROM pedidos WHERE id = ?').get(p.id)))
@@ -389,28 +414,47 @@ const enviarAutorizacion = (req, res) => {
   }
 }
 
-/** Paso 8b — gerencia aprueba el margen: nace la venta en "por facturar". */
+/**
+ * Paso 4 — el ADMINISTRADOR autoriza la nota de venta. Recién autorizada se
+ * habilita la OC al proveedor. La venta no nace acá: nace al validar la OC.
+ */
 const autorizar = (req, res) => {
   try {
     if (!ROLES_AUTORIZAN.includes(req.user?.rol)) {
-      return res.status(403).json({ error: 'Solo gerencia puede autorizar una nota de venta' })
+      return res.status(403).json({ error: 'Solo el administrador puede autorizar una nota de venta' })
     }
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
     if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
-    if (p.venta_id) return res.status(400).json({ error: 'La nota de venta ya está autorizada y registrada' })
-    if (!['oc_validada', 'en_autorizacion'].includes(p.estado)) {
-      return res.status(400).json({ error: 'La OC al proveedor debe estar validada antes de autorizar', codigo: 'OC_NO_VALIDADA' })
+    if (!['pendiente', 'confirmado', 'en_autorizacion', 'rechazado'].includes(p.estado)) {
+      return res.status(400).json({ error: `La nota de venta ya está autorizada (estado actual: ${p.estado})` })
     }
-
-    const items = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(p.id)
+    const items = db.prepare('SELECT id FROM pedido_items WHERE pedido_id = ?').all(p.id)
     if (!items.length) return res.status(400).json({ error: 'La nota de venta no tiene ítems' })
 
-    const venta = crearVentaDesdePedido(p, items, req.user)
-
     db.prepare(`UPDATE pedidos SET estado = 'autorizado', autorizado_por = ?, autorizado_at = datetime('now'),
-      venta_id = ?, motivo_rechazo = NULL, updated_at = datetime('now') WHERE id = ?`)
-      .run(req.user?.id || null, String(venta.id), p.id)
+      motivo_rechazo = NULL, updated_at = datetime('now') WHERE id = ?`)
+      .run(req.user?.id || null, p.id)
 
+    res.json(withDetalle(db.prepare('SELECT * FROM pedidos WHERE id = ?').get(p.id)))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+/**
+ * Salida sin compra: la nota de venta autorizada se despacha con stock propio,
+ * sin OC al proveedor. Genera la venta directamente en "por facturar".
+ */
+const cerrarSinOC = (req, res) => {
+  try {
+    const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
+    if (p.venta_id) return res.status(400).json({ error: 'La nota de venta ya generó su venta' })
+    if (p.estado !== 'autorizado') {
+      return res.status(400).json({ error: 'La nota de venta debe estar autorizada', codigo: 'NO_AUTORIZADA' })
+    }
+    const venta = _generarVenta(p, req.user)
+    db.prepare("UPDATE pedidos SET estado = 'oc_validada', updated_at = datetime('now') WHERE id = ?").run(p.id)
     res.json({ ...withDetalle(db.prepare('SELECT * FROM pedidos WHERE id = ?').get(p.id)), venta })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -420,7 +464,7 @@ const autorizar = (req, res) => {
 const rechazar = (req, res) => {
   try {
     if (!ROLES_AUTORIZAN.includes(req.user?.rol)) {
-      return res.status(403).json({ error: 'Solo gerencia puede rechazar una nota de venta' })
+      return res.status(403).json({ error: 'Solo el administrador puede rechazar una nota de venta' })
     }
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
     if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
@@ -519,6 +563,6 @@ const remove = (req, res) => {
 
 module.exports = {
   getAll, getOne, create, previewDesdeCotizacion, createFromCotizacion, update, cambiarEstado,
-  validarOC, enviarAutorizacion, autorizar, rechazar,
+  validarOC, enviarAutorizacion, autorizar, rechazar, cerrarSinOC,
   createDesdeLanding, remove,
 }

@@ -18,8 +18,9 @@ const ESTADO_STYLES = {
 }
 
 const TIPO_VENTA_STYLES = {
-  validacion: { label: 'En validación de pago', color: 'var(--rmg-blue)', bg: 'rgba(56,182,255,0.12)' },
+  validacion: { label: 'En validación de pago', color: 'var(--rmg-blue)',   bg: 'rgba(56,182,255,0.12)' },
   credito:    { label: 'Venta a crédito',       color: 'var(--rmg-purple)', bg: 'rgba(130,90,224,0.12)' },
+  facturada:  { label: 'Facturada · por cobrar', color: 'var(--rmg-gold)',  bg: 'rgba(244,162,60,0.14)' },
 }
 
 export default function CxCPage() {
@@ -131,7 +132,7 @@ export default function CxCPage() {
                     </tr>
                   ))
                 : ventasPendientes.map((v, i) => {
-                    const tipoStyle = TIPO_VENTA_STYLES[v.tipo] || TIPO_VENTA_STYLES.credito
+                    const tipoStyle = TIPO_VENTA_STYLES[v.tipo] || TIPO_VENTA_STYLES.facturada
                     return (
                       <tr key={v.id}
                         style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
@@ -179,12 +180,14 @@ export default function CxCPage() {
                             ) : (
                               <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Esperando gerente</span>
                             )
-                          ) : (
+                          ) : esGerente ? (
                             <button onClick={() => cobrarCreditoMut.mutate(v.id)} disabled={cobrarCreditoMut.isPending}
-                              className="text-xs px-2 py-1 rounded-lg font-medium transition-all"
+                              className="text-xs px-2 py-1 rounded-lg font-medium transition-all disabled:opacity-50"
                               style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
                               Marcar cobrada
                             </button>
+                          ) : (
+                            <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Solo gerente</span>
                           )}
                         </td>
                       </tr>

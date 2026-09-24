@@ -11,24 +11,73 @@ function insertCaja(tipo, categoria, descripcion, monto, fecha_pago, estado, ori
   } catch (_) {}
 }
 
+
+// ── Cartera real por cobrar (2026-09-24) ─────────────────────────────────────
+// Antes los KPIs y la tabla de facturas leían `facturas_cxc`, una tabla que solo
+// se llena con crearFactura manual y que en la práctica está vacía: por eso el
+// tablero mostraba $0 aunque hubiera ventas por cobrar. Ahora la cartera se
+// arma desde `ventas`, que es el registro real: toda venta no pagada que ya
+// está facturada, o que es a crédito, es cuenta por cobrar.
+const DIAS_CREDITO = { 'Crédito 30 días': 30, 'Crédito 60 días': 60, 'Crédito 90 días': 90 }
+
+function carteraPorCobrar() {
+  const rows = db.prepare(`
+    SELECT v.id, v.numero_documento, v.numero_factura, v.fecha, v.fecha_factura, v.total,
+           v.forma_pago, v.estado, v.estado_facturacion, v.cliente_id,
+           COALESCE(NULLIF(TRIM(v.cliente_nombre), ''), c.razon_social, c.contacto_nombre, '—') AS cliente,
+           c.segmento
+      FROM ventas v
+      LEFT JOIN clientes c ON c.id = v.cliente_id
+     WHERE v.estado IN ('Pendiente', 'en_validacion_pago')
+       AND COALESCE(v.estado_facturacion, '') != 'por_facturar'
+       AND (COALESCE(v.estado_facturacion, '') = 'facturada' OR v.forma_pago LIKE 'Crédito%')
+  `).all()
+
+  const hoy = new Date()
+  return rows.map(v => {
+    const dias = DIAS_CREDITO[v.forma_pago] || 0
+    const base = v.fecha_factura || v.fecha
+    const venc = new Date(base)
+    venc.setDate(venc.getDate() + dias)
+    const fecha_vencimiento = venc.toISOString().split('T')[0]
+    const dias_vencida = Math.round((hoy - venc) / (1000 * 60 * 60 * 24))
+    const estado = dias_vencida > 30 ? 'critica' : dias_vencida > 0 ? 'vencida' : 'al_dia'
+    return {
+      id: v.id,
+      venta_id: v.id,
+      numero: v.numero_factura ? `F-${v.numero_factura}` : v.numero_documento,
+      numero_factura: v.numero_factura,
+      cliente: v.cliente,
+      cliente_id: v.cliente_id,
+      segmento: v.segmento,
+      neto: v.total,
+      monto: Math.round(Number(v.total) * 1.19),  // la cartera se sigue en monto con IVA
+      fecha_emision: v.fecha_factura || v.fecha,
+      fecha_vencimiento,
+      dias_vencida,
+      estado,
+      en_validacion: v.estado === 'en_validacion_pago',
+      origen: 'venta',
+    }
+  })
+}
+
 const getFacturas = (req, res) => {
   try {
     const { estado, segmento, cliente_id } = req.query
-    let sql = 'SELECT * FROM facturas_cxc'
-    const params = []
-    const where = []
-    if (estado) { where.push('estado = ?'); params.push(estado) }
-    if (segmento) { where.push('segmento = ?'); params.push(segmento) }
-    if (cliente_id) { where.push('cliente_id = ?'); params.push(cliente_id) }
-    if (where.length) sql += ' WHERE ' + where.join(' AND ')
-    sql += ' ORDER BY fecha_vencimiento ASC'
-
     const hoy = new Date()
-    const rows = db.prepare(sql).all(...params).map(f => {
-      const vence = new Date(f.fecha_vencimiento)
-      const dias_vencida = Math.round((hoy - vence) / (1000 * 60 * 60 * 24))
-      return { ...f, dias_vencida }
-    })
+
+    // Facturas cargadas a mano (histórico), si las hay.
+    const manuales = db.prepare('SELECT * FROM facturas_cxc').all().map(f => ({
+      ...f, origen: 'factura',
+      dias_vencida: Math.round((hoy - new Date(f.fecha_vencimiento)) / (1000 * 60 * 60 * 24)),
+    })).filter(f => f.estado !== 'cobrada')
+
+    let rows = [...carteraPorCobrar(), ...manuales]
+    if (estado)     rows = rows.filter(r => r.estado === estado)
+    if (segmento)   rows = rows.filter(r => r.segmento === segmento)
+    if (cliente_id) rows = rows.filter(r => String(r.cliente_id) === String(cliente_id))
+    rows.sort((a, b) => String(a.fecha_vencimiento).localeCompare(String(b.fecha_vencimiento)))
     res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -75,15 +124,20 @@ const getCuentasCorrientes = (req, res) => {
 const getResumen = (_req, res) => {
   try {
     const hoy = new Date()
-    const facturas = db.prepare('SELECT * FROM facturas_cxc').all().map(f => {
-      const vence = new Date(f.fecha_vencimiento)
-      return { ...f, dias_vencida: Math.round((hoy - vence) / (1000 * 60 * 60 * 24)) }
+    const manuales = db.prepare('SELECT * FROM facturas_cxc').all()
+      .filter(f => f.estado !== 'cobrada')
+      .map(f => ({ ...f, dias_vencida: Math.round((hoy - new Date(f.fecha_vencimiento)) / (1000 * 60 * 60 * 24)) }))
+    const cartera = [...carteraPorCobrar(), ...manuales]
+
+    const suma = (fn) => cartera.filter(fn).reduce((s, f) => s + (Number(f.monto) || 0), 0)
+    res.json({
+      total:   suma(() => true),
+      al_dia:  suma(f => f.dias_vencida <= 0),
+      vencida: suma(f => f.dias_vencida > 0 && f.dias_vencida <= 30),
+      critica: suma(f => f.dias_vencida > 30),
+      count:   cartera.length,
+      neto:    cartera.reduce((s, f) => s + (Number(f.neto ?? Math.round((f.monto || 0) / 1.19)) || 0), 0),
     })
-    const total   = facturas.reduce((s, f) => s + f.monto, 0)
-    const al_dia  = facturas.filter(f => f.dias_vencida <= 0).reduce((s, f) => s + f.monto, 0)
-    const vencida = facturas.filter(f => f.dias_vencida > 0 && f.dias_vencida <= 30).reduce((s, f) => s + f.monto, 0)
-    const critica = facturas.filter(f => f.dias_vencida > 30).reduce((s, f) => s + f.monto, 0)
-    res.json({ total, al_dia, vencida, critica, count: facturas.length })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -92,7 +146,24 @@ const getResumen = (_req, res) => {
 const marcarCobrada = (req, res) => {
   try {
     const f = db.prepare('SELECT * FROM facturas_cxc WHERE id = ?').get(req.params.id)
-    if (!f) return res.status(404).json({ error: 'Factura no encontrada' })
+    // La cartera se arma desde `ventas`, así que el id puede ser el de una venta.
+    // Marcar cobrada es del gerente (2026-09-22).
+    if (!f) {
+      const venta = db.prepare('SELECT * FROM ventas WHERE id = ?').get(req.params.id)
+      if (!venta) return res.status(404).json({ error: 'Documento no encontrado' })
+      if (req.user?.rol !== 'gerente') {
+        return res.status(403).json({ error: 'Solo el gerente puede marcar una venta como cobrada' })
+      }
+      const fechaCobro = new Date().toISOString().split('T')[0]
+      const doCobrar = db.transaction(() => {
+        db.prepare("UPDATE ventas SET estado = 'Pagado', fecha_pago = ?, motivo_rechazo_pago = NULL WHERE id = ?")
+          .run(fechaCobro, venta.id)
+        insertCaja('ingreso', 'venta', `Cobro ${venta.numero_documento} — ${venta.cliente_nombre || ''}`,
+          Math.round(Number(venta.total) * 1.19), fechaCobro, 'confirmado', 'ventas', venta.id)
+      })
+      doCobrar()
+      return res.json(db.prepare('SELECT * FROM ventas WHERE id = ?').get(venta.id))
+    }
     const fecha_cobro = new Date().toISOString().split('T')[0]
     db.prepare("UPDATE facturas_cxc SET estado = 'cobrada', fecha_cobro = ? WHERE id = ?")
       .run(fecha_cobro, req.params.id)
