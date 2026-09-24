@@ -4,6 +4,8 @@ const ctrl = require('../controllers/pedidosController')
 const { authenticate } = require('../middleware/auth')
 
 router.get('/',                               authenticate, ctrl.getAll)
+// /preview antes que /:id — si no, Express lo captura como un id.
+router.get('/preview/:cotizacionId',          authenticate, ctrl.previewDesdeCotizacion)
 router.get('/:id',                            authenticate, ctrl.getOne)
 router.post('/',                              authenticate, ctrl.create)
 router.post('/from-cotizacion/:cotizacionId', authenticate, ctrl.createFromCotizacion)

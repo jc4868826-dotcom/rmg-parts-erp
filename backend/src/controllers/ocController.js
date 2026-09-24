@@ -216,7 +216,7 @@ const createOC = (req, res) => {
 // (cotizacion_items.oc_item_id) se hace después, con un PATCH aparte una vez
 // que la OC ya tiene sus oc_items con id real.
 // Flujo v2 (2026-09-24): la cotización ya NO emite OC al proveedor. Si la
-// cotización ya tiene su nota de pedido, se redirige a ella; si no, se pide
+// cotización ya tiene su nota de venta, se redirige a ella; si no, se pide
 // crearla primero (lo que a su vez exige la OC del cliente adjunta).
 const createOCDesdeCotizacion = (req, res) => {
   try {
@@ -224,7 +224,7 @@ const createOCDesdeCotizacion = (req, res) => {
     if (!pedido) {
       return res.status(400).json({
         codigo: 'REQUIERE_NOTA_PEDIDO',
-        error: 'La OC al proveedor se emite desde la nota de pedido. Crea primero la nota de pedido (requiere la OC del cliente adjunta).',
+        error: 'La OC al proveedor se emite desde la nota de venta. Crea primero la nota de venta (requiere la OC del cliente adjunta).',
       })
     }
     req.params.pedidoId = pedido.id
@@ -235,7 +235,7 @@ const createOCDesdeCotizacion = (req, res) => {
 }
 
 /**
- * Flujo v2 — OC al proveedor desde la NOTA DE PEDIDO.
+ * Flujo v2 — OC al proveedor desde la NOTA DE VENTA.
  * Copia las líneas del pedido con el costo ya definido (respaldo del proveedor
  * si se adjuntó, precio de lista si no) y deja la OC ligada al pedido, al
  * cliente y a la cotización de origen, para que el cruce de margen siga igual.
@@ -244,16 +244,16 @@ const createOCDesdePedido = (req, res) => {
   try {
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ? OR numero = ?')
       .get(req.params.pedidoId, req.params.pedidoId)
-    if (!pedido) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
+    if (!pedido) return res.status(404).json({ error: 'Nota de venta no encontrada' })
     if (['rechazado', 'anulado'].includes(pedido.estado)) {
-      return res.status(400).json({ error: `No se puede emitir una OC de una nota de pedido ${pedido.estado}` })
+      return res.status(400).json({ error: `No se puede emitir una OC de una nota de venta ${pedido.estado}` })
     }
 
     const { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas } = req.body || {}
     if (!proveedor) return res.status(400).json({ error: 'Proveedor requerido' })
 
     const pedItems = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(pedido.id)
-    if (!pedItems.length) return res.status(400).json({ error: 'La nota de pedido no tiene ítems' })
+    if (!pedItems.length) return res.status(400).json({ error: 'La nota de venta no tiene ítems' })
 
     const items = (Array.isArray(req.body?.items) && req.body.items.length)
       ? req.body.items
@@ -268,7 +268,7 @@ const createOCDesdePedido = (req, res) => {
                  cliente_id: pedido.cliente_id, cotizacion_id: pedido.cotizacion_id || null,
                  pedido_id: pedido.id, items }
 
-    // La OC recién creada mueve la nota de pedido a "OC emitida".
+    // La OC recién creada mueve la nota de venta a "OC emitida".
     const jsonOriginal = res.json.bind(res)
     res.json = (payload) => {
       try {

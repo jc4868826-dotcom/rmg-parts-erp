@@ -194,7 +194,7 @@ const create = (req, res) => {
 }
 
 /**
- * Flujo v2 (2026-09-24) — la venta nace de la NOTA DE PEDIDO autorizada, no de
+ * Flujo v2 (2026-09-24) — la venta nace de la NOTA DE VENTA autorizada, no de
  * la cotización. La llama pedidosController.autorizar dentro de su transacción
  * lógica; devuelve la venta ya creada en estado_facturacion 'por_facturar'.
  */
@@ -226,8 +226,8 @@ const createFromCotizacion = (req, res) => {
     return res.status(400).json({
       codigo: 'REQUIERE_NOTA_PEDIDO',
       error: pedido
-        ? `Esta cotización ya tiene la nota de pedido ${pedido.numero}. La venta se genera al autorizarla.`
-        : 'La cotización ya no se convierte directo en venta. Crea la nota de pedido (requiere la OC del cliente adjunta) y autorízala.',
+        ? `Esta cotización ya tiene la nota de venta ${pedido.numero}. La venta se genera al autorizarla.`
+        : 'La cotización ya no se convierte directo en venta. Crea la nota de venta (requiere la OC del cliente adjunta) y autorízala.',
       pedido_id: pedido?.id || null,
     })
   } catch (err) {
@@ -326,22 +326,22 @@ const recalcularCostoOC = (req, res) => {
   }
 }
 
-// Flujo v2: la venta la crea la autorización de la nota de pedido
+// Flujo v2: la venta la crea la autorización de la nota de venta
 // (pedidosController.autorizar → crearVentaDesdePedido). Esta ruta queda solo
 // como recuperación: sirve si el pedido ya está autorizado pero quedó sin venta.
 const createFromPedido = (req, res) => {
   try {
     const pedId = req.params.pedidoId
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedId)
-    if (!pedido) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
+    if (!pedido) return res.status(404).json({ error: 'Nota de venta no encontrada' })
 
     const existente = db.prepare('SELECT id FROM ventas WHERE pedido_id = ?').get(pedId)
-    if (existente) return res.status(400).json({ error: 'La nota de pedido ya tiene una venta asociada' })
+    if (existente) return res.status(400).json({ error: 'La nota de venta ya tiene una venta asociada' })
 
     if (pedido.estado !== 'autorizado') {
       return res.status(400).json({
         codigo: 'PEDIDO_NO_AUTORIZADO',
-        error: 'La venta se genera al autorizar la nota de pedido. Valida la OC al proveedor y pide la autorización de gerencia.',
+        error: 'La venta se genera al autorizar la nota de venta. Valida la OC al proveedor y pide la autorización de gerencia.',
       })
     }
 

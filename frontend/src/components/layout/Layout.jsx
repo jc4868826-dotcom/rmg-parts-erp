@@ -30,7 +30,7 @@ const NAV_SECTIONS = [
     label: 'Ventas',
     items: [
       { to: '/cotizaciones', icon: FileText,        label: 'Cotizaciones',    badge: '2' },
-      { to: '/pedidos',      icon: ShoppingCart,    label: 'Notas de Pedido', badge: null },
+      { to: '/pedidos',      icon: ShoppingCart,    label: 'Notas de Venta' , badge: null },
       { to: '/ventas',       icon: TrendingUp,      label: 'Ventas',          badge: 'facturar' },
       { to: '/cuentas-corrientes', icon: Wallet,    label: 'Cuentas Corrientes', badge: null },
       { to: '/facturas',     icon: BookOpen,        label: 'Imprimir Nota de Venta', badge: null },

@@ -1,15 +1,15 @@
 /**
- * RMG Parts — Notas de Pedido (flujo v2, 2026-09-24)
+ * RMG Parts — Notas de Venta (flujo v2, 2026-09-24)
  *
- * La nota de pedido es el paso obligatorio entre la cotización aprobada y todo
+ * La nota de venta es el paso obligatorio entre la cotización aprobada y todo
  * lo que viene después:
  *
- *   cotización → (OC del cliente adjunta) → NOTA DE PEDIDO → OC al proveedor
+ *   cotización → (OC del cliente adjunta) → NOTA DE VENTA → OC al proveedor
  *   → OC validada → autorización → venta "por facturar"
  *
  * Compuertas que impone este módulo:
- *  1. No hay nota de pedido sin la OC del cliente adjunta (restrictivo).
- *  2. La OC al proveedor solo se emite desde la nota de pedido (ver ocController).
+ *  1. No hay nota de venta sin la OC del cliente adjunta (restrictivo).
+ *  2. La OC al proveedor solo se emite desde la nota de venta (ver ocController).
  *  3. Si no hay respaldo de costos del proveedor adjunto, los costos se
  *     arrastran desde lista_precios y el pedido queda marcado origen_costos='lista'.
  *  4. Validar la OC (el proveedor confirmó) y autorizar (gerencia aprueba el
@@ -101,18 +101,20 @@ const getAll = (req, res) => {
 const getOne = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ? OR numero = ?').get(req.params.id, req.params.id)
-    if (!p) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
     res.json(withDetalle(p))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 }
 
+// Numeración de la NOTA DE VENTA: NV-2026-001. (Los documentos antiguos con
+// prefijo PED- se conservan tal cual; solo cambia lo nuevo.)
 const siguienteNumero = () => {
   const anio = new Date().getFullYear()
-  const row = db.prepare("SELECT numero FROM pedidos WHERE numero LIKE ? ORDER BY numero DESC LIMIT 1").get(`PED-${anio}-%`)
+  const row = db.prepare("SELECT numero FROM pedidos WHERE numero LIKE ? ORDER BY numero DESC LIMIT 1").get(`NV-${anio}-%`)
   const ultimo = row ? parseInt(String(row.numero).replace(/\D+/g, '').slice(-3), 10) : 0
-  return `PED-${anio}-${String((Number.isFinite(ultimo) ? ultimo : 0) + 1).padStart(3, '0')}`
+  return `NV-${anio}-${String((Number.isFinite(ultimo) ? ultimo : 0) + 1).padStart(3, '0')}`
 }
 
 const create = (req, res) => {
@@ -150,8 +152,65 @@ const create = (req, res) => {
   }
 }
 
+
 /**
- * COMPUERTA 1 — nota de pedido desde la cotización.
+ * Vista previa de la NOTA DE VENTA antes de crearla: cabecera tomada de la
+ * cotización y líneas con el costo que corresponde (respaldo del proveedor si
+ * existe, si no precio de lista). No guarda nada — solo alimenta el formulario.
+ */
+const previewDesdeCotizacion = (req, res) => {
+  try {
+    const cotId = req.params.cotizacionId
+    const cot = db.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(cotId)
+    if (!cot) return res.status(404).json({ error: 'Cotización no encontrada' })
+
+    const existente = db.prepare('SELECT id, numero FROM pedidos WHERE cotizacion_id = ?').get(cotId)
+    const cotItems = db.prepare('SELECT * FROM cotizacion_items WHERE cotizacion_id = ?').all(cotId)
+
+    const respaldo = db.prepare(
+      "SELECT id FROM documentos_adjuntos WHERE entidad = 'cotizacion' AND entidad_id = ? AND categoria = 'respaldo_costos' ORDER BY created_at DESC"
+    ).get(cotId)
+
+    const items = cotItems.map(i => {
+      let costo = null
+      let origen = 'lista'
+      if (i.oc_item_id) {
+        const ocItem = db.prepare('SELECT precio_unitario FROM oc_items WHERE id = ?').get(i.oc_item_id)
+        if (ocItem) { costo = Number(ocItem.precio_unitario) || 0; origen = 'oc' }
+      }
+      if (costo === null && Number(i.costo_unitario) > 0) { costo = Number(i.costo_unitario); origen = 'cotizacion' }
+      if (costo === null) costo = costoDeLista(i.codigo)
+      return {
+        codigo_sku: i.codigo, descripcion: i.descripcion, cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario, descuento_pct: i.descuento_pct || 0,
+        subtotal: i.subtotal, costo_unitario: costo, origen_costo: origen,
+      }
+    })
+
+    const neto = items.reduce((a, i) => a + (Number(i.subtotal) || 0), 0) || Number(cot.neto) || 0
+    const iva = Math.round(neto * IVA)
+    const costoTotal = items.reduce((a, i) => a + (Number(i.costo_unitario) || 0) * (Number(i.cantidad) || 0), 0)
+
+    res.json({
+      cotizacion: { id: cot.id, numero: cot.numero, estado: cot.estado },
+      numero_sugerido: siguienteNumero(),
+      cliente: cot.cliente, cliente_id: cot.cliente_id,
+      condicion_pago: cot.condicion_pago || 'Contado',
+      plazo_entrega: cot.plazo_entrega || null,
+      direccion_entrega: cot.direccion_entrega || null,
+      origen_costos: respaldo ? 'respaldo' : 'lista',
+      items,
+      totales: { neto, iva, total: neto + iva, costo: costoTotal,
+                 margen: neto - costoTotal, margen_pct: neto ? (neto - costoTotal) / neto : null },
+      ya_existe: existente ? { id: existente.id, numero: existente.numero } : null,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+/**
+ * COMPUERTA 1 — nota de venta desde la cotización.
  * Exige la OC del cliente: o bien ya hay un adjunto con categoria='oc_cliente'
  * colgado de la cotización, o viene `oc_cliente_doc_id` en el body (el id que
  * devolvió la subida del archivo). Sin eso, 400 y no se crea nada.
@@ -163,7 +222,7 @@ const createFromCotizacion = (req, res) => {
     if (!cot) return res.status(404).json({ error: 'Cotización no encontrada' })
 
     const existing = db.prepare('SELECT id, numero FROM pedidos WHERE cotizacion_id = ?').get(cotId)
-    if (existing) return res.status(400).json({ error: `La cotización ya tiene la nota de pedido ${existing.numero}` })
+    if (existing) return res.status(400).json({ error: `La cotización ya tiene la nota de venta ${existing.numero}` })
 
     // OC del cliente — restrictivo
     let ocDoc = null
@@ -177,7 +236,7 @@ const createFromCotizacion = (req, res) => {
     }
     if (!ocDoc) {
       return res.status(400).json({
-        error: 'Falta la OC del cliente. Adjunta la orden de compra del cliente para poder crear la nota de pedido.',
+        error: 'Falta la OC del cliente. Adjunta la orden de compra del cliente para poder crear la nota de venta.',
         codigo: 'FALTA_OC_CLIENTE',
       })
     }
@@ -203,8 +262,13 @@ const createFromCotizacion = (req, res) => {
          vendedor_id,oc_cliente_doc_id,origen_costos,direccion_entrega)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(id, numero, cotId, cot.cliente_id || null, cot.cliente || null, 'pendiente',
-        neto, iva, neto + iva, cot.condicion_pago || 'Contado', req.body?.notas || null,
+        neto, iva, neto + iva,
+        req.body?.condicion_pago || cot.condicion_pago || 'Contado', req.body?.notas || null,
         req.user?.id || null, ocDoc.id, origen_costos, req.body?.direccion_entrega || null)
+      if (req.body?.fecha_entrega_programada) {
+        db.prepare('UPDATE pedidos SET fecha_entrega_programada = ? WHERE id = ?')
+          .run(req.body.fecha_entrega_programada, id)
+      }
 
       const ins = db.prepare(`
         INSERT INTO pedido_items
@@ -241,9 +305,9 @@ const createFromCotizacion = (req, res) => {
 const update = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
-    if (!p) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
     if (['autorizado', 'facturado'].includes(p.estado)) {
-      return res.status(400).json({ error: 'La nota de pedido ya está autorizada y no se puede editar' })
+      return res.status(400).json({ error: 'La nota de venta ya está autorizada y no se puede editar' })
     }
     const BLOQUEADOS = ['id', 'numero', 'items', 'estado', 'venta_id', 'autorizado_por', 'autorizado_at', 'oc_cliente_doc_id']
     const fields = Object.keys(req.body).filter(k => !BLOQUEADOS.includes(k))
@@ -260,7 +324,7 @@ const update = (req, res) => {
 const cambiarEstado = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
-    if (!p) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
     // Los saltos del flujo comercial tienen su propio endpoint (validar-oc,
     // enviar-autorizacion, autorizar). Acá solo se mueve el estado logístico.
     const LOGISTICOS = ['confirmado', 'en_preparacion', 'despachado', 'entregado', 'anulado']
@@ -279,10 +343,10 @@ const cambiarEstado = (req, res) => {
 const validarOC = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
-    if (!p) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
     const ocs = ocsDelPedido(p.id).filter(o => ESTADOS_OC_VIGENTES.includes(o.estado))
     if (!ocs.length) {
-      return res.status(400).json({ error: 'Emite primero la OC al proveedor desde esta nota de pedido', codigo: 'SIN_OC' })
+      return res.status(400).json({ error: 'Emite primero la OC al proveedor desde esta nota de venta', codigo: 'SIN_OC' })
     }
     db.prepare(`UPDATE pedidos SET estado = 'oc_validada', validado_por = ?, validado_at = datetime('now'),
       updated_at = datetime('now') WHERE id = ?`).run(req.user?.id || null, p.id)
@@ -296,7 +360,7 @@ const validarOC = (req, res) => {
 const enviarAutorizacion = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
-    if (!p) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
     if (p.estado !== 'oc_validada') {
       return res.status(400).json({ error: 'La OC al proveedor debe estar validada antes de pedir autorización', codigo: 'OC_NO_VALIDADA' })
     }
@@ -311,17 +375,17 @@ const enviarAutorizacion = (req, res) => {
 const autorizar = (req, res) => {
   try {
     if (!ROLES_AUTORIZAN.includes(req.user?.rol)) {
-      return res.status(403).json({ error: 'Solo gerencia puede autorizar una nota de pedido' })
+      return res.status(403).json({ error: 'Solo gerencia puede autorizar una nota de venta' })
     }
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
-    if (!p) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
-    if (p.venta_id) return res.status(400).json({ error: 'La nota de pedido ya generó su venta' })
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
+    if (p.venta_id) return res.status(400).json({ error: 'La nota de venta ya está autorizada y registrada' })
     if (!['oc_validada', 'en_autorizacion'].includes(p.estado)) {
       return res.status(400).json({ error: 'La OC al proveedor debe estar validada antes de autorizar', codigo: 'OC_NO_VALIDADA' })
     }
 
     const items = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(p.id)
-    if (!items.length) return res.status(400).json({ error: 'La nota de pedido no tiene ítems' })
+    if (!items.length) return res.status(400).json({ error: 'La nota de venta no tiene ítems' })
 
     const venta = crearVentaDesdePedido(p, items, req.user)
 
@@ -338,11 +402,11 @@ const autorizar = (req, res) => {
 const rechazar = (req, res) => {
   try {
     if (!ROLES_AUTORIZAN.includes(req.user?.rol)) {
-      return res.status(403).json({ error: 'Solo gerencia puede rechazar una nota de pedido' })
+      return res.status(403).json({ error: 'Solo gerencia puede rechazar una nota de venta' })
     }
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
-    if (!p) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
-    if (p.venta_id) return res.status(400).json({ error: 'La nota de pedido ya generó su venta' })
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
+    if (p.venta_id) return res.status(400).json({ error: 'La nota de venta ya está autorizada y registrada' })
     db.prepare("UPDATE pedidos SET estado = 'rechazado', motivo_rechazo = ?, updated_at = datetime('now') WHERE id = ?")
       .run(req.body?.motivo || 'Sin motivo indicado', p.id)
     res.json(withDetalle(db.prepare('SELECT * FROM pedidos WHERE id = ?').get(p.id)))
@@ -392,7 +456,7 @@ const createDesdeLanding = (req, res) => {
     const iva   = Math.round(neto * IVA)
     const total = neto + iva
 
-    const numero = siguienteNumero().replace('PED-', 'PED-L')
+    const numero = siguienteNumero().replace('NV-', 'NV-L')
     const id = uuidv4()
 
     db.prepare(`INSERT INTO pedidos
@@ -421,8 +485,8 @@ const createDesdeLanding = (req, res) => {
 const remove = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
-    if (!p) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
-    if (p.venta_id) return res.status(400).json({ error: 'No se puede eliminar: la nota de pedido ya generó su venta' })
+    if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
+    if (p.venta_id) return res.status(400).json({ error: 'No se puede eliminar: la nota de venta ya está registrada' })
     const ocs = ocsDelPedido(p.id)
     if (ocs.length) {
       return res.status(400).json({ error: `No se puede eliminar: tiene ${ocs.length} OC al proveedor (${ocs.map(o => o.numero).join(', ')})` })
@@ -436,7 +500,7 @@ const remove = (req, res) => {
 }
 
 module.exports = {
-  getAll, getOne, create, createFromCotizacion, update, cambiarEstado,
+  getAll, getOne, create, previewDesdeCotizacion, createFromCotizacion, update, cambiarEstado,
   validarOC, enviarAutorizacion, autorizar, rechazar,
   createDesdeLanding, remove,
 }

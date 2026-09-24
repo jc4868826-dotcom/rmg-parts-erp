@@ -9,7 +9,7 @@ const { tipoDeDocumento } = require('../middleware/documentos')
 
 const ENTIDADES = ['cotizacion', 'pedido', 'venta', 'orden_compra', 'oportunidad_chilecompra']
 // Flujo v2 (2026-09-24): categorías con significado en el flujo. 'oc_cliente' es
-// la compuerta para crear la nota de pedido; 'respaldo_costos' decide si los
+// la compuerta para crear la nota de venta; 'respaldo_costos' decide si los
 // costos vienen del proveedor o de la lista de precios.
 const CATEGORIAS = ['oc_cliente', 'respaldo_costos', 'comprobante_pago', 'factura', 'guia_despacho', 'otro']
 

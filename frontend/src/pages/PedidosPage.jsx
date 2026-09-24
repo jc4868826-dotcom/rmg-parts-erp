@@ -1,8 +1,8 @@
 /**
- * RMG Parts — Notas de Pedido (flujo v2, 2026-09-24)
+ * RMG Parts — Notas de Venta (flujo v2, 2026-09-24)
  *
- * La nota de pedido es el paso obligatorio del flujo comercial:
- *   cotización aprobada + OC del cliente → NOTA DE PEDIDO → OC al proveedor
+ * La nota de venta es el paso obligatorio del flujo comercial:
+ *   cotización aprobada + OC del cliente → NOTA DE VENTA → OC al proveedor
  *   → OC validada → autorización de gerencia → venta "por facturar"
  *
  * Se crea desde Cotizaciones (ahí se adjunta la OC del cliente, que es la
@@ -22,7 +22,7 @@ import DocumentosPanel from '@components/DocumentosPanel'
 
 // Estados comerciales (los mueve el flujo) y logísticos (los mueve el usuario).
 const ESTADO_STYLES = {
-  pendiente:       { label: 'Nota creada',      bg: 'rgba(90,143,168,0.12)',  color: 'rgba(90,143,168,0.95)' },
+  pendiente:       { label: 'Nota de venta creada',      bg: 'rgba(90,143,168,0.12)',  color: 'rgba(90,143,168,0.95)' },
   oc_emitida:      { label: 'OC emitida',       bg: 'rgba(244,162,60,0.12)',  color: 'var(--rmg-gold)' },
   oc_validada:     { label: 'OC validada',      bg: 'rgba(56,182,255,0.12)',  color: 'var(--rmg-blt)' },
   en_autorizacion: { label: 'En autorización',  bg: 'rgba(123,97,196,0.14)',  color: 'var(--rmg-purple)' },
@@ -136,19 +136,19 @@ export default function PedidosPage() {
 
   const rechazarMut = useMutation({
     mutationFn: ({ id, motivo }) => api.post(`/pedidos/${id}/rechazar`, { motivo }).then(r => r.data),
-    onSuccess: () => { refrescar(); setRechazoModal(null); setMotivo(''); toast.success('Nota de pedido rechazada') },
+    onSuccess: () => { refrescar(); setRechazoModal(null); setMotivo(''); toast.success('Nota de venta rechazada') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al rechazar'),
   })
 
   const editarMut = useMutation({
     mutationFn: ({ id, data }) => api.put(`/pedidos/${id}`, data).then(r => r.data),
-    onSuccess: () => { refrescar(); setEditando(null); toast.success('Nota de pedido actualizada') },
+    onSuccess: () => { refrescar(); setEditando(null); toast.success('Nota de venta actualizada') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar'),
   })
 
   const eliminarMut = useMutation({
     mutationFn: (id) => api.delete(`/pedidos/${id}`).then(r => r.data),
-    onSuccess: () => { refrescar(); toast.success('Nota de pedido eliminada') },
+    onSuccess: () => { refrescar(); toast.success('Nota de venta eliminada') },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar'),
   })
 
@@ -232,7 +232,7 @@ export default function PedidosPage() {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Notas de Pedido</h1>
+          <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Notas de Venta</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
             Cotización aprobada + OC del cliente → OC al proveedor → autorización → venta
           </p>
@@ -272,7 +272,7 @@ export default function PedidosPage() {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
-              {['', 'N° Pedido', 'Cliente', 'Estado', 'OC proveedor', 'Neto', 'Total c/IVA', 'Entrega', 'Acciones'].map((h, i) => (
+              {['', 'N° Nota', 'Cliente', 'Estado', 'OC proveedor', 'Neto', 'Total c/IVA', 'Entrega', 'Acciones'].map((h, i) => (
                 <th key={h + i} className={`px-4 py-3 text-xs uppercase tracking-wider font-semibold ${['Neto', 'Total c/IVA'].includes(h) ? 'text-right' : 'text-left'}`}
                   style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
@@ -346,7 +346,7 @@ export default function PedidosPage() {
                             style={{ color: 'var(--rmg-muted)' }} title="Editar">
                             <Pencil size={13}/>
                           </button>
-                          <button onClick={() => { if (confirm('¿Eliminar la nota de pedido?')) eliminarMut.mutate(p.id) }}
+                          <button onClick={() => { if (confirm('¿Eliminar la nota de venta?')) eliminarMut.mutate(p.id) }}
                             className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
                             style={{ color: 'var(--rmg-red)' }} title="Eliminar">
                             <Trash2 size={13}/>
@@ -358,7 +358,7 @@ export default function PedidosPage() {
                       <tr key={`${p.id}-items`} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         <td colSpan={9} className="px-8 py-3 space-y-3" style={{ background: 'rgba(56,182,255,0.02)' }}>
                           <PedidoDetalle pedidoId={p.id} />
-                          <DocumentosPanel entidad="pedido" entidadId={p.id} titulo="Documentos de la nota de pedido" />
+                          <DocumentosPanel entidad="pedido" entidadId={p.id} titulo="Documentos de la nota de venta" />
                         </td>
                       </tr>
                     )
@@ -370,7 +370,7 @@ export default function PedidosPage() {
         {!isLoading && pedidos.length === 0 && (
           <div className="py-16 text-center" style={{ color: 'var(--rmg-muted)' }}>
             <ShoppingCart size={32} className="mx-auto mb-3 opacity-30" />
-            <p>No hay notas de pedido en este estado</p>
+            <p>No hay notas de venta en este estado</p>
             <p className="text-xs mt-2">Se crean desde una cotización, adjuntando la OC del cliente.</p>
             <button onClick={() => navigate('/cotizaciones')} className="btn-secondary text-sm mt-3 flex items-center gap-2 mx-auto">
               <FileText size={13}/> Ir a cotizaciones
@@ -397,7 +397,7 @@ export default function PedidosPage() {
               style={{ background: 'rgba(56,182,255,0.06)', border: '1px solid rgba(56,182,255,0.2)' }}>
               <AlertTriangle size={13} style={{ color: 'var(--rmg-blue)', flexShrink: 0, marginTop: 1 }}/>
               <span style={{ color: 'var(--rmg-off)' }}>
-                Las líneas se copian de la nota de pedido con el costo
+                Las líneas se copian de la nota de venta con el costo
                 {ocModal.origen_costos === 'respaldo' ? ' del respaldo del proveedor' : ' de la lista de precios'}.
                 Los precios se ajustan después en la OC.
               </span>
@@ -473,7 +473,7 @@ export default function PedidosPage() {
           <div className="rmg-card p-6 w-full max-w-md animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="font-bold">Editar nota de pedido</h2>
+                <h2 className="font-bold">Editar nota de venta</h2>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>{editando.numero}</p>
               </div>
               <button onClick={() => setEditando(null)} style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
