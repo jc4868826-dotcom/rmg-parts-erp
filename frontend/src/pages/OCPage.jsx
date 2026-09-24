@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '@utils/api'
-import { formatCLP, formatFecha } from '@utils/format'
+import { formatCLP, formatFecha, formatCantidad } from '@utils/format'
 import {
   Plus, X, Search, ChevronLeft, Send, CheckCircle, XCircle, Truck,
   PackageCheck, FileText, Mail, ClipboardList, History, RotateCcw,
@@ -149,9 +149,9 @@ function SkuRow({ item, idx, onUpdate, onRemove, showRemove }) {
         />
       </td>
       <td className="px-3 py-2 w-32">
-        <input type="number" min="0" className="rmg-input text-xs text-right" value={item.precio_unitario} onChange={e => onUpdate(idx, 'precio_unitario', e.target.value)} />
+        <input type="number" min="0" className="rmg-input text-xs text-right precio" value={item.precio_unitario} onChange={e => onUpdate(idx, 'precio_unitario', e.target.value)} />
       </td>
-      <td className="px-3 py-2 font-bold text-right text-sm" style={{ color: 'var(--rmg-off)' }}>{formatCLP(sub)}</td>
+      <td className="px-3 py-2 font-bold text-right num-celda text-sm" style={{ color: 'var(--rmg-off)' }}>{formatCLP(sub)}</td>
       <td className="px-3 py-2">
         {showRemove && <button type="button" onClick={() => onRemove(idx)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><X size={13}/></button>}
       </td>
@@ -409,7 +409,7 @@ export default function OCPage() {
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.015)' }}>
                 {['N° OC','Proveedor','Fecha creación','Fecha requerida','Estado','Neto','Total c/IVA','Ítems',''].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                  <th key={h} className={`${['Neto','Total c/IVA','Ítems'].includes(h) ? 'text-right num-celda' : 'text-left'} px-4 py-3 text-xs uppercase tracking-wider font-semibold`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -437,9 +437,9 @@ export default function OCPage() {
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(oc.fecha_emision || oc.created_at)}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: oc.fecha_requerida ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{oc.fecha_requerida ? formatFecha(oc.fecha_requerida) : '—'}</td>
                   <td className="px-4 py-3"><EstadoBadge estado={oc.estado} /></td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(oc.neto)}</td>
-                  <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(oc.total)}</td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{(oc.items || []).length} líneas</td>
+                  <td className="px-4 py-3 text-xs text-right num-celda" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(oc.neto)}</td>
+                  <td className="px-4 py-3 font-bold text-right num-celda" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(oc.total)}</td>
+                  <td className="px-4 py-3 text-xs text-right num-celda" style={{ color: 'var(--rmg-muted)' }}>{(oc.items || []).length} líneas</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5">
                       <button onClick={e => { e.stopPropagation(); abrirDetalle(oc) }} className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(56,182,255,0.1)', color: 'var(--rmg-blue)' }}>Ver →</button>
@@ -515,7 +515,7 @@ export default function OCPage() {
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                   {['Buscar','SKU','Descripción','Cant.','P. Unit. Neto','Subtotal',''].map(h => (
-                    <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                    <th key={h} className={`${['P. Unit. Neto','Subtotal'].includes(h) ? 'text-right num-celda' : 'text-left'} px-3 py-2 font-semibold uppercase tracking-wider`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -746,7 +746,7 @@ export default function OCPage() {
               <thead>
                 <tr style={{ background: 'rgba(15, 35, 60,0.02)', borderBottom: '1px solid rgba(56,182,255,0.08)' }}>
                   {['SKU','Descripción','Solicitado','Recibido','P. Unit. Neto','Subtotal'].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                    <th key={h} className={`${['Solicitado','Recibido','P. Unit. Neto','Subtotal'].includes(h) ? 'text-right num-celda' : 'text-left'} px-4 py-2.5 text-xs font-semibold uppercase tracking-wider`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -758,13 +758,13 @@ export default function OCPage() {
                     <tr key={item.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.03)' }}>
                       <td className="px-4 py-2.5 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{item.codigo}</td>
                       <td className="px-4 py-2.5" style={{ color: 'var(--rmg-off)' }}>{item.descripcion}</td>
-                      <td className="px-4 py-2.5 text-center">{item.cantidad}</td>
-                      <td className="px-4 py-2.5 text-center font-semibold" style={{ color: completada ? 'var(--rmg-teal)' : recibido > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>
-                        {recibido} {recibido > 0 && !completada ? `/ ${item.cantidad}` : ''}
+                      <td className="px-4 py-2.5 text-right num-celda">{formatCantidad(item.cantidad)}</td>
+                      <td className="px-4 py-2.5 text-right num-celda font-semibold" style={{ color: completada ? 'var(--rmg-teal)' : recibido > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>
+                        {formatCantidad(recibido)} {recibido > 0 && !completada ? `/ ${formatCantidad(item.cantidad)}` : ''}
                         {completada && <CheckCircle size={13} className="inline ml-1" style={{ color: 'var(--rmg-teal)' }} />}
                       </td>
-                      <td className="px-4 py-2.5 text-right" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(item.precio_unitario)}</td>
-                      <td className="px-4 py-2.5 text-right font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(item.subtotal)}</td>
+                      <td className="px-4 py-2.5 text-right num-celda" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(item.precio_unitario)}</td>
+                      <td className="px-4 py-2.5 text-right num-celda font-bold" style={{ color: 'var(--rmg-off)' }}>{formatCLP(item.subtotal)}</td>
                     </tr>
                   )
                 })}
@@ -816,7 +816,7 @@ export default function OCPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Monto total *</label>
-                  <input type="number" min="0" className="rmg-input text-sm" value={facturaForm.monto_total}
+                  <input type="number" min="0" className="rmg-input text-sm precio" value={facturaForm.monto_total}
                     onChange={e => setFacturaForm(f => ({ ...f, monto_total: e.target.value }))} />
                 </div>
                 <div>
@@ -873,7 +873,7 @@ export default function OCPage() {
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                     {['SKU','Descripción','Solicitado','Ya recibido','Pendiente','A recibir ahora'].map(h => (
-                      <th key={h} className="text-left px-3 py-2 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                      <th key={h} className={`${['Solicitado','Ya recibido','Pendiente'].includes(h) ? 'text-right num-celda' : 'text-left'} px-3 py-2 text-xs font-semibold uppercase tracking-wider`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -884,9 +884,9 @@ export default function OCPage() {
                       <tr key={linea.linea_oc_id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                         <td className="px-3 py-2 font-mono text-xs" style={{ color: 'var(--rmg-blt)' }}>{linea.codigo}</td>
                         <td className="px-3 py-2 text-xs" style={{ color: 'var(--rmg-off)' }}>{linea.descripcion}</td>
-                        <td className="px-3 py-2 text-center text-xs">{linea.cantidad_solicitada}</td>
-                        <td className="px-3 py-2 text-center text-xs" style={{ color: 'var(--rmg-teal)' }}>{linea.ya_recibido}</td>
-                        <td className="px-3 py-2 text-center text-xs font-bold" style={{ color: pendiente > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{pendiente}</td>
+                        <td className="px-3 py-2 text-right num-celda text-xs">{formatCantidad(linea.cantidad_solicitada)}</td>
+                        <td className="px-3 py-2 text-right num-celda text-xs" style={{ color: 'var(--rmg-teal)' }}>{formatCantidad(linea.ya_recibido)}</td>
+                        <td className="px-3 py-2 text-right num-celda text-xs font-bold" style={{ color: pendiente > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{formatCantidad(pendiente)}</td>
                         <td className="px-3 py-2 w-28">
                           <CantidadPresentacion
                             unidadesPorPack={linea.unidades_por_pack}
@@ -942,7 +942,7 @@ export default function OCPage() {
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.02)' }}>
                     {['SKU','Descripción','Cant. recibida','De'].map(h => (
-                      <th key={h} className="text-left px-3 py-1.5 font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                      <th key={h} className={`${h === 'Cant. recibida' ? 'text-right num-celda' : 'text-left'} px-3 py-1.5 font-semibold uppercase tracking-wider`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -951,8 +951,8 @@ export default function OCPage() {
                     <tr key={l.id} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.03)' }}>
                       <td className="px-3 py-2 font-mono" style={{ color: 'var(--rmg-blt)' }}>{l.codigo}</td>
                       <td className="px-3 py-2" style={{ color: 'var(--rmg-off)' }}>{l.descripcion}</td>
-                      <td className="px-3 py-2 font-bold" style={{ color: 'var(--rmg-teal)' }}>{l.cantidad_recibida}</td>
-                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>/ {l.cantidad} solicitadas</td>
+                      <td className="px-3 py-2 font-bold text-right num-celda" style={{ color: 'var(--rmg-teal)' }}>{formatCantidad(l.cantidad_recibida)}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--rmg-muted)' }}>/ {formatCantidad(l.cantidad)} solicitadas</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1139,7 +1139,7 @@ export default function OCPage() {
                         <div key={i} className="text-xs flex justify-between" style={{ color: 'var(--rmg-off)' }}>
                           <span className="font-mono" style={{ color: 'var(--rmg-blt)' }}>{m.codigo}</span>
                           <span className="truncate mx-2" style={{ color: 'var(--rmg-muted)' }}>{m.descripcion}</span>
-                          <span className="font-bold flex-shrink-0" style={{ color: 'var(--rmg-red)' }}>−{m.cantidad} unid.</span>
+                          <span className="font-bold flex-shrink-0" style={{ color: 'var(--rmg-red)' }}>−{formatCantidad(m.cantidad)} unid.</span>
                         </div>
                       ))}
                     </div>

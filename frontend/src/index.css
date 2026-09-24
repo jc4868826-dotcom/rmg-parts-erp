@@ -132,3 +132,39 @@ body {
   font-family: 'Inter Tight', 'Inter', monospace;
   font-weight: 700;
 }
+
+/* ── Campos numéricos: cantidades y precios ───────────────────
+   2026-09-24 — Los inputs de cantidad y precio se veían apretados y las
+   flechas del spinner del navegador tapaban el valor (y aparecían justo
+   donde van las flechas de orden/filtro de las tablas). Se quitan los
+   spinners en todo el sistema, se alinea a la derecha con cifras de ancho
+   fijo (tabular-nums) y se fija un ancho mínimo legible.
+   `.num-celda` hace lo mismo para celdas de solo lectura.                */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+  min-width: 92px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* Precios: más anchos, caben 9 dígitos + separadores sin cortarse. */
+input[type="number"].precio,
+input[type="number"][data-num="precio"],
+.input-precio { min-width: 128px; }
+
+/* Celdas numéricas de tabla (solo lectura) */
+.num-celda {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+}
+.precio-clp { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; white-space: nowrap; }
+
+/* Las tablas con montos no deben comprimir esas columnas */
+table td.num-celda, table th.num-celda { width: 1%; }

@@ -3032,6 +3032,72 @@ function runMigrations() {
       console.error('❌ Migración ventas_facturacion_backfill_v1 falló:', e.message)
     }
   }
+
+  // ── Flujo v2 (2026-09-24): la nota de pedido es el paso obligatorio entre la
+  // cotización aprobada y todo lo que viene después. Cotización → (OC del cliente
+  // adjunta) → nota de pedido → OC al proveedor → validación → autorización → venta.
+  // La cotización deja de generar OC y deja de convertirse directo en venta.
+  const mFlujoV2 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('flujo_v2_pedido_obligatorio_v1')
+  if (!mFlujoV2) {
+    try {
+      const raw = db._db
+
+      // 1) pedidos: estados nuevos. El CHECK no se puede alterar en SQLite → se
+      //    reconstruye la tabla con su mismo SQL (conserva columnas agregadas después).
+      const sqlPedidos = raw.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='pedidos'")[0]?.values[0][0] || ''
+      if (sqlPedidos && !sqlPedidos.includes("'oc_validada'")) {
+        const nuevoSql = sqlPedidos
+          .replace(/'anulado'\s*\)/, "'anulado','oc_emitida','oc_validada','en_autorizacion','autorizado','rechazado','facturado')")
+          .replace(/^CREATE TABLE\s+["'`]?pedidos["'`]?/i, 'CREATE TABLE pedidos_flujo_v2')
+        if (!nuevoSql.includes("'oc_validada'")) throw new Error('No se encontró el CHECK de estado en pedidos')
+        const cols = raw.exec('PRAGMA table_info(pedidos)')[0].values.map(c => `"${c[1]}"`).join(', ')
+        raw.run('PRAGMA foreign_keys = OFF')
+        try {
+          raw.run(nuevoSql)
+          raw.run(`INSERT INTO pedidos_flujo_v2 (${cols}) SELECT ${cols} FROM pedidos`)
+          raw.run('DROP TABLE pedidos')
+          raw.run('ALTER TABLE pedidos_flujo_v2 RENAME TO pedidos')
+        } finally {
+          raw.run('PRAGMA foreign_keys = ON')
+        }
+      }
+
+      // 2) columnas de trazabilidad del flujo
+      const addCols = (tabla, defs) => {
+        const existentes = raw.exec(`PRAGMA table_info(${tabla})`)[0].values.map(c => c[1])
+        for (const [col, tipo] of defs) {
+          if (!existentes.includes(col)) raw.run(`ALTER TABLE ${tabla} ADD COLUMN ${col} ${tipo}`)
+        }
+      }
+      addCols('pedidos', [
+        ['oc_cliente_doc_id', 'TEXT'],   // adjunto obligatorio: OC del cliente
+        ['origen_costos', 'TEXT'],       // 'respaldo' (cotización del proveedor) | 'lista'
+        ['validado_por', 'TEXT'], ['validado_at', 'TEXT'],
+        ['autorizado_por', 'TEXT'], ['autorizado_at', 'TEXT'],
+        ['motivo_rechazo', 'TEXT'],
+        ['venta_id', 'TEXT'],
+      ])
+      addCols('pedido_items', [
+        ['costo_unitario', 'REAL'],
+        ['oc_item_id', 'TEXT'],
+        ['cotizacion_item_id', 'TEXT'],
+      ])
+      addCols('ordenes_compra', [['pedido_id', 'TEXT']])
+      // categoría del adjunto: distingue la OC del cliente y el respaldo de costos
+      // del resto de archivos sueltos colgados del mismo documento.
+      addCols('documentos_adjuntos', [['categoria', 'TEXT']])
+      addCols('ventas', [['pedido_numero', 'TEXT']])
+
+      try { raw.run('CREATE INDEX IF NOT EXISTS idx_oc_pedido ON ordenes_compra(pedido_id)') } catch {}
+      try { raw.run('CREATE INDEX IF NOT EXISTS idx_pedidos_cotizacion ON pedidos(cotizacion_id)') } catch {}
+
+      raw.run("INSERT INTO _migrations (id) VALUES ('flujo_v2_pedido_obligatorio_v1')")
+      db._save()
+      console.log('✅ Migración flujo_v2_pedido_obligatorio_v1 — nota de pedido obligatoria entre cotización y OC/venta')
+    } catch (e) {
+      console.error('❌ Migración flujo_v2_pedido_obligatorio_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

@@ -193,7 +193,49 @@ const create = (req, res) => {
   }
 }
 
+/**
+ * Flujo v2 (2026-09-24) — la venta nace de la NOTA DE PEDIDO autorizada, no de
+ * la cotización. La llama pedidosController.autorizar dentro de su transacción
+ * lógica; devuelve la venta ya creada en estado_facturacion 'por_facturar'.
+ */
+function crearVentaDesdePedido(pedido, pedidoItems, user) {
+  const items = pedidoItems.map(i => ({
+    sku: i.codigo_sku, descripcion: i.descripcion, cantidad: i.cantidad,
+    precio_unitario: i.precio_unitario,
+    costo_unitario: i.costo_unitario != null ? i.costo_unitario : (getLp(i.codigo_sku)?.costo || 0),
+    descuento_pct: i.descuento_pct || 0,
+  }))
+  const venta = _insertVenta({
+    cliente_id: pedido.cliente_id, cliente_nombre: pedido.cliente,
+    cotizacion_id: pedido.cotizacion_id || null, pedido_id: pedido.id,
+    forma_pago: pedido.condicion_pago, notas: pedido.notas,
+    direccion_entrega: pedido.direccion_entrega,
+    vendedor_id: pedido.vendedor_id || user?.id, items,
+  })
+  db.prepare("UPDATE ventas SET estado_facturacion = 'por_facturar', pedido_numero = ? WHERE id = ?")
+    .run(pedido.numero, venta.id)
+  return { ...venta, estado_facturacion: 'por_facturar', pedido_numero: pedido.numero }
+}
+
+// Flujo v2: la cotización ya no se convierte directo en venta. Queda la ruta
+// para no romper clientes antiguos, pero devuelve el camino correcto.
 const createFromCotizacion = (req, res) => {
+  try {
+    const cotId = req.params.cotizacionId
+    const pedido = db.prepare('SELECT id, numero, estado FROM pedidos WHERE cotizacion_id = ?').get(cotId)
+    return res.status(400).json({
+      codigo: 'REQUIERE_NOTA_PEDIDO',
+      error: pedido
+        ? `Esta cotización ya tiene la nota de pedido ${pedido.numero}. La venta se genera al autorizarla.`
+        : 'La cotización ya no se convierte directo en venta. Crea la nota de pedido (requiere la OC del cliente adjunta) y autorízala.',
+      pedido_id: pedido?.id || null,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+const createFromCotizacionLegacy = (req, res) => {
   try {
     const cotId = req.params.cotizacionId
     const cot = db.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(cotId)
@@ -284,32 +326,28 @@ const recalcularCostoOC = (req, res) => {
   }
 }
 
+// Flujo v2: la venta la crea la autorización de la nota de pedido
+// (pedidosController.autorizar → crearVentaDesdePedido). Esta ruta queda solo
+// como recuperación: sirve si el pedido ya está autorizado pero quedó sin venta.
 const createFromPedido = (req, res) => {
   try {
     const pedId = req.params.pedidoId
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedId)
-    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' })
+    if (!pedido) return res.status(404).json({ error: 'Nota de pedido no encontrada' })
 
     const existente = db.prepare('SELECT id FROM ventas WHERE pedido_id = ?').get(pedId)
-    if (existente) return res.status(400).json({ error: 'El pedido ya tiene una venta asociada' })
+    if (existente) return res.status(400).json({ error: 'La nota de pedido ya tiene una venta asociada' })
 
-    const items = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(pedId).map(i => {
-      const codigo = i.codigo_sku
-      const lp = getLp(codigo)
-      return {
-        sku: codigo, descripcion: i.descripcion, cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario, costo_unitario: lp ? lp.costo : 0,
-        descuento_pct: i.descuento_pct || 0,
-      }
-    })
+    if (pedido.estado !== 'autorizado') {
+      return res.status(400).json({
+        codigo: 'PEDIDO_NO_AUTORIZADO',
+        error: 'La venta se genera al autorizar la nota de pedido. Valida la OC al proveedor y pide la autorización de gerencia.',
+      })
+    }
 
-    const venta = _insertVenta({
-      cliente_id: pedido.cliente_id, cliente_nombre: pedido.cliente,
-      cotizacion_id: pedido.cotizacion_id, pedido_id: pedId,
-      forma_pago: pedido.condicion_pago, direccion_entrega: pedido.direccion_entrega,
-      notas: req.body?.notas, vendedor_id: req.user?.id, items,
-    })
-
+    const items = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(pedId)
+    const venta = crearVentaDesdePedido(pedido, items, req.user)
+    db.prepare('UPDATE pedidos SET venta_id = ? WHERE id = ?').run(String(venta.id), pedId)
     res.status(201).json(venta)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -567,6 +605,7 @@ const remove = (req, res) => {
 
 module.exports = { facturar,
   ESTADOS_LOGISTICOS,
+  crearVentaDesdePedido, createFromCotizacionLegacy,
   getAll, getOne, create, createFromCotizacion, createFromPedido,
   update, cambiarEstadoLogistico, registrarPago, subirComprobantePago, validarPago, remove,
   recalcularCostoOC,

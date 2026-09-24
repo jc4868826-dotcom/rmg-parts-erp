@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
 import { formatCLP, formatFecha, totalConIVA, netoDesdeTotal } from '@utils/format'
-import { DollarSign, AlertTriangle, Check, Clock, X, Paperclip, ShieldCheck, Upload } from 'lucide-react'
+import { DollarSign, AlertTriangle, Check, Clock, X, Paperclip, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const SEG_COLOR = { taller: 'var(--rmg-blt)', flota: 'var(--rmg-teal)', concesionario: 'var(--rmg-purple)', construccion: 'var(--rmg-gold)' }
@@ -20,7 +20,6 @@ const ESTADO_STYLES = {
 const TIPO_VENTA_STYLES = {
   validacion: { label: 'En validación de pago', color: 'var(--rmg-blue)', bg: 'rgba(56,182,255,0.12)' },
   credito:    { label: 'Venta a crédito',       color: 'var(--rmg-purple)', bg: 'rgba(130,90,224,0.12)' },
-  facturada:  { label: 'Facturada · por cobrar', color: 'var(--rmg-gold)',  bg: 'rgba(244,162,60,0.12)' },
 }
 
 export default function CxCPage() {
@@ -72,25 +71,6 @@ export default function CxCPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al registrar el pago'),
   })
 
-  // Datos de pago (comprobante) → la venta pasa a "en validación de pago" y llega al gerente.
-  const fileInputRef = useRef(null)
-  const [subiendoParaId, setSubiendoParaId] = useState(null)
-  const comprobanteMut = useMutation({
-    mutationFn: ({ id, file }) => {
-      const fd = new FormData()
-      fd.append('archivo', file)
-      return api.post(`/ventas/${id}/comprobante`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data)
-    },
-    onSuccess: () => { invalidateVentas(); toast.success('Comprobante subido — enviado a validación del gerente') },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al subir comprobante'),
-  })
-  const abrirSelectorComprobante = (id) => { setSubiendoParaId(id); fileInputRef.current?.click() }
-  const handleComprobante = (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (file && subiendoParaId) comprobanteMut.mutate({ id: subiendoParaId, file })
-  }
-
   const handleRechazar = (id) => {
     const motivo = window.prompt('Motivo del rechazo (ej: el depósito no aparece en la cuenta corriente):')
     if (motivo === null) return
@@ -120,7 +100,6 @@ export default function CxCPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <input ref={fileInputRef} type="file" accept="application/pdf,image/*" hidden onChange={handleComprobante} />
 
       <div>
         <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Cuentas por Cobrar</h1>
@@ -138,7 +117,7 @@ export default function CxCPage() {
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                 {['Doc.', 'Cliente', 'Tipo', 'Neto', 'Total c/IVA', 'Fecha', 'Vencimiento', 'Comprobante', ''].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                  <th key={h} className={`${['Neto', 'Total c/IVA'].includes(h) ? 'text-right num-celda' : 'text-left'} px-4 py-3 text-xs uppercase tracking-wider font-semibold`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -156,10 +135,7 @@ export default function CxCPage() {
                     return (
                       <tr key={v.id}
                         style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)', background: i % 2 ? 'transparent' : 'rgba(15, 35, 60,0.01)' }}>
-                        <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>
-                          {v.numero_documento || `#${v.id}`}
-                          {v.numero_factura && <div className="text-[10px] font-normal" style={{ color: 'var(--rmg-muted)' }}>Factura N° {v.numero_factura}</div>}
-                        </td>
+                        <td className="px-4 py-3 font-mono text-xs font-bold" style={{ color: 'var(--rmg-blt)' }}>{v.numero_documento || `#${v.id}`}</td>
                         <td className="px-4 py-3 font-medium" style={{ color: 'var(--rmg-off)' }}>{v.cliente_nombre || '—'}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: tipoStyle.bg, color: tipoStyle.color }}>
@@ -171,8 +147,8 @@ export default function CxCPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.total)}</td>
-                        <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(v.total))}</td>
+                        <td className="px-4 py-3 text-xs text-right num-celda" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.total)}</td>
+                        <td className="px-4 py-3 font-bold precio-clp text-right num-celda" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(v.total))}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(v.fecha)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: v.dias_vencida > 0 ? 'var(--rmg-red)' : 'var(--rmg-muted)' }}>
                           {v.fecha_vencimiento ? `${formatFecha(v.fecha_vencimiento)}${v.dias_vencida > 0 ? ` (+${v.dias_vencida}d)` : ''}` : '—'}
@@ -204,23 +180,11 @@ export default function CxCPage() {
                               <span className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Esperando gerente</span>
                             )
                           ) : (
-                            <div className="flex gap-1">
-                              {/* Pago directo: solo gerente (2026-09-22). El resto ingresa el
-                                  comprobante y la venta pasa a validación del gerente. */}
-                              {esGerente && (
-                                <button onClick={() => { if (confirm('¿Marcar esta venta como pagada?')) cobrarCreditoMut.mutate(v.id) }} disabled={cobrarCreditoMut.isPending}
-                                  className="text-xs px-2 py-1 rounded-lg font-medium transition-all"
-                                  style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
-                                  Marcar cobrada
-                                </button>
-                              )}
-                              <button onClick={() => abrirSelectorComprobante(v.id)} disabled={comprobanteMut.isPending}
-                                className="text-xs px-2 py-1 rounded-lg font-medium transition-all flex items-center gap-1 disabled:opacity-50"
-                                style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}
-                                title="Adjuntar comprobante de pago — pasa a validación del gerente">
-                                <Upload size={12}/> Comprobante
-                              </button>
-                            </div>
+                            <button onClick={() => cobrarCreditoMut.mutate(v.id)} disabled={cobrarCreditoMut.isPending}
+                              className="text-xs px-2 py-1 rounded-lg font-medium transition-all"
+                              style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}>
+                              Marcar cobrada
+                            </button>
                           )}
                         </td>
                       </tr>
@@ -307,7 +271,7 @@ export default function CxCPage() {
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
               {['N° Factura','Cliente','Segmento','Neto','Monto c/IVA','Emisión','Vencimiento','Días','Estado',''].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                <th key={h} className={`${['Neto','Monto c/IVA','Días'].includes(h) ? 'text-right num-celda' : 'text-left'} px-4 py-3 text-xs uppercase tracking-wider font-semibold`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -343,11 +307,11 @@ export default function CxCPage() {
                           {SEG_NAME[f.segmento] || f.segmento}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(netoDesdeTotal(f.monto))}</td>
-                      <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(f.monto)}</td>
+                      <td className="px-4 py-3 text-xs text-right num-celda" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(netoDesdeTotal(f.monto))}</td>
+                      <td className="px-4 py-3 font-bold precio-clp text-right num-celda" style={{ color: 'var(--rmg-off)' }}>{formatCLP(f.monto)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(f.fecha_emision)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(f.fecha_vencimiento)}</td>
-                      <td className="px-4 py-3 text-xs font-bold"
+                      <td className="px-4 py-3 text-xs font-bold text-right num-celda"
                         style={{ color: f.dias_vencida > 30 ? 'var(--rmg-red)' : f.dias_vencida > 0 ? 'var(--rmg-gold)' : 'var(--rmg-teal)' }}>
                         {f.dias_vencida > 0 ? `+${f.dias_vencida}d` : `${Math.abs(f.dias_vencida)}d`}
                       </td>

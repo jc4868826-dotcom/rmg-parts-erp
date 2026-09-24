@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
-import { formatCLP, formatFecha, calcularIVA, totalConIVA } from '@utils/format'
+import { formatCLP, formatFecha, calcularIVA, totalConIVA, formatCantidad } from '@utils/format'
 import { Plus, X, Pencil, Trash2, ShoppingCart, Paperclip, FileText, ClipboardList, DollarSign, CreditCard, User, Upload, Check, ShieldAlert, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -313,7 +313,7 @@ export default function VentasPage() {
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                       {['Buscar producto', 'SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Costo', 'Desc %', 'Subtotal', ''].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                        <th key={h} className={`${h === 'Subtotal' ? 'text-right num-celda' : ['P.Unit.', 'Costo'].includes(h) ? 'text-right' : 'text-left'} px-3 py-2 font-semibold uppercase tracking-wider whitespace-nowrap`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -333,10 +333,10 @@ export default function VentasPage() {
                               onChange={v => updateItem(i, 'cantidad', v)}
                             />
                           </td>
-                          <td className="px-3 py-2 w-36"><input type="number" min="0" step="any" className="rmg-input text-xs text-right" value={item.precio_unitario} onChange={e => updateItem(i, 'precio_unitario', e.target.value)} /></td>
-                          <td className="px-3 py-2 w-36"><input type="number" min="0" step="any" className="rmg-input text-xs text-right" value={item.costo_unitario} onChange={e => updateItem(i, 'costo_unitario', e.target.value)} /></td>
+                          <td className="px-3 py-2 w-36"><input type="number" min="0" step="any" className="rmg-input precio text-xs text-right" value={item.precio_unitario} onChange={e => updateItem(i, 'precio_unitario', e.target.value)} /></td>
+                          <td className="px-3 py-2 w-36"><input type="number" min="0" step="any" className="rmg-input precio text-xs text-right" value={item.costo_unitario} onChange={e => updateItem(i, 'costo_unitario', e.target.value)} /></td>
                           <td className="px-3 py-2 w-20"><input type="number" min="0" max="100" step="any" className="rmg-input text-xs text-center" value={item.descuento_pct} onChange={e => updateItem(i, 'descuento_pct', e.target.value)} /></td>
-                          <td className="px-3 py-2 font-bold text-right whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{formatCLP(sub)}</td>
+                          <td className="px-3 py-2 font-bold text-right num-celda whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{formatCLP(sub)}</td>
                           <td className="px-3 py-2">
                             {form.items.length > 1 && <button type="button" onClick={() => removeItem(i)} className="p-1 rounded hover:bg-red-500/10" style={{ color: 'var(--rmg-red)' }}><X size={13}/></button>}
                           </td>
@@ -577,7 +577,7 @@ export default function VentasPage() {
                       <thead>
                         <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)' }}>
                           {['SKU', 'Descripción', 'Cant.', 'P.Unit.', 'Desc %', 'Subtotal'].map(h => (
-                            <th key={h} className="text-left px-2 py-2 font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                            <th key={h} className={`${['Cant.', 'P.Unit.', 'Desc %', 'Subtotal'].includes(h) ? 'text-right num-celda' : 'text-left'} px-2 py-2 font-semibold uppercase tracking-wider whitespace-nowrap`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -586,10 +586,10 @@ export default function VentasPage() {
                           <tr key={it.id || idx} style={{ borderBottom: '1px solid rgba(15, 35, 60,0.04)' }}>
                             <td className="px-2 py-2 font-mono" style={{ color: 'var(--rmg-blt)' }}>{it.sku}</td>
                             <td className="px-2 py-2" style={{ color: 'var(--rmg-off)' }}>{it.descripcion}</td>
-                            <td className="px-2 py-2 text-right" style={{ color: 'var(--rmg-muted)' }}>{it.cantidad}</td>
-                            <td className="px-2 py-2 text-right whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(it.precio_unitario)}</td>
-                            <td className="px-2 py-2 text-right" style={{ color: it.descuento_pct > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{it.descuento_pct > 0 ? `${it.descuento_pct}%` : '—'}</td>
-                            <td className="px-2 py-2 text-right font-bold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{formatCLP(it.subtotal)}</td>
+                            <td className="px-2 py-2 text-right num-celda" style={{ color: 'var(--rmg-muted)' }}>{formatCantidad(it.cantidad)}</td>
+                            <td className="px-2 py-2 text-right num-celda whitespace-nowrap" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(it.precio_unitario)}</td>
+                            <td className="px-2 py-2 text-right num-celda" style={{ color: it.descuento_pct > 0 ? 'var(--rmg-gold)' : 'var(--rmg-muted)' }}>{it.descuento_pct > 0 ? `${it.descuento_pct}%` : '—'}</td>
+                            <td className="px-2 py-2 text-right num-celda font-bold whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>{formatCLP(it.subtotal)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -647,7 +647,7 @@ export default function VentasPage() {
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.08)', background: 'rgba(15, 35, 60,0.015)' }}>
                 {['Fecha y hora', 'Cliente', 'Doc.', 'Emitido por', 'Neto', 'c/IVA', 'Costo', 'Estado', 'Logística', 'Forma Pago', 'Acciones'].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                  <th key={h} className={`${['Neto', 'c/IVA', 'Costo'].includes(h) ? 'text-right num-celda' : 'text-left'} px-4 py-3 text-xs uppercase tracking-wider font-semibold`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -685,9 +685,9 @@ export default function VentasPage() {
                         </td>
                         <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--rmg-muted)' }}>{v.numero_documento || '—'}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{v.vendedor_nombre || '—'}</td>
-                        <td className="px-4 py-3 font-bold" style={{ color: 'var(--rmg-blt)' }}>{formatCLP(v.total)}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(v.total))}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.costo_total)}</td>
+                        <td className="px-4 py-3 font-bold text-right num-celda" style={{ color: 'var(--rmg-blt)' }}>{formatCLP(v.total)}</td>
+                        <td className="px-4 py-3 text-xs text-right num-celda" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(v.total))}</td>
+                        <td className="px-4 py-3 text-xs text-right num-celda" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(v.costo_total)}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: est.bg, color: est.color }}>{ESTADO_LABEL[v.estado] || v.estado}</span>
                           {v.estado_facturacion === 'por_facturar' && (
@@ -753,9 +753,9 @@ export default function VentasPage() {
               <tfoot>
                 <tr style={{ background: 'rgba(15, 35, 60,0.03)', borderTop: '1px solid rgba(56,182,255,0.1)' }}>
                   <td colSpan={4} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Total mes</td>
-                  <td className="px-4 py-3 font-black text-base" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(totalMes)}</td>
-                  <td className="px-4 py-3 font-bold text-sm" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(totalMes))}</td>
-                  <td className="px-4 py-3 font-bold text-sm" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(costoMes)}</td>
+                  <td className="px-4 py-3 font-black text-base text-right num-celda" style={{ color: 'var(--rmg-blt)', fontFamily: 'Inter Tight, sans-serif' }}>{formatCLP(totalMes)}</td>
+                  <td className="px-4 py-3 font-bold text-sm text-right num-celda" style={{ color: 'var(--rmg-off)' }}>{formatCLP(totalConIVA(totalMes))}</td>
+                  <td className="px-4 py-3 font-bold text-sm text-right num-celda" style={{ color: 'var(--rmg-gold)' }}>{formatCLP(costoMes)}</td>
                   <td colSpan={4} />
                 </tr>
               </tfoot>

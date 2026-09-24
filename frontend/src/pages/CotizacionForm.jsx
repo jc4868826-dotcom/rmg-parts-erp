@@ -147,18 +147,14 @@ export default function CotizacionForm() {
     }
   }
 
+  // Flujo v2 (2026-09-24): la cotización ya no se convierte directo en venta.
+  // El camino es cotización aprobada + OC del cliente → nota de pedido → OC al
+  // proveedor → autorización → venta. La nota de pedido se crea desde la lista
+  // de cotizaciones, donde se adjunta la OC del cliente.
   const [convirtiendo, setConvirtiendo] = useState(false)
-  const handleConvertirVenta = async () => {
-    setConvirtiendo(true)
-    try {
-      await api.post(`/ventas/desde-cotizacion/${id}`)
-      toast.success('Venta generada — enviada a facturación')
-      navigate('/ventas')
-    } catch (e) {
-      toast.error(e.response?.data?.error || 'Error al generar la venta')
-    } finally {
-      setConvirtiendo(false)
-    }
+  const irANotaPedido = () => {
+    toast('Adjunta la OC del cliente en la lista de cotizaciones para crear la nota de pedido', { icon: '📄' })
+    navigate('/cotizaciones')
   }
 
   return (
@@ -238,7 +234,7 @@ export default function CotizacionForm() {
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
                     {['Buscar producto', 'Código', 'Descripción', 'Cant.', 'Precio neto', 'Desc %', 'Subtotal', 'OC vinculada', ''].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                      <th key={h} className={`${['Precio neto', 'Subtotal'].includes(h) ? 'text-right num-celda' : 'text-left'} px-4 py-2.5 text-xs uppercase tracking-wider font-semibold`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -268,14 +264,14 @@ export default function CotizacionForm() {
                           />
                         </td>
                         <td className="px-4 py-2 w-32">
-                          <input className="rmg-input text-xs text-right" type="number" min="0"
+                          <input className="rmg-input text-xs text-right precio" type="number" min="0"
                             value={item.precio_unitario} onChange={e => updateItem(i, 'precio_unitario', Number(e.target.value))} />
                         </td>
                         <td className="px-4 py-2 w-20">
                           <input className="rmg-input text-xs text-center" type="number" min="0" max="100"
                             value={item.descuento_pct} onChange={e => updateItem(i, 'descuento_pct', Number(e.target.value))} />
                         </td>
-                        <td className="px-4 py-2 font-bold precio-clp text-right whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>
+                        <td className="px-4 py-2 font-bold precio-clp text-right num-celda whitespace-nowrap" style={{ color: 'var(--rmg-off)' }}>
                           {formatCLP(subtotal)}
                         </td>
                         <td className="px-4 py-2 min-w-44">
@@ -361,10 +357,11 @@ export default function CotizacionForm() {
           {/* Acciones */}
           <div className="flex gap-3 justify-end items-center">
             {isEdit && cotizacion?.estado !== 'rechazada' && (
-              <button type="button" onClick={handleConvertirVenta} disabled={convirtiendo}
+              <button type="button" onClick={irANotaPedido} disabled={convirtiendo}
                 className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
-                style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.3)' }}>
-                <ShoppingCart size={15}/> {convirtiendo ? 'Generando…' : 'Convertir a venta'}
+                style={{ background: 'rgba(45,201,138,0.15)', color: 'var(--rmg-teal)', border: '1px solid rgba(45,201,138,0.3)' }}
+                title="Requiere adjuntar la OC del cliente">
+                <ShoppingCart size={15}/> Crear nota de pedido
               </button>
             )}
             <button type="button" onClick={() => navigate('/cotizaciones')} className="btn-secondary">Cancelar</button>
@@ -417,6 +414,8 @@ function CrearOCModal({ cotizacionId, onClose, onCreated }) {
       toast.success(`OC ${data.numero} creada — ajusta los precios de compra`)
       onCreated(data.id)
     } catch (e) {
+      // Flujo v2: si la cotización todavía no tiene nota de pedido, el backend
+      // responde REQUIERE_NOTA_PEDIDO — la OC solo se emite desde ahí.
       toast.error(e.response?.data?.error || 'Error al crear la OC')
     } finally {
       setCreando(false)
@@ -433,7 +432,9 @@ function CrearOCModal({ cotizacionId, onClose, onCreated }) {
           </button>
         </div>
         <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
-          Se copian todas las líneas de la cotización a una OC nueva en borrador, con el proveedor que elijas.
+          Se copian las líneas a una OC nueva en borrador, con el proveedor que elijas.
+          La OC se emite desde la nota de pedido: si esta cotización todavía no la tiene,
+          créala primero adjuntando la OC del cliente.
         </p>
         <div>
           <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Proveedor *</label>

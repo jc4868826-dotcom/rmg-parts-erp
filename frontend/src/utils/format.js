@@ -18,6 +18,35 @@ export const formatCLP = (valor, decimales = 0) => {
 }
 
 /**
+ * Cantidades: muestra decimales SOLO si existen (máx. 2). Evita el "1,00" y el
+ * "2,4500000001" en tablas de ítems.
+ * @example formatCantidad(3) → "3" · formatCantidad(2.5) → "2,5"
+ */
+export const formatCantidad = (valor, maxDecimales = 2) => {
+  const n = Number(valor)
+  if (!Number.isFinite(n)) return '—'
+  const redondeado = Math.round(n * 10 ** maxDecimales) / 10 ** maxDecimales
+  return new Intl.NumberFormat('es-CL', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Number.isInteger(redondeado) ? 0 : maxDecimales,
+  }).format(redondeado)
+}
+
+/**
+ * Número con separador de miles y sin decimales (para cantidades grandes,
+ * stock, unidades). No lleva signo $.
+ * @example formatNumero(12500) → "12.500"
+ */
+export const formatNumero = (valor, decimales = 0) => {
+  const n = Number(valor)
+  if (!Number.isFinite(n)) return '—'
+  return new Intl.NumberFormat('es-CL', {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  }).format(n)
+}
+
+/**
  * IVA Chile (19%). `ventas.total` (y sus agregados en Cuentas Corrientes,
  * Dashboard, EDR) se guarda y trata como NETO en todo el sistema — estas
  * funciones son solo de despliegue: calculan el IVA y el total con IVA a

@@ -8,6 +8,10 @@ const { db, uuidv4 } = require('../../config/database')
 const { tipoDeDocumento } = require('../middleware/documentos')
 
 const ENTIDADES = ['cotizacion', 'pedido', 'venta', 'orden_compra', 'oportunidad_chilecompra']
+// Flujo v2 (2026-09-24): categorías con significado en el flujo. 'oc_cliente' es
+// la compuerta para crear la nota de pedido; 'respaldo_costos' decide si los
+// costos vienen del proveedor o de la lista de precios.
+const CATEGORIAS = ['oc_cliente', 'respaldo_costos', 'comprobante_pago', 'factura', 'guia_despacho', 'otro']
 
 const publicRow = (d) => {
   if (!d) return d
@@ -19,9 +23,10 @@ const listar = (req, res) => {
   try {
     const { entidad, entidadId } = req.params
     if (!ENTIDADES.includes(entidad)) return res.status(400).json({ error: 'Entidad inválida' })
-    const rows = db.prepare(
-      'SELECT * FROM documentos_adjuntos WHERE entidad = ? AND entidad_id = ? ORDER BY created_at DESC'
-    ).all(entidad, entidadId)
+    let sql = 'SELECT * FROM documentos_adjuntos WHERE entidad = ? AND entidad_id = ?'
+    const params = [entidad, entidadId]
+    if (req.query.categoria) { sql += ' AND categoria = ?'; params.push(req.query.categoria) }
+    const rows = db.prepare(sql + ' ORDER BY created_at DESC').all(...params)
     res.json(rows.map(publicRow))
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -37,12 +42,14 @@ const subir = (req, res) => {
     const tipo = tipoDeDocumento(req.file.mimetype)
     if (!tipo) return res.status(400).json({ error: 'Formato no permitido — usa PDF, Excel o imagen' })
 
+    const categoria = CATEGORIAS.includes(req.body?.categoria) ? req.body.categoria : null
+
     const id = uuidv4()
     db.prepare(`INSERT INTO documentos_adjuntos
-      (id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por)
-      VALUES (?,?,?,?,?,?,?,?)`
+      (id, entidad, entidad_id, tipo, nombre_archivo, mime_type, contenido_base64, subido_por, categoria)
+      VALUES (?,?,?,?,?,?,?,?,?)`
     ).run(id, entidad, entidadId, tipo, req.file.originalname, req.file.mimetype,
-      req.file.buffer.toString('base64'), req.user?.id || null)
+      req.file.buffer.toString('base64'), req.user?.id || null, categoria)
 
     res.status(201).json(publicRow(db.prepare('SELECT * FROM documentos_adjuntos WHERE id = ?').get(id)))
   } catch (err) {

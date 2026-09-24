@@ -22,4 +22,7 @@ router.delete('/:id',  authenticate, c.deleteOC)
 // negociado en la cotización si existe).
 router.post('/desde-cotizacion/:cotizacionId', authenticate, c.createOCDesdeCotizacion)
 
+// Flujo v2 (2026-09-24): la OC al proveedor se emite desde la NOTA DE PEDIDO.
+router.post('/desde-pedido/:pedidoId', authenticate, c.createOCDesdePedido)
+
 module.exports = router

@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@utils/api'
-import { formatCLP, formatFecha } from '@utils/format'
-import { Plus, FileText, Send, Check, X, Clock, Printer, MessageCircle, Pencil, Trash2, ShoppingCart } from 'lucide-react'
+import { formatCLP, formatFecha, formatCantidad } from '@utils/format'
+import { Plus, FileText, Send, Check, X, Clock, Printer, MessageCircle, Pencil, Trash2, ShoppingCart, Upload, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ESTADOS = [
@@ -254,7 +254,7 @@ function imprimirCotizacion(c) {
           <span class="desc-name">${i.descripcion || '—'}</span>
           <span class="beneficio">${getBeneficio(i.codigo, i.descripcion)}</span>
         </td>
-        <td class="r" style="vertical-align:top;padding-top:5px">${i.cantidad}</td>
+        <td class="r" style="vertical-align:top;padding-top:5px">${formatCantidad(i.cantidad)}</td>
         <td class="r" style="vertical-align:top;padding-top:5px">$${fmt(i.precio_unitario)}</td>
         <td class="r" style="font-weight:700;vertical-align:top;padding-top:5px">$${fmt(i.subtotal)}</td>
       </tr>`).join('')}
@@ -367,14 +367,35 @@ export default function CotizacionesPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar cotización'),
   })
 
-  const convertirVentaMut = useMutation({
-    mutationFn: (id) => api.post(`/ventas/desde-cotizacion/${id}`).then(r => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['cotizaciones'] })
-      toast.success('Venta generada — enviada a facturación')
-      navigate('/ventas')
+  // Flujo v2 (2026-09-24): la cotización ya no se convierte directo en venta.
+  // Aprobada + OC del cliente adjunta → NOTA DE PEDIDO. Desde ahí sale la OC al
+  // proveedor y, una vez autorizada, la venta.
+  const [notaPedido, setNotaPedido] = useState(null)   // cotización elegida
+  const [ocCliente, setOcCliente] = useState(null)     // archivo OC del cliente (obligatorio)
+  const [respaldoCostos, setRespaldoCostos] = useState(null) // cotización del proveedor (opcional)
+
+  const cerrarNotaPedido = () => { setNotaPedido(null); setOcCliente(null); setRespaldoCostos(null) }
+
+  const crearPedidoMut = useMutation({
+    mutationFn: async ({ cotizacionId, archivoOC, archivoRespaldo }) => {
+      const subir = async (file, categoria) => {
+        const fd = new FormData()
+        fd.append('archivo', file)
+        fd.append('categoria', categoria)
+        return api.post(`/documentos/cotizacion/${cotizacionId}`, fd).then(r => r.data)
+      }
+      const doc = await subir(archivoOC, 'oc_cliente')
+      if (archivoRespaldo) await subir(archivoRespaldo, 'respaldo_costos')
+      return api.post(`/pedidos/from-cotizacion/${cotizacionId}`, { oc_cliente_doc_id: doc.id }).then(r => r.data)
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al generar la venta'),
+    onSuccess: (pedido) => {
+      qc.invalidateQueries({ queryKey: ['cotizaciones'] })
+      qc.invalidateQueries({ queryKey: ['pedidos'] })
+      cerrarNotaPedido()
+      toast.success(`Nota de pedido ${pedido.numero} creada`)
+      navigate('/pedidos')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al crear la nota de pedido'),
   })
 
   const total = cotizaciones.reduce((s, c) => s + c.total, 0)
@@ -434,7 +455,7 @@ export default function CotizacionesPage() {
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(56,182,255,0.1)', background: 'rgba(15, 35, 60,0.02)' }}>
               {['N° Cotización', 'Cliente', 'Estado', 'Neto', 'IVA', 'Total', 'Fecha', 'Acciones'].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--rmg-muted)' }}>{h}</th>
+                <th key={h} className={`${['Neto', 'IVA', 'Total'].includes(h) ? 'text-right num-celda' : 'text-left'} px-4 py-3 text-xs uppercase tracking-wider font-semibold`} style={{ color: 'var(--rmg-muted)' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -464,9 +485,9 @@ export default function CotizacionesPage() {
                           {est.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 precio-clp text-sm" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.neto)}</td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(c.iva)}</td>
-                      <td className="px-4 py-3 font-bold precio-clp" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total)}</td>
+                      <td className="px-4 py-3 precio-clp text-sm text-right num-celda" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.neto)}</td>
+                      <td className="px-4 py-3 text-xs text-right num-celda" style={{ color: 'var(--rmg-muted)' }}>{formatCLP(c.iva)}</td>
+                      <td className="px-4 py-3 font-bold precio-clp text-right num-celda" style={{ color: 'var(--rmg-off)' }}>{formatCLP(c.total)}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--rmg-muted)' }}>{formatFecha(c.created_at)}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5 items-center" onClick={e => e.stopPropagation()}>
@@ -484,12 +505,11 @@ export default function CotizacionesPage() {
                           </a>
                           {c.estado !== 'rechazada' && (
                             <button
-                              disabled={convertirVentaMut.isPending}
-                              onClick={e => { e.stopPropagation(); convertirVentaMut.mutate(c.id) }}
-                              className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold disabled:opacity-50"
+                              onClick={e => { e.stopPropagation(); setNotaPedido(c) }}
+                              className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
                               style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}
-                              title="Convertir a venta">
-                              <ShoppingCart size={11}/> Venta
+                              title="Crear nota de pedido (requiere la OC del cliente)">
+                              <ShoppingCart size={11}/> Nota de pedido
                             </button>
                           )}
                           <button
@@ -567,6 +587,70 @@ export default function CotizacionesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Flujo v2 — crear NOTA DE PEDIDO. Compuerta: la OC del cliente es obligatoria. */}
+      {notaPedido && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,35,60,0.45)' }}>
+          <div className="rmg-card w-full max-w-lg p-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Nueva nota de pedido</h2>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                Desde {notaPedido.numero} · {notaPedido.cliente}
+              </p>
+            </div>
+
+            <div className="flex gap-2 items-start text-xs rounded-lg px-3 py-2.5"
+              style={{ background: 'rgba(224,90,78,0.07)', border: '1px solid rgba(224,90,78,0.2)', color: 'var(--rmg-off)' }}>
+              <AlertTriangle size={14} style={{ color: 'var(--rmg-red)', flexShrink: 0, marginTop: 1 }}/>
+              <span>Sin la orden de compra del cliente no se puede crear la nota de pedido. Es el respaldo de que el cliente compró, y recién con ella se puede emitir la OC al proveedor.</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>
+                OC del cliente · obligatoria
+              </label>
+              <label className="flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 cursor-pointer"
+                style={{ border: `1px dashed ${ocCliente ? 'var(--rmg-teal)' : 'rgba(224,90,78,0.5)'}`,
+                         background: ocCliente ? 'rgba(45,201,138,0.06)' : 'transparent' }}>
+                <Upload size={14} style={{ color: ocCliente ? 'var(--rmg-teal)' : 'var(--rmg-red)' }}/>
+                <span className="truncate" style={{ color: ocCliente ? 'var(--rmg-off)' : 'var(--rmg-muted)' }}>
+                  {ocCliente ? ocCliente.name : 'Adjuntar PDF, Word, Excel o imagen de la OC'}
+                </span>
+                <input type="file" hidden accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
+                  onChange={e => setOcCliente(e.target.files?.[0] || null)} />
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>
+                Respaldo de costos del proveedor · opcional
+              </label>
+              <label className="flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 cursor-pointer"
+                style={{ border: '1px dashed rgba(56,182,255,0.4)',
+                         background: respaldoCostos ? 'rgba(56,182,255,0.06)' : 'transparent' }}>
+                <Upload size={14} style={{ color: 'var(--rmg-blue)' }}/>
+                <span className="truncate" style={{ color: respaldoCostos ? 'var(--rmg-off)' : 'var(--rmg-muted)' }}>
+                  {respaldoCostos ? respaldoCostos.name : 'Cotización del proveedor u otro respaldo de precio'}
+                </span>
+                <input type="file" hidden accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
+                  onChange={e => setRespaldoCostos(e.target.files?.[0] || null)} />
+              </label>
+              <p className="text-xs mt-1.5" style={{ color: 'var(--rmg-muted)' }}>
+                Sin respaldo, los costos se arrastran desde la lista de precios y el margen queda marcado como referencial.
+              </p>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-1">
+              <button type="button" onClick={cerrarNotaPedido} className="btn-secondary">Cancelar</button>
+              <button type="button" disabled={!ocCliente || crearPedidoMut.isPending}
+                onClick={() => crearPedidoMut.mutate({ cotizacionId: notaPedido.id, archivoOC: ocCliente, archivoRespaldo: respaldoCostos })}
+                className="btn-primary disabled:opacity-40">
+                {crearPedidoMut.isPending ? 'Creando…' : 'Crear nota de pedido'}
+              </button>
+            </div>
           </div>
         </div>
       )}
