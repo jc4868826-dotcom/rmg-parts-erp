@@ -22,29 +22,27 @@ const ESTADO_STYLES = {
   pendiente: { color: 'rgba(90,143,168,0.9)', bg: 'rgba(15, 35, 60,0.08)', label: '○ No configurado' },
 }
 // 3 perfiles: gerente (acceso total + autorizaciones) · administrador (acceso total, sin autorizaciones) · vendedor (resto)
-const ROLES = ['gerente', 'administrador', 'facturador', 'vendedor']
-const ROL_LABEL = { gerente: 'Gerente', administrador: 'Administrador', facturador: 'Facturador', vendedor: 'Vendedor' }
+const ROLES = ['gerente', 'administrador', 'vendedor']
+const ROL_LABEL = { gerente: 'Gerente', administrador: 'Administrador', vendedor: 'Vendedor' }
 const ROL_STYLES = {
   gerente:       { bg: 'rgba(159,90,253,0.12)', color: 'var(--rmg-purple)' },
   administrador: { bg: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blt)'    },
-  facturador:    { bg: 'rgba(244,162,60,0.12)', color: 'var(--rmg-gold)'   },
   vendedor:      { bg: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)'   },
 }
 const PERMISOS = [
-  { modulo: 'Dashboard',      gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Catálogo',       gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Clientes',       gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Pipeline CRM',   gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Cotizaciones',   gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Pedidos',        gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Inventario',     gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Agenda',         gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Bot WhatsApp',   gerente: true,  administrador: true, facturador: true,  vendedor: true  },
-  { modulo: 'Gastos',         gerente: true,  administrador: true, facturador: true,  vendedor: false },
-  { modulo: 'Reportes',       gerente: true,  administrador: true, facturador: true,  vendedor: false },
-  { modulo: 'Configuración',  gerente: true,  administrador: true, facturador: true,  vendedor: false },
-  { modulo: 'Facturación SII (N° factura en ventas)', gerente: true, administrador: true, facturador: true, vendedor: false },
-  { modulo: 'Autorizaciones (OC / cotizaciones)', gerente: true, administrador: false, facturador: false, vendedor: false },
+  { modulo: 'Dashboard',      gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Catálogo',       gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Clientes',       gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Pipeline CRM',   gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Cotizaciones',   gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Pedidos',        gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Inventario',     gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Agenda',         gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Bot WhatsApp',   gerente: true,  administrador: true,  vendedor: true  },
+  { modulo: 'Gastos',         gerente: true,  administrador: true,  vendedor: false },
+  { modulo: 'Reportes',       gerente: true,  administrador: true,  vendedor: false },
+  { modulo: 'Configuración',  gerente: true,  administrador: true,  vendedor: false },
+  { modulo: 'Autorizaciones (OC / cotizaciones)', gerente: true, administrador: false, vendedor: false },
 ]
 const FORM_INIT = { nombre: '', email: '', password: '', telefono: '', rol: 'vendedor' }
 
@@ -77,18 +75,30 @@ export default function ConfiguracionPage() {
   const [tab, setTab] = useState('empresa')
   const { user } = useAuth()
 
-  // ── Empresa ──────────────────────────────────────────────
-  const [empresa, setEmpresa] = useState({
-    nombre:    'RMG Parts',
-    rut:       '76.XXX.XXX-X',
-    direccion: 'Santiago, RM, Chile',
-    telefono:  '+56 9 1234 5678',
-    email:     'ventas@rmgautoparts.cl',
-  })
-  const handleSaveEmpresa = () => toast.success('Datos de empresa guardados')
-
   // ── Usuarios (API real — sin datos simulados) ─────────────
   const qc = useQueryClient()
+
+  // ── Empresa (2026-09-25): antes el formulario no guardaba nada — solo
+  //    mostraba un toast. Ahora lee y escribe en /api/empresa, que es lo que
+  //    alimenta el membrete de cotizaciones, OC y notas de venta.
+  const [empresa, setEmpresa] = useState(null)
+  const { data: empresaApi } = useQuery({
+    queryKey: ['empresa'],
+    queryFn: () => api.get('/empresa').then(r => r.data),
+  })
+  useEffect(() => { if (empresaApi && !empresa) setEmpresa(empresaApi) }, [empresaApi])
+
+  const guardarEmpresaMut = useMutation({
+    mutationFn: (data) => api.put('/empresa', data).then(r => r.data),
+    onSuccess: (data) => {
+      setEmpresa(data)
+      qc.invalidateQueries({ queryKey: ['empresa'] })
+      toast.success('Datos de la empresa guardados')
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al guardar los datos de la empresa'),
+  })
+  const handleSaveEmpresa = () => empresa && guardarEmpresaMut.mutate(empresa)
+  const setCampoEmpresa = (key, val) => setEmpresa(p => ({ ...(p || {}), [key]: val }))
 
   const { data: usuarios = [], isLoading: usuariosLoading } = useQuery({
     queryKey: ['usuarios'],
@@ -232,26 +242,74 @@ export default function ConfiguracionPage() {
 
       {/* ══ EMPRESA ═══════════════════════════════════════════ */}
       {tab === 'empresa' && (
-        <div className="rmg-card p-6 space-y-4">
-          <h2 className="font-bold">Datos de la empresa</h2>
-          {[
-            { label: 'Nombre / Razón social', key: 'nombre'    },
-            { label: 'RUT',                   key: 'rut'        },
-            { label: 'Dirección',             key: 'direccion'  },
-            { label: 'Teléfono',              key: 'telefono'   },
-            { label: 'Email comercial',       key: 'email'      },
-          ].map(({ label, key }) => (
-            <Field key={key} label={label}>
-              <input className="rmg-input" value={empresa[key]}
-                onChange={e => setEmpresa(p => ({ ...p, [key]: e.target.value }))} />
+        !empresa ? (
+          <div className="rmg-card p-6 text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando…</div>
+        ) : (
+        <div className="space-y-4">
+          <div className="rmg-card p-6 space-y-4">
+            <div>
+              <h2 className="font-bold">Datos de la empresa</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                Es el membrete de las cotizaciones, órdenes de compra y notas de venta. Lo que cambies acá sale impreso.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { label: 'Nombre comercial',  key: 'nombre'       },
+                { label: 'Razón social',      key: 'razon_social' },
+                { label: 'RUT',               key: 'rut'          },
+                { label: 'Giro',              key: 'giro'         },
+                { label: 'Dirección',         key: 'direccion'    },
+                { label: 'Comuna',            key: 'comuna'       },
+                { label: 'Ciudad / Región',   key: 'ciudad'       },
+                { label: 'Teléfono',          key: 'telefono'     },
+                { label: 'Email comercial',   key: 'email'        },
+                { label: 'Sitio web',         key: 'web'          },
+              ].map(({ label, key }) => (
+                <Field key={key} label={label}>
+                  <input className="rmg-input" value={empresa[key] || ''}
+                    onChange={e => setCampoEmpresa(key, e.target.value)} />
+                </Field>
+              ))}
+            </div>
+          </div>
+
+          <div className="rmg-card p-6 space-y-4">
+            <div>
+              <h2 className="font-bold">Datos para transferencia</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--rmg-muted)' }}>
+                Aparecen en el pie de la cotización, en el bloque de forma de pago.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { label: 'Banco',                key: 'banco_nombre'      },
+                { label: 'Tipo de cuenta',       key: 'banco_tipo_cuenta' },
+                { label: 'N° de cuenta',         key: 'banco_numero'      },
+                { label: 'Titular',              key: 'banco_titular'     },
+                { label: 'RUT del titular',      key: 'banco_rut'         },
+                { label: 'Email para comprobantes', key: 'banco_email'    },
+              ].map(({ label, key }) => (
+                <Field key={key} label={label}>
+                  <input className="rmg-input" value={empresa[key] || ''}
+                    onChange={e => setCampoEmpresa(key, e.target.value)} />
+                </Field>
+              ))}
+            </div>
+            <Field label="Pie de página de los documentos">
+              <input className="rmg-input" value={empresa.pie_pagina || ''}
+                onChange={e => setCampoEmpresa('pie_pagina', e.target.value)} />
             </Field>
-          ))}
-          <div className="pt-2">
-            <button onClick={handleSaveEmpresa} className="btn-primary flex items-center gap-2">
-              <Check size={15} /> Guardar cambios
+          </div>
+
+          <div className="flex justify-end">
+            <button onClick={handleSaveEmpresa} disabled={guardarEmpresaMut.isPending}
+              className="btn-primary flex items-center gap-2 disabled:opacity-50">
+              <Check size={15} /> {guardarEmpresaMut.isPending ? 'Guardando…' : 'Guardar cambios'}
             </button>
           </div>
         </div>
+        )
       )}
 
       {/* ══ USUARIOS Y ROLES ══════════════════════════════════ */}

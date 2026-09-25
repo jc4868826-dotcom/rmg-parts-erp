@@ -3008,6 +3008,41 @@ function runMigrations() {
     }
   }
 
+  // Datos de la empresa (2026-09-25): fila única que alimenta el membrete de
+  // cotizaciones, OC y notas de venta. Antes estaban escritos a mano en la
+  // plantilla del PDF y el formulario de Configuración no guardaba nada.
+  const mEmpresa = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('empresa_config_v1')
+  if (!mEmpresa) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS empresa_config (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          nombre TEXT, razon_social TEXT, rut TEXT, giro TEXT,
+          direccion TEXT, comuna TEXT, ciudad TEXT,
+          telefono TEXT, email TEXT, web TEXT,
+          banco_nombre TEXT, banco_tipo_cuenta TEXT, banco_numero TEXT,
+          banco_titular TEXT, banco_rut TEXT, banco_email TEXT,
+          pie_pagina TEXT, logo_base64 TEXT,
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `)
+      // Semilla con lo que hasta ahora estaba escrito a mano en el PDF.
+      db.prepare(`INSERT OR IGNORE INTO empresa_config
+        (id, nombre, razon_social, giro, ciudad, telefono, email,
+         banco_nombre, banco_tipo_cuenta, banco_numero, banco_titular, banco_email, pie_pagina)
+        VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run('RMG Parts', 'RMG Parts SpA', 'Distribución mayorista de insumos automotrices',
+             'Santiago, Región Metropolitana', '+56 9 7448 8647', 'ventas@rmgautoparts.cl',
+             'Banco de Chile', 'Cuenta Corriente', '1781310106', 'RMG Parts SpA',
+             'ventas@rmgautoparts.cl', 'Distribución mayorista B2B · Santiago RM')
+      db.prepare("INSERT INTO _migrations (id) VALUES ('empresa_config_v1')").run()
+      db._save()
+      console.log('✅ Migración empresa_config_v1 — datos de la empresa editables desde Configuración')
+    } catch (e) {
+      console.error('❌ Migración empresa_config_v1 falló:', e.message)
+    }
+  }
+
   // Backfill: las ventas que ya existían quedaron con estado_facturacion NULL, así que
   // el flujo nuevo no se veía en pantalla. Las ventas pendientes nacidas de una cotización
   // y sin pago registrado entran a "por facturar"; el resto (pagadas, en validación,
