@@ -132,20 +132,37 @@ const getOCs = (req, res) => {
     }
     sql += ' ORDER BY created_at DESC'
     const ocs = db.prepare(sql).all(...params)
+    if (ocs.length === 0) return res.json([])
+
+    // 2026-10-08 (pedido de JC, "el ERP está lento al navegar entre
+    // pestañas"): esto antes hacía 2 consultas POR CADA fila (items +
+    // cotizacion_numero) — con la lista creciendo, esa es la pantalla que
+    // más se nota. Se batchea a 2 consultas totales con IN(...), sin cambiar
+    // la forma de la respuesta.
+    const ocIds = ocs.map(oc => oc.id)
+    const phIds = ocIds.map(() => '?').join(',')
+    const itemsByOc = {}
+    for (const it of db.prepare(`SELECT * FROM oc_items WHERE oc_id IN (${phIds})`).all(...ocIds)) {
+      if (!itemsByOc[it.oc_id]) itemsByOc[it.oc_id] = []
+      itemsByOc[it.oc_id].push(it)
+    }
+
+    const cotizacionIds = [...new Set(ocs.map(oc => oc.cotizacion_id).filter(Boolean))]
+    const cotNumeroPorId = {}
+    if (cotizacionIds.length) {
+      const phCot = cotizacionIds.map(() => '?').join(',')
+      for (const c of db.prepare(`SELECT id, numero FROM cotizaciones WHERE id IN (${phCot})`).all(...cotizacionIds)) {
+        cotNumeroPorId[c.id] = c.numero
+      }
+    }
+
     // Trazabilidad cotización↔OC (2026-09-13): número de cotización para
     // mostrar el badge "🔗 venta calzada" en la lista sin ir al detalle.
-    res.json(ocs.map(oc => {
-      let cotizacion_numero = null
-      if (oc.cotizacion_id) {
-        const cot = db.prepare('SELECT numero FROM cotizaciones WHERE id = ?').get(oc.cotizacion_id)
-        cotizacion_numero = cot?.numero || null
-      }
-      return {
-        ...oc,
-        items: db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(oc.id),
-        cotizacion_numero,
-      }
-    }))
+    res.json(ocs.map(oc => ({
+      ...oc,
+      items: itemsByOc[oc.id] || [],
+      cotizacion_numero: oc.cotizacion_id ? (cotNumeroPorId[oc.cotizacion_id] || null) : null,
+    })))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

@@ -97,14 +97,36 @@ const getAll = (req, res) => {
     if (cotizacion_id) { sql += ' AND p.cotizacion_id = ?'; params.push(cotizacion_id) }
     if (q) { sql += ' AND (p.numero LIKE ? OR LOWER(COALESCE(p.cliente, cl.razon_social, \'\')) LIKE LOWER(?))'; params.push(`%${q}%`, `%${q}%`) }
     sql += ' ORDER BY p.created_at DESC'
-    const pedidos = db.prepare(sql).all(...params).map(p => ({
+    const pedidos = db.prepare(sql).all(...params)
+    if (pedidos.length === 0) return res.json([])
+
+    // 2026-10-08 (pedido de JC, "el ERP está lento al navegar entre
+    // pestañas"): esto antes hacía 2 consultas POR CADA fila (OCs del pedido
+    // + cotizacion_numero) — se batchea a 2 consultas totales con IN(...).
+    const pedidoIds = pedidos.map(p => p.id)
+    const phPed = pedidoIds.map(() => '?').join(',')
+    const ocsPorPedido = {}
+    for (const o of db.prepare(
+      `SELECT id, numero, estado, pedido_id FROM ordenes_compra WHERE pedido_id IN (${phPed}) ORDER BY created_at ASC`
+    ).all(...pedidoIds)) {
+      if (!ocsPorPedido[o.pedido_id]) ocsPorPedido[o.pedido_id] = []
+      ocsPorPedido[o.pedido_id].push({ id: o.id, numero: o.numero, estado: o.estado })
+    }
+
+    const cotizacionIds = [...new Set(pedidos.map(p => p.cotizacion_id).filter(Boolean))]
+    const cotNumeroPorId = {}
+    if (cotizacionIds.length) {
+      const phCot = cotizacionIds.map(() => '?').join(',')
+      for (const c of db.prepare(`SELECT id, numero FROM cotizaciones WHERE id IN (${phCot})`).all(...cotizacionIds)) {
+        cotNumeroPorId[c.id] = c.numero
+      }
+    }
+
+    res.json(pedidos.map(p => ({
       ...p,
-      ocs: ocsDelPedido(p.id).map(o => ({ id: o.id, numero: o.numero, estado: o.estado })),
-      cotizacion_numero: p.cotizacion_id
-        ? (db.prepare('SELECT numero FROM cotizaciones WHERE id = ?').get(p.cotizacion_id)?.numero || null)
-        : null,
-    }))
-    res.json(pedidos)
+      ocs: ocsPorPedido[p.id] || [],
+      cotizacion_numero: p.cotizacion_id ? (cotNumeroPorId[p.cotizacion_id] || null) : null,
+    })))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
