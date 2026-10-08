@@ -1,7 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const c = require('../controllers/prospeccionController')
-const { authenticate } = require('../middleware/auth')
+const { authenticate, requireRole } = require('../middleware/auth')
 
 // GET  /api/prospeccion          — lista con filtros opcionales
 router.get('/',                      authenticate, c.list)
@@ -110,5 +110,8 @@ router.post('/:id/bitacora',         authenticate, c.addBitacora)
 
 // POST /api/prospeccion/:id/enviar-email — enviar correo real y dejar constancia en bitácora
 router.post('/:id/enviar-email',     authenticate, c.enviarEmail)
+
+// DELETE /api/prospeccion/:id — borrado real (2026-10-08, pedido de JC)
+router.delete('/:id',                authenticate, requireRole(['gerente', 'administrador']), c.remove)
 
 module.exports = router

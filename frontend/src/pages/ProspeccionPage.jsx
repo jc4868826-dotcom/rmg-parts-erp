@@ -4,7 +4,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
-import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check, Megaphone, FileText } from 'lucide-react'
+import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check, Megaphone, FileText, XCircle } from 'lucide-react'
+
+// 2026-10-08 (pedido de JC): pestañas de etapa — "prospecto" es la lista de
+// siempre (default del backend); "prospectado" = ya se envió correo inicial,
+// a la espera de WhatsApp/llamada; "contactado_sin_exito" = seguimiento
+// hecho pero sin interés todavía.
+const ETAPA_TABS = [
+  { v: 'prospecto', l: 'Prospectos' },
+  { v: 'prospectado', l: 'Prospectados' },
+  { v: 'contactado_sin_exito', l: 'Sin éxito' },
+]
 
 // ─── constants ──────────────────────────────────────────────────────────────
 
@@ -331,6 +341,7 @@ function FormularioProspecto({ titulo, datos, setDatos, onSubmit, isPending, onC
 export default function ProspeccionPage() {
   const navigate = useNavigate()
   const [busqueda, setBusqueda]           = useState('')
+  const [etapaTab, setEtapaTab]           = useState('prospecto')
   const [segmentoFiltro, setSegmentoFiltro] = useState('Todos')
   const [prioridadFiltro, setPrioridadFiltro] = useState('Todas')
   const [regionFiltro, setRegionFiltro]   = useState('Todas')
@@ -345,8 +356,8 @@ export default function ProspeccionPage() {
   const qc = useQueryClient()
 
   const { data = [], isLoading } = useQuery({
-    queryKey: ['prospeccion'],
-    queryFn: () => api.get('/prospeccion').then(r => r.data),
+    queryKey: ['prospeccion', etapaTab],
+    queryFn: () => api.get('/prospeccion', { params: { etapa: etapaTab } }).then(r => r.data),
   })
 
   const { data: stats } = useQuery({
@@ -459,6 +470,17 @@ export default function ProspeccionPage() {
     }
   }
 
+  const handleEliminar = async (id, empresa) => {
+    if (!confirm(`¿Eliminar definitivamente "${empresa}"? Esta acción no se puede deshacer.`)) return
+    try {
+      await api.delete(`/prospeccion/${id}`)
+      toast.success('Prospecto eliminado')
+      invalidate()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error al eliminar')
+    }
+  }
+
   const toggleNota = (id) => setExpandedNotas(prev => ({ ...prev, [id]: !prev[id] }))
   const totalActivos = stats?.total_activos ?? data.length
 
@@ -503,6 +525,21 @@ export default function ProspeccionPage() {
             <Plus size={13}/> Nuevo prospecto
           </button>
         </div>
+      </div>
+
+      {/* ── Pestañas de etapa ── */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {ETAPA_TABS.map(t => (
+          <button key={t.v} onClick={() => setEtapaTab(t.v)}
+            style={{
+              fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 20, cursor: 'pointer',
+              border: etapaTab === t.v ? '1px solid rgba(27,143,212,0.4)' : '1px solid rgba(15, 35, 60,0.08)',
+              background: etapaTab === t.v ? 'rgba(27,143,212,0.15)' : 'transparent',
+              color: etapaTab === t.v ? 'var(--rmg-blue)' : 'var(--rmg-muted)',
+            }}>
+            {t.l}
+          </button>
+        ))}
       </div>
 
       {/* ── Filters ── */}
@@ -674,11 +711,17 @@ export default function ProspeccionPage() {
                           onMouseLeave={e => e.currentTarget.style.background = 'rgba(27,143,212,0.12)'}>
                           <UserCheck size={14} />
                         </button>
-                        <button title="Descartar" onClick={() => handleDescartar(p.id, p.empresa)}
+                        <button title="Descartar (reversible)" onClick={() => handleDescartar(p.id, p.empresa)}
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(224,90,78,0.1)', border: '0.5px solid rgba(224,90,78,0.2)', color: '#e05a4e', cursor: 'pointer', transition: 'background 0.15s' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(224,90,78,0.2)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'rgba(224,90,78,0.1)'}>
                           <Trash2 size={14} />
+                        </button>
+                        <button title="Eliminar definitivamente" onClick={() => handleEliminar(p.id, p.empresa)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(160,160,170,0.1)', border: '0.5px solid rgba(160,160,170,0.25)', color: '#8a8a95', cursor: 'pointer', transition: 'background 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(160,160,170,0.2)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(160,160,170,0.1)'}>
+                          <XCircle size={14} />
                         </button>
                       </div>
                     </td>

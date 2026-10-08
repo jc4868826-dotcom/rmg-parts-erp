@@ -6,7 +6,7 @@ import { formatFecha } from '@utils/format'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Phone, Mail, MapPin, MessageCircle, UserCheck,
-  Plus, X, Send,
+  Plus, X, Send, Paperclip, ThumbsDown, Trash2,
 } from 'lucide-react'
 
 // Mismo helper de wa.me que la lista de Prospección — número chileno a 9
@@ -28,20 +28,67 @@ const TIPOS = [
   { v: 'nota',    l: 'Nota' },
 ]
 
-// Modal "Enviar correo" — envía de verdad (SMTP vía backend) y queda en bitácora.
+const ETAPA_LABEL = {
+  prospecto: 'Prospecto',
+  prospectado: 'Prospectado',
+  contactado_sin_exito: 'Contactado sin éxito',
+  contacto: 'Contacto',
+  visita: 'Visita',
+  propuesta: 'Propuesta',
+  cliente: 'Cliente',
+}
+
+// Plantilla de correo inicial — copy breve orientado a neuromarketing:
+// nombra el dolor (paradas no programadas / costo de mantención), presenta a
+// RMG como la solución puntual, y cierra con una invitación concreta a abrir
+// el dossier adjunto (curiosidad + bajo compromiso).
+function plantillaInicial(prospecto) {
+  const empresa = prospecto.empresa || 'su empresa'
+  const contacto = prospecto.nombre_contacto ? prospecto.nombre_contacto.split(' ')[0] : ''
+  return `${contacto ? `Hola ${contacto},` : 'Hola,'}
+
+Una falla por lubricación mal elegida no avisa: para cuando se nota, ya paró una línea o un equipo quedó fuera de ruta. En ${empresa} eso se traduce directo en horas de producción y plazos comprometidos.
+
+Somos RMG Auto Parts — trabajamos lubricantes industriales, baterías y neumáticos con respaldo técnico real (no solo despacho), para que ese tipo de parada deje de ser una sorpresa.
+
+Le adjunto un dossier breve con lo que ofrecemos y cómo trabajamos con flotas e industria. Si calza con lo que necesitan hoy, conversamos 15 minutos esta semana.
+
+Saludos,`
+}
+
+// Modal "Enviar correo" — envía de verdad (SMTP vía backend), permite
+// adjuntar un archivo (ej. dossier PDF) y queda en bitácora. Al enviar, el
+// prospecto pasa a etapa 'prospectado' (lo hace el backend).
 function EnviarEmailModal({ prospecto, onClose, onSent }) {
-  const [asunto, setAsunto] = useState(`RMG Auto Parts — ${prospecto.empresa}`)
-  const [mensaje, setMensaje] = useState('')
+  const [asunto, setAsunto] = useState(`RMG Auto Parts — Lubricación industrial para ${prospecto.empresa}`)
+  const [mensaje, setMensaje] = useState(() => plantillaInicial(prospecto))
+  const [adjunto, setAdjunto] = useState(null) // { nombre, mime, base64 }
+  const [cargandoArchivo, setCargandoArchivo] = useState(false)
+
+  const handleArchivo = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) { toast.error('El adjunto no puede superar 8 MB'); e.target.value = ''; return }
+    setCargandoArchivo(true)
+    const reader = new FileReader()
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1]
+      setAdjunto({ nombre: file.name, mime: file.type, base64 })
+      setCargandoArchivo(false)
+    }
+    reader.onerror = () => { toast.error('No se pudo leer el archivo'); setCargandoArchivo(false) }
+    reader.readAsDataURL(file)
+  }
 
   const enviarMut = useMutation({
-    mutationFn: () => api.post(`/prospeccion/${prospecto.id}/enviar-email`, { asunto, mensaje }).then(r => r.data),
-    onSuccess: () => { toast.success('Correo enviado'); onSent() },
+    mutationFn: () => api.post(`/prospeccion/${prospecto.id}/enviar-email`, { asunto, mensaje, adjunto }).then(r => r.data),
+    onSuccess: (data) => { toast.success('Correo enviado'); onSent(data.prospecto) },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al enviar el correo'),
   })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,35,60,0.5)' }}>
-      <div className="rmg-card w-full max-w-lg p-5 space-y-4">
+      <div className="rmg-card w-full max-w-lg p-5 space-y-4" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Enviar correo a {prospecto.empresa}</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
@@ -57,11 +104,27 @@ function EnviarEmailModal({ prospecto, onClose, onSent }) {
           </div>
           <div>
             <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Mensaje</label>
-            <textarea required rows={6} className="rmg-input mt-1" value={mensaje} onChange={e => setMensaje(e.target.value)} />
+            <textarea required rows={10} className="rmg-input mt-1" value={mensaje} onChange={e => setMensaje(e.target.value)} />
+            <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>Plantilla precargada — edítala antes de enviar si lo necesitas.</p>
+          </div>
+          <div>
+            <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Adjunto (dossier, PDF, etc.)</label>
+            <div className="flex items-center gap-2 mt-1">
+              <label className="btn-secondary text-xs flex items-center gap-1.5 cursor-pointer">
+                <Paperclip size={13}/> {cargandoArchivo ? 'Cargando...' : 'Elegir archivo'}
+                <input type="file" className="hidden" onChange={handleArchivo} disabled={cargandoArchivo} />
+              </label>
+              {adjunto && (
+                <span className="text-xs flex items-center gap-1.5" style={{ color: 'var(--rmg-off)' }}>
+                  {adjunto.nombre}
+                  <button type="button" onClick={() => setAdjunto(null)} style={{ color: 'var(--rmg-muted)' }}><X size={12}/></button>
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancelar</button>
-            <button type="submit" disabled={enviarMut.isPending} className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50">
+            <button type="submit" disabled={enviarMut.isPending || cargandoArchivo} className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50">
               <Send size={14}/> {enviarMut.isPending ? 'Enviando...' : 'Enviar'}
             </button>
           </div>
@@ -128,14 +191,33 @@ export default function ProspectoDetalle() {
     queryFn: () => api.get(`/prospeccion/${id}/bitacora`).then(r => r.data),
   })
 
+  const invalidateTodo = () => {
+    qc.invalidateQueries({ queryKey: ['prospecto', id] })
+    qc.invalidateQueries({ queryKey: ['prospectos'] })
+    qc.invalidateQueries({ queryKey: ['prospeccion'] })
+    qc.invalidateQueries({ queryKey: ['prospeccion-stats'] })
+  }
+
   const convertirMut = useMutation({
     mutationFn: () => api.post(`/prospeccion/${id}/mover-a-contacto`).then(r => r.data),
     onSuccess: (data) => {
       toast.success('Prospecto convertido en cliente')
-      qc.invalidateQueries({ queryKey: ['prospectos'] })
+      invalidateTodo()
       navigate(`/clientes/${data.cliente_id}`)
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Error al convertir en cliente'),
+  })
+
+  const sinExitoMut = useMutation({
+    mutationFn: () => api.patch(`/prospeccion/${id}/etapa`, { etapa: 'contactado_sin_exito' }).then(r => r.data),
+    onSuccess: () => { toast.success('Marcado como contactado sin éxito'); invalidateTodo() },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al actualizar'),
+  })
+
+  const eliminarMut = useMutation({
+    mutationFn: () => api.delete(`/prospeccion/${id}`).then(r => r.data),
+    onSuccess: () => { toast.success('Prospecto eliminado'); invalidateTodo(); navigate('/prospeccion') },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al eliminar'),
   })
 
   const registrarWsp = useMutation({
@@ -152,11 +234,17 @@ export default function ProspectoDetalle() {
 
   const phone = prospecto.telefono_contacto || prospecto.telefono_empresa || prospecto.celular
   const waUrl = toWaLink(phone, `Hola ${prospecto.nombre_contacto || ''}, te contacto de RMG Auto Parts —`)
+  const yaFueContactado = ['prospectado', 'contactado_sin_exito'].includes(prospecto.etapa)
 
   const handleWhatsApp = () => {
     if (!waUrl) return
     window.open(waUrl, '_blank', 'noopener,noreferrer')
     registrarWsp.mutate()
+  }
+
+  const handleEliminar = () => {
+    if (!confirm(`¿Eliminar definitivamente "${prospecto.empresa}"? Esta acción no se puede deshacer.`)) return
+    eliminarMut.mutate()
   }
 
   return (
@@ -176,7 +264,7 @@ export default function ProspectoDetalle() {
               </span>
             )}
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(15, 35, 60,0.06)', color: 'var(--rmg-blt)' }}>
-              {prospecto.etapa === 'prospecto' ? 'Prospecto' : prospecto.etapa}
+              {ETAPA_LABEL[prospecto.etapa] || prospecto.etapa}
             </span>
           </div>
           <p className="text-sm mt-1" style={{ color: 'var(--rmg-muted)' }}>
@@ -196,11 +284,25 @@ export default function ProspectoDetalle() {
               <Mail size={15} /> Enviar correo
             </button>
           )}
+          {yaFueContactado && prospecto.etapa !== 'contactado_sin_exito' && (
+            <button onClick={() => sinExitoMut.mutate()} disabled={sinExitoMut.isPending}
+              className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-semibold disabled:opacity-50"
+              style={{ background: 'rgba(160,160,170,0.12)', color: 'var(--rmg-muted)', border: '1px solid rgba(160,160,170,0.3)' }}
+              title="Se hizo seguimiento pero todavía no hay interés">
+              <ThumbsDown size={15} /> Sin éxito
+            </button>
+          )}
           <button onClick={() => convertirMut.mutate()} disabled={convertirMut.isPending}
             className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-semibold disabled:opacity-50"
             style={{ background: 'rgba(244,162,60,0.15)', color: 'var(--rmg-gold)', border: '1px solid rgba(244,162,60,0.3)' }}
             title="Crea el cliente en el ERP y abre su ficha">
             <UserCheck size={15} /> {convertirMut.isPending ? 'Creando...' : 'Crear como cliente'}
+          </button>
+          <button onClick={handleEliminar} disabled={eliminarMut.isPending}
+            className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-semibold disabled:opacity-50"
+            style={{ background: 'rgba(220,70,70,0.1)', color: '#dc4646', border: '1px solid rgba(220,70,70,0.25)' }}
+            title="Elimina este prospecto definitivamente">
+            <Trash2 size={15} /> Eliminar
           </button>
         </div>
       </div>
@@ -285,7 +387,7 @@ export default function ProspectoDetalle() {
         <EnviarEmailModal
           prospecto={prospecto}
           onClose={() => setShowEmail(false)}
-          onSent={() => { setShowEmail(false); qc.invalidateQueries({ queryKey: ['prospecto-bitacora', id] }) }}
+          onSent={() => { setShowEmail(false); invalidateTodo() }}
         />
       )}
     </div>

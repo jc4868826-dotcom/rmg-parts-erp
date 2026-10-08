@@ -1,7 +1,10 @@
 const { db, uuidv4 } = require('../../config/database')
 const nodemailer = require('nodemailer')
 
-const ETAPAS_VALIDAS  = ['prospecto', 'contacto', 'visita', 'propuesta', 'cliente']
+// 2026-10-08 (pedido de JC): 'prospectado' = correo inicial ya enviado, a la
+// espera de seguimiento por WhatsApp/llamada; 'contactado_sin_exito' = se
+// hizo seguimiento pero todavía no hay interés/cierre.
+const ETAPAS_VALIDAS  = ['prospecto', 'prospectado', 'contactado_sin_exito', 'contacto', 'visita', 'propuesta', 'cliente']
 const ESTADOS_VALIDOS = ['activo', 'descartado']
 
 // Mapea segmentos de pipeline_contactos al CHECK constraint de clientes
@@ -345,10 +348,14 @@ const enviarEmail = async (req, res) => {
   try {
     const registro = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id)
     if (!registro) return res.status(404).json({ error: 'Prospecto no encontrado' })
-    const { asunto, mensaje, destinatario } = req.body
+    const { asunto, mensaje, destinatario, adjunto } = req.body
     const to = destinatario || registro.email
     if (!to) return res.status(400).json({ error: 'Este prospecto no tiene email registrado' })
     if (!mensaje) return res.status(400).json({ error: 'mensaje es requerido' })
+
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      return res.status(500).json({ error: 'El servidor de correo no está configurado (faltan SMTP_USER / SMTP_PASS)' })
+    }
 
     const transporter = nodemailer.createTransport({
       host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
@@ -363,21 +370,53 @@ const enviarEmail = async (req, res) => {
     const remitenteNombre = req.user?.nombre ? `${req.user.nombre} · RMG Auto Parts` : 'RMG Auto Parts'
     const replyTo = req.user?.email || undefined
 
+    // 2026-10-08 (pedido de JC): adjunto opcional (ej. dossier PDF) — llega
+    // como { nombre, mime, base64 } desde el frontend.
+    const attachments = (adjunto && adjunto.base64 && adjunto.nombre)
+      ? [{ filename: adjunto.nombre, content: Buffer.from(adjunto.base64, 'base64'), contentType: adjunto.mime || undefined }]
+      : []
+
     await transporter.sendMail({
       from:    `"${remitenteNombre}" <${process.env.SMTP_USER || 'no-reply@rmgautoparts.cl'}>`,
       ...(replyTo ? { replyTo } : {}),
       to,
       subject: asunto || `RMG Auto Parts — ${registro.empresa}`,
       html: `<div style="font-family:Arial,sans-serif;max-width:700px;white-space:pre-wrap">${mensaje}</div>`,
+      attachments,
     })
 
     const id = uuidv4()
+    const detalleAdjunto = attachments.length ? `\n[Adjunto: ${adjunto.nombre}]` : ''
     db.prepare(`INSERT INTO prospecto_bitacora
       (id, prospecto_id, tipo, descripcion, usuario_id)
       VALUES (?,?,?,?,?)`
-    ).run(id, req.params.id, 'email', `Para: ${to}\nAsunto: ${asunto || ''}\n\n${mensaje}`, req.user?.id || null)
+    ).run(id, req.params.id, 'email', `Para: ${to}\nAsunto: ${asunto || ''}\n\n${mensaje}${detalleAdjunto}`, req.user?.id || null)
 
-    res.json({ ok: true, bitacora: db.prepare('SELECT * FROM prospecto_bitacora WHERE id = ?').get(id) })
+    // 2026-10-08 (pedido de JC): al mandar el correo, el prospecto pasa a
+    // 'prospectado' para seguir luego con WhatsApp/llamada — solo si todavía
+    // está en 'prospecto', para no pisar una etapa más avanzada.
+    if (registro.etapa === 'prospecto') {
+      db.prepare("UPDATE pipeline_contactos SET etapa = 'prospectado', fecha_ultima_actualizacion = datetime('now') WHERE id = ?").run(req.params.id)
+    }
+
+    res.json({
+      ok: true,
+      bitacora: db.prepare('SELECT * FROM prospecto_bitacora WHERE id = ?').get(id),
+      prospecto: db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id),
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// DELETE /api/prospeccion/:id — borrado real (pedido de JC, 2026-10-08).
+// Solo gerente/administrador. La bitácora se borra en cascada (FK ON DELETE CASCADE).
+const remove = (req, res) => {
+  try {
+    const registro = db.prepare('SELECT id FROM pipeline_contactos WHERE id = ?').get(req.params.id)
+    if (!registro) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    db.prepare('DELETE FROM pipeline_contactos WHERE id = ?').run(req.params.id)
+    res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -385,5 +424,5 @@ const enviarEmail = async (req, res) => {
 
 module.exports = {
   list, getStats, cambiarEtapa, descartar, moverAContacto, create, update, bulkImport,
-  getOne, getBitacora, addBitacora, enviarEmail,
+  getOne, getBitacora, addBitacora, enviarEmail, remove,
 }
