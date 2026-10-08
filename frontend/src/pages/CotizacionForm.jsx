@@ -1,14 +1,75 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { formatCLP, calcularTotalesCotizacion } from '@utils/format'
-import { ArrowLeft, Plus, Trash2, Send, ShoppingCart, Link2, Truck, X } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Send, ShoppingCart, Link2, Truck, X, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import DocumentosPanel from '@components/DocumentosPanel'
 import ProductoSearch from '@components/ProductoSearch'
 import CantidadPresentacion from '@components/CantidadPresentacion'
 import CruceMargenCard from '@components/CruceMargenCard'
+
+// Modal rápido "Nuevo cliente" — pedido de JC 2026-10-08: al armar una
+// cotización para un cliente nuevo había que salir a /clientes, crearlo ahí,
+// y volver. Este modal crea el cliente sin perder lo que ya se llevaba
+// escrito en la cotización, y lo deja seleccionado al cerrar.
+function NuevoClienteModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ razon_social: '', rut: '', segmento: 'taller', telefono: '', email: '' })
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  const crearMut = useMutation({
+    mutationFn: () => api.post('/clientes', form).then(r => r.data),
+    onSuccess: (data) => { toast.success(`Cliente ${data.razon_social} creado`); onCreated(data) },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al crear el cliente'),
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,35,60,0.5)' }}>
+      <div className="rmg-card w-full max-w-md p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Nuevo cliente</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+        </div>
+        <form onSubmit={e => { e.preventDefault(); crearMut.mutate() }} className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Razón social *</label>
+            <input required autoFocus className="rmg-input mt-1" value={form.razon_social} onChange={set('razon_social')} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>RUT</label>
+              <input className="rmg-input mt-1" value={form.rut} onChange={set('rut')} placeholder="76.123.456-7" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Segmento</label>
+              <select className="rmg-input mt-1" value={form.segmento} onChange={set('segmento')}>
+                <option value="taller">Taller</option>
+                <option value="flota">Flota</option>
+                <option value="concesionario">Concesionario</option>
+                <option value="construccion">Construcción</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Teléfono</label>
+              <input className="rmg-input mt-1" value={form.telefono} onChange={set('telefono')} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Email</label>
+              <input type="email" className="rmg-input mt-1" value={form.email} onChange={set('email')} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancelar</button>
+            <button type="submit" disabled={crearMut.isPending} className="btn-primary text-sm disabled:opacity-50">
+              {crearMut.isPending ? 'Creando...' : 'Crear cliente'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 export default function CotizacionForm() {
   const { id } = useParams()
@@ -25,6 +86,7 @@ export default function CotizacionForm() {
   ])
   const [saving, setSaving]         = useState(false)
   const [loaded, setLoaded]         = useState(false)
+  const [showNuevoCliente, setShowNuevoCliente] = useState(false)
   const queryClient = useQueryClient()
 
   const { data: clientes = [] } = useQuery({
@@ -184,10 +246,16 @@ export default function CotizacionForm() {
           <div className="rmg-card p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Cliente *</label>
-              <select className="rmg-input" value={clienteId} onChange={e => setClienteId(e.target.value)} required>
-                <option value="">Seleccionar cliente...</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.razon_social}</option>)}
-              </select>
+              <div className="flex gap-1.5">
+                <select className="rmg-input flex-1" value={clienteId} onChange={e => setClienteId(e.target.value)} required>
+                  <option value="">Seleccionar cliente...</option>
+                  {clientes.map(c => <option key={c.id} value={c.id}>{c.razon_social}</option>)}
+                </select>
+                <button type="button" onClick={() => setShowNuevoCliente(true)} title="Crear nuevo cliente"
+                  className="btn-secondary px-2.5 flex items-center justify-center">
+                  <UserPlus size={15}/>
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Condición de pago</label>
@@ -364,6 +432,17 @@ export default function CotizacionForm() {
             </button>
           </div>
         </form>
+      )}
+
+      {showNuevoCliente && (
+        <NuevoClienteModal
+          onClose={() => setShowNuevoCliente(false)}
+          onCreated={(nuevoCliente) => {
+            setShowNuevoCliente(false)
+            setClienteId(nuevoCliente.id)
+            queryClient.invalidateQueries({ queryKey: ['clientes'] })
+          }}
+        />
       )}
 
     </div>

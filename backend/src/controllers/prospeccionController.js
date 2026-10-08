@@ -1,4 +1,5 @@
 const { db, uuidv4 } = require('../../config/database')
+const nodemailer = require('nodemailer')
 
 const ETAPAS_VALIDAS  = ['prospecto', 'contacto', 'visita', 'propuesta', 'cliente']
 const ESTADOS_VALIDOS = ['activo', 'descartado']
@@ -293,4 +294,89 @@ const bulkImport = (req, res) => {
   }
 }
 
-module.exports = { list, getStats, cambiarEtapa, descartar, moverAContacto, create, update, bulkImport }
+// GET /api/prospeccion/:id — ficha de un prospecto (2026-10-08, pedido de JC)
+const getOne = (req, res) => {
+  try {
+    const registro = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id)
+    if (!registro) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    res.json(registro)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// GET /api/prospeccion/:id/bitacora — historial de acciones de la ficha
+const getBitacora = (req, res) => {
+  try {
+    const rows = db.prepare(
+      'SELECT * FROM prospecto_bitacora WHERE prospecto_id = ? ORDER BY created_at DESC'
+    ).all(req.params.id)
+    res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// POST /api/prospeccion/:id/bitacora — registrar una acción (llamada, visita,
+// whatsapp, email, nota). El envío real de WhatsApp lo hace el frontend
+// abriendo wa.me — acá solo se deja constancia.
+const addBitacora = (req, res) => {
+  try {
+    const registro = db.prepare('SELECT id FROM pipeline_contactos WHERE id = ?').get(req.params.id)
+    if (!registro) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    const { tipo, descripcion, resultado, proxima_accion, fecha_proxima } = req.body
+    if (!tipo) return res.status(400).json({ error: 'tipo es requerido' })
+    const id = uuidv4()
+    db.prepare(`INSERT INTO prospecto_bitacora
+      (id, prospecto_id, tipo, descripcion, resultado, proxima_accion, fecha_proxima, usuario_id)
+      VALUES (?,?,?,?,?,?,?,?)`
+    ).run(id, req.params.id, tipo, descripcion || null, resultado || null,
+      proxima_accion || null, fecha_proxima || null, req.user?.id || null)
+    res.status(201).json(db.prepare('SELECT * FROM prospecto_bitacora WHERE id = ?').get(id))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// POST /api/prospeccion/:id/enviar-email — envía un correo real al prospecto
+// (mismo patrón SMTP que ocController.enviarEmailOC / chilecompraEmailDigest)
+// y deja la copia en la bitácora como tipo 'email'.
+const enviarEmail = async (req, res) => {
+  try {
+    const registro = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id)
+    if (!registro) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    const { asunto, mensaje, destinatario } = req.body
+    const to = destinatario || registro.email
+    if (!to) return res.status(400).json({ error: 'Este prospecto no tiene email registrado' })
+    if (!mensaje) return res.status(400).json({ error: 'mensaje es requerido' })
+
+    const transporter = nodemailer.createTransport({
+      host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
+      port:   Number(process.env.SMTP_PORT || 587),
+      secure: false,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    })
+
+    await transporter.sendMail({
+      from:    `"RMG Auto Parts" <${process.env.SMTP_USER || 'no-reply@rmgautoparts.cl'}>`,
+      to,
+      subject: asunto || `RMG Auto Parts — ${registro.empresa}`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:700px;white-space:pre-wrap">${mensaje}</div>`,
+    })
+
+    const id = uuidv4()
+    db.prepare(`INSERT INTO prospecto_bitacora
+      (id, prospecto_id, tipo, descripcion, usuario_id)
+      VALUES (?,?,?,?,?)`
+    ).run(id, req.params.id, 'email', `Para: ${to}\nAsunto: ${asunto || ''}\n\n${mensaje}`, req.user?.id || null)
+
+    res.json({ ok: true, bitacora: db.prepare('SELECT * FROM prospecto_bitacora WHERE id = ?').get(id) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+module.exports = {
+  list, getStats, cambiarEtapa, descartar, moverAContacto, create, update, bulkImport,
+  getOne, getBitacora, addBitacora, enviarEmail,
+}

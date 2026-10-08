@@ -99,4 +99,16 @@ router.patch('/:id/descartar',       authenticate, c.descartar)
 // POST  /api/prospeccion/:id/mover-a-contacto — promover al Pipeline CRM
 router.post('/:id/mover-a-contacto', authenticate, c.moverAContacto)
 
+// GET  /api/prospeccion/:id            — ficha de un prospecto
+router.get('/:id',                   authenticate, c.getOne)
+
+// GET  /api/prospeccion/:id/bitacora   — historial de acciones
+router.get('/:id/bitacora',          authenticate, c.getBitacora)
+
+// POST /api/prospeccion/:id/bitacora   — registrar una acción (llamada/visita/whatsapp/email/nota)
+router.post('/:id/bitacora',         authenticate, c.addBitacora)
+
+// POST /api/prospeccion/:id/enviar-email — enviar correo real y dejar constancia en bitácora
+router.post('/:id/enviar-email',     authenticate, c.enviarEmail)
+
 module.exports = router

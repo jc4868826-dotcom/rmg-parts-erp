@@ -32,6 +32,7 @@ import CxPPage          from '@pages/CxPPage'
 import FacturaPage      from '@pages/FacturaPage'
 import PricingTab        from '@components/PricingTab'
 import ProspeccionPage  from '@pages/ProspeccionPage'
+import ProspectoDetalle from '@pages/ProspectoDetalle'
 import ListaPreciosPage from '@pages/ListaPreciosPage'
 import FlujoCajaPage   from '@pages/FlujoCajaPage'
 import AsistenteIAPage from '@pages/AsistenteIAPage'
@@ -110,6 +111,7 @@ export default function App() {
               <Route path="facturas"           element={<FacturaPage />} />
               <Route path="pricing"            element={<PricingTab />} />
               <Route path="prospeccion"       element={<ProspeccionPage />} />
+              <Route path="prospeccion/:id"   element={<ProspectoDetalle />} />
               <Route path="lista-precios"     element={<ListaPreciosPage />} />
               <Route path="flujo-caja"        element={<FlujoCajaPage />} />
               <Route path="asistente"         element={<AsistenteIAPage />} />

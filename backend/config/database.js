@@ -3133,6 +3133,71 @@ function runMigrations() {
       console.error('❌ Migración flujo_v2_pedido_obligatorio_v1 falló:', e.message)
     }
   }
+
+  // Migration: analisis_adjudicacion_v1 (2026-09-28) — Cotizador Manual, registro
+  // del resultado de un proceso (ganado/perdido/desierto) + análisis automático
+  // línea por línea contra la oferta rival (por qué se ganó o perdió), igual
+  // criterio que el análisis manual hecho a mano para Cerrillos
+  // (324-521-COT26). No toca documentos_adjuntos (su CHECK de `entidad` no
+  // incluye oportunidades) — el PDF de la oferta rival, si se sube, se guarda
+  // en su propia columna base64 acá mismo.
+  const mAnalisisAdjudicacion = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('analisis_adjudicacion_v1')
+  if (!mAnalisisAdjudicacion) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS analisis_adjudicacion (
+          id TEXT PRIMARY KEY,
+          oportunidad_id TEXT NOT NULL REFERENCES oportunidades_chilecompra(id) ON DELETE CASCADE,
+          resultado TEXT NOT NULL CHECK(resultado IN ('ganado','perdido','desierto')),
+          competidor_nombre TEXT,
+          competidor_monto_neto INTEGER,
+          competidor_monto_civa INTEGER,
+          competidor_doc_nombre TEXT,
+          competidor_doc_mime TEXT,
+          competidor_doc_base64 TEXT,
+          items_competidor TEXT,
+          analisis TEXT NOT NULL,
+          creado_por TEXT,
+          generado_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_analisis_adjudicacion_oportunidad ON analisis_adjudicacion(oportunidad_id);
+      `)
+      db.prepare("INSERT INTO _migrations (id) VALUES ('analisis_adjudicacion_v1')").run()
+      console.log('✅ Migración analisis_adjudicacion_v1 — tabla analisis_adjudicacion (Cotizador Manual)')
+    } catch (e) {
+      console.error('❌ Migración analisis_adjudicacion_v1 falló:', e.message)
+    }
+  }
+
+  // Migration: prospecto_bitacora_v1 (2026-10-08) — ficha de prospecto, pedido
+  // de JC: pipeline_contactos no tenía dónde registrar acciones (llamadas,
+  // visitas, correos, WhatsApp) mientras el registro es solo un prospecto —
+  // actividades_pipeline existe pero su FK es a clientes(id), no a
+  // pipeline_contactos(id). Tabla propia, mismo shape que actividades_pipeline
+  // para reusar la misma UI de bitácora ya probada en ClienteDetalle.
+  const mProspectoBitacora = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('prospecto_bitacora_v1')
+  if (!mProspectoBitacora) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS prospecto_bitacora (
+          id TEXT PRIMARY KEY,
+          prospecto_id TEXT NOT NULL REFERENCES pipeline_contactos(id) ON DELETE CASCADE,
+          tipo TEXT NOT NULL,
+          descripcion TEXT,
+          resultado TEXT,
+          proxima_accion TEXT,
+          fecha_proxima TEXT,
+          usuario_id TEXT REFERENCES usuarios(id),
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_prospecto_bitacora_prospecto ON prospecto_bitacora(prospecto_id);
+      `)
+      db.prepare("INSERT INTO _migrations (id) VALUES ('prospecto_bitacora_v1')").run()
+      console.log('✅ Migración prospecto_bitacora_v1 — tabla prospecto_bitacora (ficha de prospecto)')
+    } catch (e) {
+      console.error('❌ Migración prospecto_bitacora_v1 falló:', e.message)
+    }
+  }
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

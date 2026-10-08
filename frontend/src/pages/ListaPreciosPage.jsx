@@ -1,7 +1,108 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
-import { Tag, X, Package, Download } from 'lucide-react'
+import { Tag, X, Package, Download, Plus } from 'lucide-react'
+import toast from 'react-hot-toast'
+
+const CAMPOS_VACIOS = {
+  codigo_sku: '', descripcion: '', marca: '', proveedor: '', categoria: '',
+  segmento_negocio: '', presentacion: '', unidades_por_pack: '1',
+  costo_unidad_neto: '', precio_venta_neto: '', stock_actual: '0', stock_minimo: '5',
+}
+
+// Modal "Nuevo producto" — pedido de JC 2026-10-08: no había forma de agregar
+// un SKU suelto a la lista de precios (solo existía /import, que reemplaza
+// TODA la tabla desde un Excel). Este modal crea una sola fila.
+function NuevoProductoModal({ onClose, onCreated }) {
+  const [form, setForm] = useState(CAMPOS_VACIOS)
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  const crearMut = useMutation({
+    mutationFn: () => api.post('/lista-precios', {
+      ...form,
+      unidades_por_pack: Number(form.unidades_por_pack) || 1,
+      costo_unidad_neto: Number(form.costo_unidad_neto) || 0,
+      precio_venta_neto: Number(form.precio_venta_neto) || 0,
+      stock_actual: Number(form.stock_actual) || 0,
+      stock_minimo: Number(form.stock_minimo) || 5,
+    }).then(r => r.data),
+    onSuccess: (data) => {
+      toast.success(`Producto ${data.codigo_sku} creado`)
+      onCreated()
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error al crear el producto'),
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,35,60,0.5)' }}>
+      <div className="rmg-card w-full max-w-lg p-5 space-y-4" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Nuevo producto</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--rmg-muted)' }}><X size={18}/></button>
+        </div>
+        <form onSubmit={e => { e.preventDefault(); crearMut.mutate() }} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Código SKU *</label>
+              <input required className="rmg-input mt-1" value={form.codigo_sku} onChange={set('codigo_sku')} placeholder="Ej: 7000123" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Descripción *</label>
+              <input required className="rmg-input mt-1" value={form.descripcion} onChange={set('descripcion')} placeholder="Ej: AUSTER MAXTECH PRO 5W30 1 LT" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Marca</label>
+              <input className="rmg-input mt-1" value={form.marca} onChange={set('marca')} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Proveedor</label>
+              <input className="rmg-input mt-1" value={form.proveedor} onChange={set('proveedor')} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Categoría</label>
+              <input className="rmg-input mt-1" value={form.categoria} onChange={set('categoria')} placeholder="lubricantes / baterias / neumaticos" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Segmento</label>
+              <input className="rmg-input mt-1" value={form.segmento_negocio} onChange={set('segmento_negocio')} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Presentación</label>
+              <input className="rmg-input mt-1" value={form.presentacion} onChange={set('presentacion')} placeholder="Caja 4x5L" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Unidades por pack</label>
+              <input type="number" min="1" step="1" className="rmg-input mt-1" value={form.unidades_por_pack} onChange={set('unidades_por_pack')} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Costo neto por unidad *</label>
+              <input required type="number" min="0" className="rmg-input mt-1" value={form.costo_unidad_neto} onChange={set('costo_unidad_neto')} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Precio venta neto *</label>
+              <input required type="number" min="0" className="rmg-input mt-1" value={form.precio_venta_neto} onChange={set('precio_venta_neto')} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Stock actual</label>
+              <input type="number" min="0" step="1" className="rmg-input mt-1" value={form.stock_actual} onChange={set('stock_actual')} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Stock mínimo</label>
+              <input type="number" min="0" step="1" className="rmg-input mt-1" value={form.stock_minimo} onChange={set('stock_minimo')} />
+            </div>
+          </div>
+          <p className="text-xs" style={{ color: 'var(--rmg-muted)' }}>* Precios netos, sin IVA — igual que el resto de la lista.</p>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancelar</button>
+            <button type="submit" disabled={crearMut.isPending} className="btn-primary text-sm disabled:opacity-50">
+              {crearMut.isPending ? 'Creando...' : 'Crear producto'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 function formatCLP(v) {
   if (v == null) return '—'
@@ -14,6 +115,8 @@ function formatPct(v) {
 }
 
 export default function ListaPreciosPage() {
+  const qc = useQueryClient()
+  const [showNuevo, setShowNuevo] = useState(false)
   const [tab, setTab] = useState('lista')
   const [busqueda, setBusqueda] = useState('')
   const [filtroProveedor, setFiltroProveedor] = useState('')
@@ -99,12 +202,22 @@ export default function ListaPreciosPage() {
           <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Precios RMG por producto · {filas.length} registros totales</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowNuevo(true)} className="btn-primary flex items-center gap-1.5 text-xs">
+            <Plus size={14}/> Nuevo producto
+          </button>
           <button onClick={descargarExcel} className="btn-secondary flex items-center gap-1.5 text-xs">
             <Download size={14}/> Descargar Excel
           </button>
           <Tag size={18} style={{ color: 'var(--rmg-blue)' }}/>
         </div>
       </div>
+
+      {showNuevo && (
+        <NuevoProductoModal
+          onClose={() => setShowNuevo(false)}
+          onCreated={() => { setShowNuevo(false); qc.invalidateQueries({ queryKey: ['lista-precios'] }) }}
+        />
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b" style={{ borderColor: 'rgba(56,182,255,0.1)' }}>

@@ -1,9 +1,10 @@
 import { useState, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
-import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check, Megaphone } from 'lucide-react'
+import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check, Megaphone, FileText } from 'lucide-react'
 
 // ─── constants ──────────────────────────────────────────────────────────────
 
@@ -328,6 +329,7 @@ function FormularioProspecto({ titulo, datos, setDatos, onSubmit, isPending, onC
 }
 
 export default function ProspeccionPage() {
+  const navigate = useNavigate()
   const [busqueda, setBusqueda]           = useState('')
   const [segmentoFiltro, setSegmentoFiltro] = useState('Todos')
   const [prioridadFiltro, setPrioridadFiltro] = useState('Todas')
@@ -593,7 +595,7 @@ export default function ProspeccionPage() {
                       {p.rut ? `${p.rut}${p.dv ? `-${p.dv}` : ''}` : <span style={{ color: 'rgba(90,143,168,0.35)' }}>—</span>}
                     </td>
                     {/* Razón Social + segmento */}
-                    <td style={{ padding: '11px 12px', minWidth: 160 }}>
+                    <td style={{ padding: '11px 12px', minWidth: 160, cursor: 'pointer' }} onClick={() => navigate(`/prospeccion/${p.id}`)} title="Abrir ficha">
                       <div style={{ fontWeight: 600, fontSize: 13, color: 'rgba(15, 35, 60,0.85)', marginBottom: 4 }}>{p.empresa || '—'}</div>
                       <SegmentoBadge segmento={p.segmento} />
                     </td>
@@ -654,6 +656,12 @@ export default function ProspeccionPage() {
                     {/* Acciones */}
                     <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: 5 }}>
+                        <button title="Ver ficha" onClick={() => navigate(`/prospeccion/${p.id}`)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(45,201,138,0.1)', border: '0.5px solid rgba(45,201,138,0.2)', color: 'var(--rmg-teal)', cursor: 'pointer', transition: 'background 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(45,201,138,0.2)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(45,201,138,0.1)'}>
+                          <FileText size={13} />
+                        </button>
                         <button title="Editar" onClick={() => setEditando({ ...p })}
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(15, 35, 60,0.05)', border: '0.5px solid rgba(15, 35, 60,0.1)', color: 'rgba(15, 35, 60,0.5)', cursor: 'pointer', transition: 'background 0.15s' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.1)'}

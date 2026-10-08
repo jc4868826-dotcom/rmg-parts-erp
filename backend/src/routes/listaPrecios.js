@@ -117,6 +117,87 @@ router.get('/', (_req, res) => {
   }
 })
 
+// POST /api/lista-precios — crear UN producto nuevo a mano (2026-10-08, pedido
+// de JC: no había forma de agregar un SKU suelto sin re-subir todo el Excel
+// vía /import). No toca el resto de la tabla.
+router.post('/', authenticate, requireRole(['gerente', 'administrador']), (req, res) => {
+  try {
+    const {
+      codigo_sku, descripcion, marca, proveedor, categoria, segmento_negocio,
+      producto_generico, presentacion, tipo_envase, unidades_por_pack,
+      costo_unidad_neto, precio_venta_neto, stock_actual, stock_minimo,
+    } = req.body
+
+    const sku = String(codigo_sku || '').trim()
+    if (!sku) return res.status(400).json({ error: 'codigo_sku es requerido' })
+    if (!descripcion) return res.status(400).json({ error: 'descripcion es requerida' })
+
+    const existe = db.prepare('SELECT id FROM lista_precios WHERE codigo_sku = ?').get(sku)
+    if (existe) return res.status(409).json({ error: `El SKU ${sku} ya existe en la lista de precios` })
+
+    const costo  = Number(costo_unidad_neto) || 0
+    const precio = Number(precio_venta_neto) || 0
+    const unids  = Number(unidades_por_pack) || 1
+    const margenClp = Math.round(precio - costo)
+    const margenPct = costo > 0 ? parseFloat(((precio - costo) / costo).toFixed(4)) : 0
+
+    db.prepare(`
+      INSERT INTO lista_precios
+        (codigo_sku, descripcion, producto_generico, marca, proveedor,
+         presentacion, tipo_envase, unidades_por_pack, categoria, segmento_negocio,
+         costo_unidad_neto, precio_venta_neto, costo_compra, precio_venta,
+         costo_neto, precio_neto, costo_pack_neto,
+         margen_clp, margen_pct, stock_actual, stock_minimo)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      sku, descripcion, producto_generico || null, marca || null, proveedor || null,
+      presentacion || null, tipo_envase || null, unids, categoria || null, segmento_negocio || null,
+      costo, precio, costo, precio,
+      costo, precio, costo * unids,
+      margenClp, margenPct, Number(stock_actual) || 0, Number(stock_minimo) || 5,
+    )
+
+    console.log('[lista-precios] producto creado a mano:', sku, 'por', req.user?.email)
+    res.status(201).json(db.prepare('SELECT * FROM lista_precios WHERE codigo_sku = ?').get(sku))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/lista-precios/:codigo_sku — editar un producto existente
+router.put('/:codigo_sku', authenticate, requireRole(['gerente', 'administrador']), (req, res) => {
+  try {
+    const sku = req.params.codigo_sku
+    const actual = db.prepare('SELECT * FROM lista_precios WHERE codigo_sku = ?').get(sku)
+    if (!actual) return res.status(404).json({ error: 'Producto no encontrado' })
+
+    const campos = [
+      'descripcion', 'producto_generico', 'marca', 'proveedor', 'presentacion',
+      'tipo_envase', 'unidades_por_pack', 'categoria', 'segmento_negocio',
+      'costo_unidad_neto', 'precio_venta_neto', 'stock_actual', 'stock_minimo',
+    ]
+    const vals = {}
+    for (const c of campos) if (req.body[c] !== undefined) vals[c] = req.body[c]
+
+    const costo  = vals.costo_unidad_neto  !== undefined ? Number(vals.costo_unidad_neto)  : actual.costo_unidad_neto
+    const precio = vals.precio_venta_neto  !== undefined ? Number(vals.precio_venta_neto)  : actual.precio_venta_neto
+    const unids  = vals.unidades_por_pack  !== undefined ? Number(vals.unidades_por_pack)  : (actual.unidades_por_pack || 1)
+    vals.margen_clp = Math.round(precio - costo)
+    vals.margen_pct = costo > 0 ? parseFloat(((precio - costo) / costo).toFixed(4)) : 0
+    if (vals.costo_unidad_neto  !== undefined) { vals.costo_compra = costo; vals.costo_neto = costo }
+    if (vals.precio_venta_neto  !== undefined) { vals.precio_venta = precio; vals.precio_neto = precio }
+    if (vals.unidades_por_pack  !== undefined) vals.costo_pack_neto = costo * unids
+
+    const fields = Object.keys(vals)
+    if (!fields.length) return res.json(actual)
+    const set = fields.map(f => `${f} = ?`).join(', ')
+    db.prepare(`UPDATE lista_precios SET ${set} WHERE codigo_sku = ?`).run(...fields.map(f => vals[f]), sku)
+    res.json(db.prepare('SELECT * FROM lista_precios WHERE codigo_sku = ?').get(sku))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/lista-precios/import — reemplaza toda la lista preservando stock
 // Body: { items: [{ segmento_negocio, prioridad_consumo, categoria, producto_generico,
 //   proveedor, marca, ranking_compra, codigo_sku, descripcion, presentacion,
