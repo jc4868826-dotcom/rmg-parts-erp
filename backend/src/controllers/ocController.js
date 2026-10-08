@@ -775,8 +775,16 @@ const enviarEmailOC = async (req, res) => {
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     })
 
+    // 2026-10-08 (pedido de JC): el remitente visible y el Reply-To pasan a
+    // ser los del usuario logeado, aunque el envío siga saliendo por la
+    // cuenta SMTP única — así las respuestas del proveedor le llegan a quien
+    // mandó el correo, no a un buzón genérico.
+    const remitenteNombre = req.user?.nombre ? `${req.user.nombre} · RMG Auto Parts` : 'RMG Auto Parts'
+    const replyTo = req.user?.email || undefined
+
     await transporter.sendMail({
-      from:    `"RMG Auto Parts" <${process.env.SMTP_USER || 'no-reply@rmgautoparts.cl'}>`,
+      from:    `"${remitenteNombre}" <${process.env.SMTP_USER || 'no-reply@rmgautoparts.cl'}>`,
+      ...(replyTo ? { replyTo } : {}),
       to:      email_destino,
       subject: `Orden de Compra ${oc.numero} — RMG Auto Parts`,
       html: `<div style="font-family:Arial,sans-serif;max-width:700px">

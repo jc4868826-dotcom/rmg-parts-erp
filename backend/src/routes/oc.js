@@ -12,7 +12,7 @@ router.get('/:id/recepciones',     c.getRecepcionesOC)
 router.post('/:id/recepcion', authenticate, c.registrarRecepcionOC)
 router.post('/:id/factura',   authenticate, c.registrarFactura)
 router.get('/:id/pdf',             c.generarPdfOC)
-router.post('/:id/enviar-email',   c.enviarEmailOC)
+router.post('/:id/enviar-email',   authenticate, c.enviarEmailOC)
 router.get('/:id/impacto-eliminacion', c.getImpactoEliminacion)
 router.delete('/:id',  authenticate, c.deleteOC)
 

@@ -357,8 +357,15 @@ const enviarEmail = async (req, res) => {
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     })
 
+    // 2026-10-08 (pedido de JC): remitente visible y Reply-To = usuario
+    // logeado (mismo patrón que ocController.enviarEmailOC), aunque el envío
+    // siga saliendo por la cuenta SMTP única.
+    const remitenteNombre = req.user?.nombre ? `${req.user.nombre} · RMG Auto Parts` : 'RMG Auto Parts'
+    const replyTo = req.user?.email || undefined
+
     await transporter.sendMail({
-      from:    `"RMG Auto Parts" <${process.env.SMTP_USER || 'no-reply@rmgautoparts.cl'}>`,
+      from:    `"${remitenteNombre}" <${process.env.SMTP_USER || 'no-reply@rmgautoparts.cl'}>`,
+      ...(replyTo ? { replyTo } : {}),
       to,
       subject: asunto || `RMG Auto Parts — ${registro.empresa}`,
       html: `<div style="font-family:Arial,sans-serif;max-width:700px;white-space:pre-wrap">${mensaje}</div>`,
