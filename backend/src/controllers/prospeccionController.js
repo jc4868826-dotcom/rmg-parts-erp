@@ -1,10 +1,15 @@
 const { db, uuidv4 } = require('../../config/database')
-const nodemailer = require('nodemailer')
+const correoUsuario = require('../services/correoUsuario')
 
 // 2026-10-08 (pedido de JC): 'prospectado' = correo inicial ya enviado, a la
 // espera de seguimiento por WhatsApp/llamada; 'contactado_sin_exito' = se
 // hizo seguimiento pero todavía no hay interés/cierre.
-const ETAPAS_VALIDAS  = ['prospecto', 'prospectado', 'contactado_sin_exito', 'contacto', 'visita', 'propuesta', 'cliente']
+//
+// 2026-10-09 (pedido de JC): 'contactado' = ya se habló con la empresa. Es un
+// estado de seguimiento, NO una conversión: a diferencia de 'contacto', no
+// crea ficha en `clientes`. Su único propósito es sacar el registro de la base
+// bruta ('prospecto') para que la lista de trabajo deje de mostrarlo.
+const ETAPAS_VALIDAS  = ['prospecto', 'prospectado', 'contactado', 'contactado_sin_exito', 'contacto', 'visita', 'propuesta', 'cliente']
 const ESTADOS_VALIDOS = ['activo', 'descartado']
 
 // Mapea segmentos de pipeline_contactos al CHECK constraint de clientes
@@ -135,6 +140,49 @@ const descartar = (req, res) => {
       SET estado = 'descartado', fecha_ultima_actualizacion = datetime('now')
       WHERE id = ?
     `).run(req.params.id)
+
+    res.json(db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// PATCH /api/prospeccion/:id/contactado
+// Marca el prospecto como contactado y deja constancia en la bitácora.
+//
+// 2026-10-09 (pedido de JC). Deliberadamente NO toca la tabla `clientes`: esto
+// no es una conversión, es sacar el registro de la base bruta para trabajarlo
+// en seguimiento. La diferencia con `moverAContacto` es justamente esa.
+//
+// La bitácora se escribe acá y no desde el frontend para que el registro
+// exista aunque el botón se apriete desde otra pantalla o desde la API: si el
+// seguimiento depende de que alguien además anote la acción, se pierde.
+const marcarContactado = (req, res) => {
+  try {
+    const registro = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id)
+    if (!registro) return res.status(404).json({ error: 'Prospecto no encontrado' })
+
+    const { via, nota } = req.body || {}
+    const VIAS = ['llamada', 'whatsapp', 'email', 'visita', 'otro']
+    const canal = VIAS.includes(via) ? via : 'otro'
+
+    const ejecutar = db.transaction(() => {
+      db.prepare(`
+        UPDATE pipeline_contactos
+        SET etapa = 'contactado', fecha_ultima_actualizacion = datetime('now')
+        WHERE id = ?
+      `).run(registro.id)
+
+      db.prepare(`INSERT INTO prospecto_bitacora
+        (id, prospecto_id, tipo, descripcion, resultado, usuario_id)
+        VALUES (?,?,?,?,?,?)`
+      ).run(
+        uuidv4(), registro.id, canal === 'otro' ? 'nota' : canal,
+        nota || `Marcado como contactado (${canal})`,
+        'contactado', req.user?.id || null,
+      )
+    })
+    ejecutar()
 
     res.json(db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id))
   } catch (err) {
@@ -353,22 +401,17 @@ const enviarEmail = async (req, res) => {
     if (!to) return res.status(400).json({ error: 'Este prospecto no tiene email registrado' })
     if (!mensaje) return res.status(400).json({ error: 'mensaje es requerido' })
 
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      return res.status(500).json({ error: 'El servidor de correo no está configurado (faltan SMTP_USER / SMTP_PASS)' })
+    // 2026-10-09 (pedido de JC): el correo sale desde la casilla @rmgautos.cl
+    // del usuario conectado cuando la tiene configurada en su perfil. Si no,
+    // cae a la cuenta compartida con Reply-To, que es el comportamiento
+    // anterior — se degrada, no se rompe.
+    const remitente = correoUsuario.remitenteDe(req.user)
+    if (!remitente) {
+      return res.status(500).json({
+        error: 'No hay forma de enviar correo: configura tu casilla en Configuración → Mi correo, '
+             + 'o define SMTP_USER / SMTP_PASS en el servidor.',
+      })
     }
-
-    const transporter = nodemailer.createTransport({
-      host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
-      port:   Number(process.env.SMTP_PORT || 587),
-      secure: false,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    })
-
-    // 2026-10-08 (pedido de JC): remitente visible y Reply-To = usuario
-    // logeado (mismo patrón que ocController.enviarEmailOC), aunque el envío
-    // siga saliendo por la cuenta SMTP única.
-    const remitenteNombre = req.user?.nombre ? `${req.user.nombre} · RMG Auto Parts` : 'RMG Auto Parts'
-    const replyTo = req.user?.email || undefined
 
     // 2026-10-08 (pedido de JC): adjunto opcional (ej. dossier PDF) — llega
     // como { nombre, mime, base64 } desde el frontend.
@@ -376,21 +419,32 @@ const enviarEmail = async (req, res) => {
       ? [{ filename: adjunto.nombre, content: Buffer.from(adjunto.base64, 'base64'), contentType: adjunto.mime || undefined }]
       : []
 
-    await transporter.sendMail({
-      from:    `"${remitenteNombre}" <${process.env.SMTP_USER || 'no-reply@rmgautoparts.cl'}>`,
-      ...(replyTo ? { replyTo } : {}),
-      to,
-      subject: asunto || `RMG Auto Parts — ${registro.empresa}`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:700px;white-space:pre-wrap">${mensaje}</div>`,
-      attachments,
-    })
+    try {
+      await remitente.transporter.sendMail({
+        from:    remitente.from,
+        ...(remitente.replyTo ? { replyTo: remitente.replyTo } : {}),
+        to,
+        subject: asunto || `RMG Auto Parts — ${registro.empresa}`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:700px;white-space:pre-wrap">${mensaje}</div>`,
+        attachments,
+      })
+    } catch (e) {
+      // El error de SMTP se devuelve tal cual: "535 authentication failed" le
+      // dice al vendedor que su clave cambió, cosa que un mensaje genérico no.
+      return res.status(502).json({
+        error: remitente.propio
+          ? `Tu casilla ${remitente.direccion} rechazó el envío: ${e.message}`
+          : `El servidor de correo rechazó el envío: ${e.message}`,
+      })
+    }
 
     const id = uuidv4()
     const detalleAdjunto = attachments.length ? `\n[Adjunto: ${adjunto.nombre}]` : ''
+    const detalleRemitente = `De: ${remitente.direccion}\n`
     db.prepare(`INSERT INTO prospecto_bitacora
       (id, prospecto_id, tipo, descripcion, usuario_id)
       VALUES (?,?,?,?,?)`
-    ).run(id, req.params.id, 'email', `Para: ${to}\nAsunto: ${asunto || ''}\n\n${mensaje}${detalleAdjunto}`, req.user?.id || null)
+    ).run(id, req.params.id, 'email', `${detalleRemitente}Para: ${to}\nAsunto: ${asunto || ''}\n\n${mensaje}${detalleAdjunto}`, req.user?.id || null)
 
     // 2026-10-08 (pedido de JC): al mandar el correo, el prospecto pasa a
     // 'prospectado' para seguir luego con WhatsApp/llamada — solo si todavía
@@ -401,6 +455,8 @@ const enviarEmail = async (req, res) => {
 
     res.json({
       ok: true,
+      enviado_desde: remitente.direccion,
+      casilla_propia: remitente.propio,
       bitacora: db.prepare('SELECT * FROM prospecto_bitacora WHERE id = ?').get(id),
       prospecto: db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(req.params.id),
     })
@@ -423,6 +479,7 @@ const remove = (req, res) => {
 }
 
 module.exports = {
-  list, getStats, cambiarEtapa, descartar, moverAContacto, create, update, bulkImport,
+  list, getStats, cambiarEtapa, descartar, marcarContactado, moverAContacto,
+  create, update, bulkImport,
   getOne, getBitacora, addBitacora, enviarEmail, remove,
 }

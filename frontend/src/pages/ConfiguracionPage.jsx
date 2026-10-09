@@ -4,9 +4,10 @@ import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
 import {
   Building2, Users, Plug, Check, Plus, X,
-  Shield, Eye, EyeOff, SlidersHorizontal, ChevronLeft, ChevronRight, KeyRound
+  Shield, Eye, EyeOff, SlidersHorizontal, ChevronLeft, ChevronRight, KeyRound, Mail
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import MiCorreoPanel from '@components/MiCorreoPanel'
 
 // ─── Datos estáticos ─────────────────────────────────────
 const INTEGRACIONES = [
@@ -216,6 +217,9 @@ export default function ConfiguracionPage() {
     { k: 'usuarios',   l: 'Usuarios y Roles',   Icon: Users            },
     { k: 'parametros', l: 'Parámetros negocio', Icon: SlidersHorizontal },
     { k: 'integraciones', l: 'Integraciones',   Icon: Plug             },
+    // 2026-10-09 (pedido de JC): cada usuario configura su casilla @rmgautos.cl
+    // para que los correos a prospectos salgan desde su dirección.
+    { k: 'micorreo',   l: 'Mi correo',          Icon: Mail             },
   ]
 
   return (
@@ -223,7 +227,7 @@ export default function ConfiguracionPage() {
 
       <div>
         <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Configuración</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Empresa · Usuarios · Parámetros · Integraciones</p>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Empresa · Usuarios · Parámetros · Integraciones · Mi correo</p>
       </div>
 
       {/* ── Tabs ──────────────────────────────────────────── */}
@@ -239,6 +243,9 @@ export default function ConfiguracionPage() {
           </button>
         ))}
       </div>
+
+      {/* ══ MI CORREO ═════════════════════════════════════════ */}
+      {tab === 'micorreo' && <MiCorreoPanel />}
 
       {/* ══ EMPRESA ═══════════════════════════════════════════ */}
       {tab === 'empresa' && (

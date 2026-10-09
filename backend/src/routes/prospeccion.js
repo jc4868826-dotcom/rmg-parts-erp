@@ -96,6 +96,10 @@ router.patch('/:id/etapa',           authenticate, c.cambiarEtapa)
 // PATCH /api/prospeccion/:id/descartar — marcar como descartado
 router.patch('/:id/descartar',       authenticate, c.descartar)
 
+// PATCH /api/prospeccion/:id/contactado — sale de la base bruta a seguimiento.
+// No crea cliente: eso lo hace /mover-a-contacto.
+router.patch('/:id/contactado',      authenticate, c.marcarContactado)
+
 // POST  /api/prospeccion/:id/mover-a-contacto — promover al Pipeline CRM
 router.post('/:id/mover-a-contacto', authenticate, c.moverAContacto)
 

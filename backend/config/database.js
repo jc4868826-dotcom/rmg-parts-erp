@@ -3198,6 +3198,29 @@ function runMigrations() {
       console.error('❌ Migración prospecto_bitacora_v1 falló:', e.message)
     }
   }
+
+  // Migración: usuario_smtp_v1 — casilla de correo propia por usuario
+  // 2026-10-09 (pedido de JC): los correos a prospectos deben salir desde la
+  // dirección @rmgautos.cl del vendedor conectado, no desde una cuenta común.
+  // La clave se guarda cifrada (ver services/correoUsuario.js); acá solo se
+  // crean las columnas. ALTER TABLE en SQLite no acepta IF NOT EXISTS, por eso
+  // se consulta PRAGMA antes de cada una.
+  const mSmtp = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('usuario_smtp_v1')
+  if (!mSmtp) {
+    try {
+      const colsU = db.prepare('PRAGMA table_info(usuarios)').all().map(c => c.name)
+      if (!colsU.includes('smtp_email'))        db.exec('ALTER TABLE usuarios ADD COLUMN smtp_email TEXT')
+      if (!colsU.includes('smtp_pass_enc'))     db.exec('ALTER TABLE usuarios ADD COLUMN smtp_pass_enc TEXT')
+      if (!colsU.includes('smtp_host'))         db.exec('ALTER TABLE usuarios ADD COLUMN smtp_host TEXT')
+      if (!colsU.includes('smtp_port'))         db.exec('ALTER TABLE usuarios ADD COLUMN smtp_port INTEGER')
+      if (!colsU.includes('smtp_verificado_at')) db.exec('ALTER TABLE usuarios ADD COLUMN smtp_verificado_at TEXT')
+      db.prepare("INSERT INTO _migrations (id) VALUES ('usuario_smtp_v1')").run()
+      console.log('✅ Migración usuario_smtp_v1 — casilla de correo propia por usuario')
+    } catch (e) {
+      console.error('❌ Migración usuario_smtp_v1 falló:', e.message)
+    }
+  }
+
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

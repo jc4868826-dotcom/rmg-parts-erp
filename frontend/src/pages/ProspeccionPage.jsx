@@ -4,15 +4,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
-import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check, Megaphone, FileText, XCircle } from 'lucide-react'
+import { UserCheck, Trash2, MessageCircle, Search, Upload, Download, Plus, Pencil, X, Check, Megaphone, FileText, XCircle, PhoneCall } from 'lucide-react'
 
 // 2026-10-08 (pedido de JC): pestañas de etapa — "prospecto" es la lista de
 // siempre (default del backend); "prospectado" = ya se envió correo inicial,
 // a la espera de WhatsApp/llamada; "contactado_sin_exito" = seguimiento
 // hecho pero sin interés todavía.
+// 2026-10-09 (pedido de JC): "contactado" = ya se habló con la empresa. Sale
+// de la base bruta para trabajarse en seguimiento, pero NO es un cliente: eso
+// sigue siendo "Mover a Contacto", que es el que crea la ficha en Clientes.
 const ETAPA_TABS = [
   { v: 'prospecto', l: 'Prospectos' },
   { v: 'prospectado', l: 'Prospectados' },
+  { v: 'contactado', l: 'Contactados' },
   { v: 'contactado_sin_exito', l: 'Sin éxito' },
 ]
 
@@ -459,6 +463,21 @@ export default function ProspeccionPage() {
     }
   }
 
+  const handleContactado = async (id, empresa) => {
+    const via = (prompt(
+      `¿Por dónde contactaste a "${empresa}"?\n\nEscribe: llamada, whatsapp, email, visita u otro`,
+      'llamada',
+    ) || '').trim().toLowerCase()
+    if (!via) return   // canceló
+    try {
+      await api.patch(`/prospeccion/${id}/contactado`, { via })
+      toast.success('Marcado como contactado — queda en seguimiento')
+      invalidate()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error al marcar como contactado')
+    }
+  }
+
   const handleDescartar = async (id, empresa) => {
     if (!confirm(`¿Descartar "${empresa}"?`)) return
     try {
@@ -705,7 +724,13 @@ export default function ProspeccionPage() {
                           onMouseLeave={e => e.currentTarget.style.background = 'rgba(15, 35, 60,0.05)'}>
                           <Pencil size={13} />
                         </button>
-                        <button title="Mover a Contacto" onClick={() => handleMoverAContacto(p.id)}
+                        <button title="Marcar como contactado (sale de la base bruta, no crea cliente)" onClick={() => handleContactado(p.id, p.empresa)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(244,162,60,0.12)', border: '0.5px solid rgba(244,162,60,0.25)', color: '#f4a23c', cursor: 'pointer', transition: 'background 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(244,162,60,0.22)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(244,162,60,0.12)'}>
+                          <PhoneCall size={13} />
+                        </button>
+                        <button title="Mover a Contacto (crea ficha de cliente)" onClick={() => handleMoverAContacto(p.id)}
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, background: 'rgba(27,143,212,0.12)', border: '0.5px solid rgba(27,143,212,0.25)', color: 'var(--rmg-blue)', cursor: 'pointer', transition: 'background 0.15s' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(27,143,212,0.22)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'rgba(27,143,212,0.12)'}>

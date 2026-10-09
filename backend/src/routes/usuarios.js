@@ -9,6 +9,14 @@ const { authenticate, requireRole } = require('../middleware/auth')
 
 const gestionUsuarios = [authenticate, requireRole(['gerente', 'administrador', 'facturador'])]
 
+// Casilla de correo del propio usuario. Va ANTES de '/:id' para que Express no
+// capture "me" como un id, y solo exige estar autenticado: cada quien
+// configura la suya, incluidos los vendedores.
+router.get('/me/correo',          authenticate, c.getMiCorreo)
+router.put('/me/correo',          authenticate, c.setMiCorreo)
+router.delete('/me/correo',       authenticate, c.borrarMiCorreo)
+router.post('/me/correo/probar',  authenticate, c.probarMiCorreo)
+
 router.get('/',      ...gestionUsuarios, c.getAll)
 router.get('/:id',   ...gestionUsuarios, c.getOne)
 
