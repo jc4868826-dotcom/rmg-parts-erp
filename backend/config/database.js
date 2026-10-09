@@ -3221,6 +3221,70 @@ function runMigrations() {
     }
   }
 
+
+  // Migración: pipeline_etapas_v3 — quitar el CHECK de `etapa`
+  //
+  // 2026-10-09. La tabla nació con CHECK(etapa IN ('prospecto','contacto',
+  // 'visita','propuesta','cliente')). Cada etapa nueva —'prospectado',
+  // 'contactado_sin_exito', 'contactado'— la rechazaba con "CHECK constraint
+  // failed", y el error aparecía recién al usar la función, no al agregarla.
+  // SQLite no permite alterar un CHECK: hay que reconstruir la tabla.
+  //
+  // Se saca el CHECK de `etapa` en vez de ampliarlo: el catálogo de etapas
+  // cambia seguido y `prospeccionController.ETAPAS_VALIDAS` ya lo valida
+  // devolviendo un 400 legible. Un CHECK que hay que migrar cada vez es una
+  // trampa, no una protección. Los CHECK de `prioridad` y `estado` sí se
+  // reponen: esos no han cambiado nunca.
+  //
+  // Ojo con `prospecto_bitacora`: tiene FK ON DELETE CASCADE hacia esta tabla,
+  // así que el DROP se la lleva por delante. `PRAGMA foreign_keys=OFF` no
+  // basta —no surte efecto dentro de una transacción— por eso la bitácora se
+  // respalda y se repone explícitamente. Verificado: sin ese respaldo, la
+  // prueba perdió las 5 filas de bitácora.
+  const mEtapas = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('pipeline_etapas_v3')
+  if (!mEtapas) {
+    try {
+      const colsPC = db.prepare('PRAGMA table_info(pipeline_contactos)').all()
+      if (!colsPC.length) throw new Error('pipeline_contactos no existe todavía')
+
+      const defs = colsPC.map(col => {
+        let d = `${col.name} ${col.type || 'TEXT'}`
+        if (col.pk)      d += ' PRIMARY KEY'
+        if (col.notnull) d += ' NOT NULL'
+        // El DEFAULT va entre paréntesis siempre: PRAGMA devuelve la expresión
+        // cruda y `DEFAULT datetime('now')` sin paréntesis es inválido.
+        if (col.dflt_value !== null && col.dflt_value !== undefined) d += ` DEFAULT (${col.dflt_value})`
+        if (col.name === 'prioridad') d += " CHECK(prioridad IN ('alta','media','baja'))"
+        if (col.name === 'estado')    d += " CHECK(estado IN ('activo','descartado'))"
+        return d
+      }).join(',\n          ')
+      const nombres = colsPC.map(c => c.name).join(', ')
+
+      db.pragma('foreign_keys = OFF')
+      db.exec(`
+        CREATE TEMP TABLE _bitacora_bk AS SELECT * FROM prospecto_bitacora;
+        CREATE TABLE pipeline_contactos_new (
+          ${defs}
+        );
+        INSERT INTO pipeline_contactos_new (${nombres}) SELECT ${nombres} FROM pipeline_contactos;
+        DROP TABLE pipeline_contactos;
+        ALTER TABLE pipeline_contactos_new RENAME TO pipeline_contactos;
+        INSERT OR IGNORE INTO prospecto_bitacora SELECT * FROM _bitacora_bk;
+        DROP TABLE _bitacora_bk;
+        CREATE INDEX IF NOT EXISTS idx_pc_etapa ON pipeline_contactos(etapa);
+        CREATE INDEX IF NOT EXISTS idx_pc_segmento ON pipeline_contactos(segmento);
+        CREATE INDEX IF NOT EXISTS idx_pc_estado ON pipeline_contactos(estado);
+      `)
+      db.pragma('foreign_keys = ON')
+
+      db.prepare("INSERT INTO _migrations (id) VALUES ('pipeline_etapas_v3')").run()
+      console.log('✅ Migración pipeline_etapas_v3 — CHECK de etapa removido, bitácora preservada')
+    } catch (e) {
+      try { db.pragma('foreign_keys = ON') } catch (_) {}
+      console.error('❌ Migración pipeline_etapas_v3 falló:', e.message)
+    }
+  }
+
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
