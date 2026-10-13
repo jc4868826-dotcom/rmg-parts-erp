@@ -3285,6 +3285,88 @@ function runMigrations() {
     }
   }
 
+  // Migración: email_plantillas_v1 (2026-10-13, pedido de JC) — plantillas de
+  // correo para prospección, editables desde Configuración → Plantillas de
+  // correo, y seleccionables al enviar correo desde la ficha del prospecto.
+  // Se seedean 3 plantillas por segmento (industrias/fábricas, construcción,
+  // agrícola) con copy de neuromarketing; JC las puede editar o agregar más.
+  const mPlantillas = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('email_plantillas_v1')
+  if (!mPlantillas) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS email_plantillas (
+          id TEXT PRIMARY KEY,
+          nombre TEXT NOT NULL,
+          segmento TEXT,
+          asunto TEXT NOT NULL,
+          cuerpo TEXT NOT NULL,
+          activa INTEGER DEFAULT 1,
+          usuario_id TEXT REFERENCES usuarios(id),
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `)
+
+      const insert = db.prepare(`
+        INSERT INTO email_plantillas (id, nombre, segmento, asunto, cuerpo)
+        VALUES (?,?,?,?,?)
+      `)
+
+      insert.run(
+        uuidv4(),
+        'Industrias y fábricas',
+        'Industria',
+        'RMG Auto Parts — Lubricación que no para su línea',
+        `Hola {{contacto}},
+
+Una falla por lubricación mal elegida no avisa: para cuando se nota, ya paró una línea o un equipo quedó fuera de ruta. En {{empresa}} eso se traduce directo en horas de producción y plazos comprometidos.
+
+Somos RMG Auto Parts — trabajamos lubricantes industriales, baterías y neumáticos con respaldo técnico real (no solo despacho), para que ese tipo de parada deje de ser una sorpresa.
+
+Le adjunto un dossier breve con lo que ofrecemos y cómo trabajamos con industria y manufactura. Si calza con lo que necesitan hoy, conversamos 15 minutos esta semana.
+
+Saludos,`
+      )
+
+      insert.run(
+        uuidv4(),
+        'Construcción',
+        'Construcción',
+        'RMG Auto Parts — Que un equipo parado no le cueste la obra',
+        `Hola {{contacto}},
+
+Un camión o una excavadora fuera de servicio en plena obra no es un detalle menor: son días de atraso, arriendo de reemplazo y, muchas veces, multas por plazo. Gran parte de esas paradas parte en algo evitable: lubricación, batería o neumático mal elegido para la exigencia del terreno.
+
+En RMG Auto Parts trabajamos lubricantes, baterías y neumáticos para maquinaria pesada y flota, con despacho directo a faena y respaldo técnico — no solo vendemos, ayudamos a elegir lo correcto para cada equipo.
+
+Le adjunto un dossier breve con el detalle. Si tiene sentido para {{empresa}}, conversamos 15 minutos esta semana.
+
+Saludos,`
+      )
+
+      insert.run(
+        uuidv4(),
+        'Agrícola',
+        'Agrícola',
+        'RMG Auto Parts — Su maquinaria lista para la ventana de cosecha',
+        `Hola {{contacto}},
+
+La ventana de cosecha es corta y no da segundas oportunidades: un tractor o una cosechadora detenida en plena faena por una falla evitable le puede costar la temporada completa a {{empresa}}.
+
+En RMG Auto Parts trabajamos lubricantes, baterías y neumáticos para maquinaria agrícola, con stock disponible y despacho a predio, para que la máquina esté lista cuando la necesita y no un día después.
+
+Le adjunto un dossier breve con cómo trabajamos. Si le hace sentido, conversamos 15 minutos esta semana.
+
+Saludos,`
+      )
+
+      db.prepare("INSERT INTO _migrations (id) VALUES ('email_plantillas_v1')").run()
+      console.log('✅ Migración email_plantillas_v1 — tabla email_plantillas + 3 plantillas seed')
+    } catch (e) {
+      console.error('❌ Migración email_plantillas_v1 falló:', e.message)
+    }
+  }
+
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

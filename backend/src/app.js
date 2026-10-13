@@ -115,6 +115,7 @@ app.use('/api/usuarios',            require('./routes/usuarios'));    // Usuario
 // app.use('/api/chilecompra',      require('./routes/chilecompra')); // Asistente de oportunidades ChileCompra
 // 2026-09-22 — Compra Ágil, Evaluador, Cotizador y Cotizador Manual retirados (rutas, crons y datos: purga_compra_agil_v1).
 app.use('/api/utilitarios',         require('./routes/utilitarios')); // Librería de fichas técnicas (scrape Vistony)
+app.use('/api/plantillas-email',    require('./routes/plantillasEmail')); // Plantillas de correo para prospección
 
 // ─── Health check ───────────────────────────────────────────
 app.get('/health', (req, res) => {

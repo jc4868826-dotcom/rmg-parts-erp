@@ -6,7 +6,7 @@ import { formatFecha } from '@utils/format'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Phone, Mail, MapPin, MessageCircle, UserCheck,
-  Plus, X, Send, Paperclip, ThumbsDown, Trash2,
+  Plus, X, Send, Paperclip, ThumbsDown, Trash2, FileText,
 } from 'lucide-react'
 
 // Mismo helper de wa.me que la lista de Prospección — número chileno a 9
@@ -38,11 +38,11 @@ const ETAPA_LABEL = {
   cliente: 'Cliente',
 }
 
-// Plantilla de correo inicial — copy breve orientado a neuromarketing:
-// nombra el dolor (paradas no programadas / costo de mantención), presenta a
-// RMG como la solución puntual, y cierra con una invitación concreta a abrir
-// el dossier adjunto (curiosidad + bajo compromiso).
-function plantillaInicial(prospecto) {
+// Plantilla de respaldo si todavía no hay ninguna cargada desde Configuración
+// → Plantillas de correo (ej. recién migrada la base, sin internet la
+// primera vez). Copy breve de neuromarketing: dolor → solución RMG → abrir
+// el dossier adjunto.
+function plantillaRespaldo(prospecto) {
   const empresa = prospecto.empresa || 'su empresa'
   const contacto = prospecto.nombre_contacto ? prospecto.nombre_contacto.split(' ')[0] : ''
   return `${contacto ? `Hola ${contacto},` : 'Hola,'}
@@ -56,14 +56,45 @@ Le adjunto un dossier breve con lo que ofrecemos y cómo trabajamos con flotas e
 Saludos,`
 }
 
-// Modal "Enviar correo" — envía de verdad (SMTP vía backend), permite
-// adjuntar un archivo (ej. dossier PDF) y queda en bitácora. Al enviar, el
-// prospecto pasa a etapa 'prospectado' (lo hace el backend).
+// Reemplaza {{empresa}} / {{contacto}} en el texto de una plantilla.
+function aplicarPlaceholders(texto, prospecto) {
+  const empresa = prospecto.empresa || 'su empresa'
+  const contacto = prospecto.nombre_contacto ? prospecto.nombre_contacto.split(' ')[0] : ''
+  return (texto || '').replaceAll('{{empresa}}', empresa).replaceAll('{{contacto}}', contacto || '')
+}
+
+// Modal "Enviar correo" — envía de verdad (SMTP vía backend), permite elegir
+// una plantilla (ver Configuración → Plantillas de correo), adjuntar un
+// archivo (ej. dossier PDF) y queda en bitácora. Al enviar, el prospecto
+// pasa a etapa 'prospectado' (lo hace el backend).
 function EnviarEmailModal({ prospecto, onClose, onSent }) {
-  const [asunto, setAsunto] = useState(`RMG Auto Parts — Lubricación industrial para ${prospecto.empresa}`)
-  const [mensaje, setMensaje] = useState(() => plantillaInicial(prospecto))
+  const { data: plantillas = [] } = useQuery({
+    queryKey: ['plantillas-email'],
+    queryFn: () => api.get('/plantillas-email').then(r => r.data),
+  })
+
+  // Preselecciona la plantilla cuyo segmento calza con el del prospecto, si
+  // hay una — si no, la primera de la lista.
+  const plantillaSugerida = plantillas.find(p => p.segmento && p.segmento === prospecto.segmento) || plantillas[0] || null
+
+  const [plantillaId, setPlantillaId] = useState(plantillaSugerida?.id || '')
+  const [asunto, setAsunto] = useState(() =>
+    plantillaSugerida ? plantillaSugerida.asunto : `RMG Auto Parts — Lubricación industrial para ${prospecto.empresa}`
+  )
+  const [mensaje, setMensaje] = useState(() =>
+    plantillaSugerida ? aplicarPlaceholders(plantillaSugerida.cuerpo, prospecto) : plantillaRespaldo(prospecto)
+  )
   const [adjunto, setAdjunto] = useState(null) // { nombre, mime, base64 }
   const [cargandoArchivo, setCargandoArchivo] = useState(false)
+
+  const handlePlantilla = (id) => {
+    setPlantillaId(id)
+    const p = plantillas.find(pl => pl.id === id)
+    if (p) {
+      setAsunto(p.asunto)
+      setMensaje(aplicarPlaceholders(p.cuerpo, prospecto))
+    }
+  }
 
   const handleArchivo = (e) => {
     const file = e.target.files[0]
@@ -98,6 +129,19 @@ function EnviarEmailModal({ prospecto, onClose, onSent }) {
             <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Para</label>
             <input disabled className="rmg-input mt-1" value={prospecto.email || ''} />
           </div>
+          {plantillas.length > 0 && (
+            <div>
+              <label className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--rmg-muted)' }}>
+                <FileText size={12}/> Plantilla
+              </label>
+              <select className="rmg-input mt-1" value={plantillaId} onChange={e => handlePlantilla(e.target.value)}>
+                {!plantillaId && <option value="">— Elegir plantilla —</option>}
+                {plantillas.map(p => (
+                  <option key={p.id} value={p.id}>{p.nombre}{p.segmento ? ` (${p.segmento})` : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Asunto</label>
             <input className="rmg-input mt-1" value={asunto} onChange={e => setAsunto(e.target.value)} />
@@ -105,7 +149,7 @@ function EnviarEmailModal({ prospecto, onClose, onSent }) {
           <div>
             <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Mensaje</label>
             <textarea required rows={10} className="rmg-input mt-1" value={mensaje} onChange={e => setMensaje(e.target.value)} />
-            <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>Plantilla precargada — edítala antes de enviar si lo necesitas.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--rmg-muted)' }}>Editable antes de enviar. Las plantillas se administran en Configuración → Plantillas de correo.</p>
           </div>
           <div>
             <label className="text-xs font-semibold" style={{ color: 'var(--rmg-muted)' }}>Adjunto (dossier, PDF, etc.)</label>

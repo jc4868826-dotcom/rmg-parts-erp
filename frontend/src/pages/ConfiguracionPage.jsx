@@ -4,10 +4,11 @@ import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
 import {
   Building2, Users, Plug, Check, Plus, X,
-  Shield, Eye, EyeOff, SlidersHorizontal, ChevronLeft, ChevronRight, KeyRound, Mail
+  Shield, Eye, EyeOff, SlidersHorizontal, ChevronLeft, ChevronRight, KeyRound, Mail, FileText
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import MiCorreoPanel from '@components/MiCorreoPanel'
+import PlantillasEmailPanel from '@components/PlantillasEmailPanel'
 
 // ─── Datos estáticos ─────────────────────────────────────
 const INTEGRACIONES = [
@@ -220,6 +221,10 @@ export default function ConfiguracionPage() {
     // 2026-10-09 (pedido de JC): cada usuario configura su casilla @rmgautos.cl
     // para que los correos a prospectos salgan desde su dirección.
     { k: 'micorreo',   l: 'Mi correo',          Icon: Mail             },
+    // 2026-10-13 (pedido de JC): plantillas de correo para prospección
+    // (industrias/fábricas, construcción, agrícola), editables acá y
+    // seleccionables al enviar correo desde la ficha del prospecto.
+    { k: 'plantillas', l: 'Plantillas de correo', Icon: FileText       },
   ]
 
   return (
@@ -227,7 +232,7 @@ export default function ConfiguracionPage() {
 
       <div>
         <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Configuración</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Empresa · Usuarios · Parámetros · Integraciones · Mi correo</p>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Empresa · Usuarios · Parámetros · Integraciones · Mi correo · Plantillas</p>
       </div>
 
       {/* ── Tabs ──────────────────────────────────────────── */}
@@ -246,6 +251,9 @@ export default function ConfiguracionPage() {
 
       {/* ══ MI CORREO ═════════════════════════════════════════ */}
       {tab === 'micorreo' && <MiCorreoPanel />}
+
+      {/* ══ PLANTILLAS DE CORREO ══════════════════════════════ */}
+      {tab === 'plantillas' && <PlantillasEmailPanel />}
 
       {/* ══ EMPRESA ═══════════════════════════════════════════ */}
       {tab === 'empresa' && (
