@@ -89,6 +89,14 @@ function _transporter({ host, port, email, pass }) {
     port,
     secure: Number(port) === 465,
     auth: { user: email, pass },
+    // 2026-10-13 (pedido de JC, caso Abril): sin esto, un servidor que no
+    // responde (firewall bloqueando la IP de Render, por ejemplo) deja la
+    // conexión colgada por minutos y el usuario solo ve "no se pudo conectar"
+    // sin saber si fue timeout, IP bloqueada o clave mala. Con el timeout, el
+    // error trae el código (ETIMEDOUT/ECONNREFUSED/etc.) en vez de nada.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
   })
 }
 
@@ -131,14 +139,21 @@ function remitenteDe(usuario) {
 
 /** Prueba la conexión y el login sin mandar ningún correo. */
 async function probar({ email, pass, host, port }) {
-  const t = _transporter({
-    email,
-    pass,
-    host: host || HOST_DEFECTO,
-    port: Number(port || PUERTO_DEFECTO),
-  })
-  await t.verify()
-  return true
+  const h = host || HOST_DEFECTO
+  const p = Number(port || PUERTO_DEFECTO)
+  const t = _transporter({ email, pass, host: h, port: p })
+  try {
+    await t.verify()
+    return true
+  } catch (e) {
+    // 2026-10-13 (caso Abril): "no se pudo conectar" a secas no dice si fue
+    // DNS, firewall o clave — se agrega host:puerto y el código del error de
+    // nodemailer/Node (ETIMEDOUT, ECONNREFUSED, ENOTFOUND, EAUTH, 535...) para
+    // que el mensaje sea accionable la próxima vez que falle.
+    const codigo = e.code || e.responseCode || ''
+    e.message = `${e.message}${codigo ? ` [${codigo}]` : ''} (servidor: ${h}:${p})`
+    throw e
+  }
 }
 
 module.exports = {
