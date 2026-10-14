@@ -3367,6 +3367,77 @@ Saludos,`
     }
   }
 
+  // Migración: prospeccion_auto_v1 (2026-10-13, pedido de JC) — secuencia
+  // automática correo D0 → WhatsApp D1 → WhatsApp D2 → dormido, con estado
+  // comercial separado para Abril. No toca `etapa`: la secuencia vive en
+  // columnas propias (seq_*) y el estado comercial en com_*. Ver
+  // services/prospeccionAuto.js.
+  const mAuto = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('prospeccion_auto_v1')
+  if (!mAuto) {
+    try {
+      const cols = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+      const nuevas = [
+        ['seq_estado', 'TEXT'], ['com_estado', 'TEXT'], ['com_motivo', 'TEXT'],
+        ['seq_tema', 'TEXT'], ['seq_lote', 'TEXT'],
+        ['seq_correo_at', 'TEXT'], ['seq_wsp1_at', 'TEXT'], ['seq_wsp2_at', 'TEXT'],
+        ['seq_respuesta_at', 'TEXT'], ['seq_dormido_at', 'TEXT'],
+        ['seq_canal_respuesta', 'TEXT'], ['seq_token', 'TEXT'], ['seq_wa_numero', 'TEXT'],
+        ['seq_reintento_at', 'TEXT'], ['seq_reintentos', 'INTEGER DEFAULT 0'],
+        ['seq_ultimo_mensaje', 'TEXT'], ['responsable_visita', "TEXT DEFAULT 'JC'"],
+        ['com_actualizado_at', 'TEXT'], ['visita_fecha', 'TEXT'],
+      ]
+      for (const [n, t] of nuevas) {
+        if (!cols.includes(n)) db.exec(`ALTER TABLE pipeline_contactos ADD COLUMN ${n} ${t}`)
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_pc_seq_estado ON pipeline_contactos(seq_estado);
+        CREATE INDEX IF NOT EXISTS idx_pc_seq_token ON pipeline_contactos(seq_token);
+        CREATE INDEX IF NOT EXISTS idx_pc_seq_wa ON pipeline_contactos(seq_wa_numero);
+        CREATE TABLE IF NOT EXISTS prospeccion_auto_config (
+          id INTEGER PRIMARY KEY,
+          activo INTEGER DEFAULT 0,
+          wsp_activo INTEGER DEFAULT 0,
+          lote_diario INTEGER DEFAULT 20,
+          hora_correo TEXT DEFAULT '09:00',
+          hora_wsp1 TEXT DEFAULT '10:00',
+          hora_wsp2 TEXT DEFAULT '11:00',
+          hora_dormido TEXT DEFAULT '12:00',
+          usuario_remitente_id TEXT,
+          tema_activo TEXT DEFAULT 'plasticos_quimica_alimentos',
+          wa_numero_bot TEXT,
+          test_email TEXT,
+          test_celular TEXT,
+          notificar_emails TEXT DEFAULT 'aquiroga@rmgautos.cl',
+          ult_correo TEXT, ult_wsp1 TEXT, ult_wsp2 TEXT, ult_dormido TEXT,
+          pausa_motivo TEXT,
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+        INSERT OR IGNORE INTO prospeccion_auto_config (id) VALUES (1);
+        CREATE TABLE IF NOT EXISTS prospeccion_auto_eventos (
+          id TEXT PRIMARY KEY,
+          prospecto_id TEXT,
+          tipo TEXT NOT NULL,
+          detalle TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_pae_prospecto ON prospeccion_auto_eventos(prospecto_id);
+        CREATE INDEX IF NOT EXISTS idx_pae_tipo ON prospeccion_auto_eventos(tipo);
+      `)
+      // Remitente por defecto: el usuario de Abril (aquiroga@rmgautos.cl) si existe.
+      try {
+        const abril = db.prepare(
+          "SELECT id FROM usuarios WHERE lower(email) = 'aquiroga@rmgautos.cl' OR lower(smtp_email) = 'aquiroga@rmgautos.cl' LIMIT 1"
+        ).get()
+        if (abril) db.prepare('UPDATE prospeccion_auto_config SET usuario_remitente_id = ? WHERE id = 1 AND usuario_remitente_id IS NULL').run(abril.id)
+      } catch (_) { /* se elige desde el panel */ }
+
+      db.prepare("INSERT INTO _migrations (id) VALUES ('prospeccion_auto_v1')").run()
+      console.log('✅ Migración prospeccion_auto_v1 — secuencia automática de prospección')
+    } catch (e) {
+      console.error('❌ Migración prospeccion_auto_v1 falló:', e.message)
+    }
+  }
+
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

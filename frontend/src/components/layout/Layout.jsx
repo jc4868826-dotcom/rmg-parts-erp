@@ -14,7 +14,7 @@ import {
   Settings, LogOut, Menu, X, Bell, ChevronRight,
   CalendarDays, Receipt, Truck, ShoppingBag, DollarSign,
   CreditCard, Building2, BookOpen, Tag, Crosshair, ClipboardList, LineChart,
-  ExternalLink, Bot, LayoutTemplate, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark
+  ExternalLink, Bot, LayoutTemplate, Send, TrendingUp, PackagePlus, BarChart2, Megaphone, Shield, Search, Wallet, Landmark
 } from 'lucide-react'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://landing-9iz8.onrender.com'
@@ -57,6 +57,7 @@ const NAV_SECTIONS = [
     label: 'Gestión Comercial',
     items: [
       { to: '/prospeccion',  icon: Crosshair,       label: 'Prospección',     badge: 'prospeccion' },
+      { to: '/prospeccion-auto', icon: Send,       label: 'Prospección automática', badge: null },
       { to: '/pipeline',     icon: GitBranch,       label: 'Pipeline CRM',    badge: '3' },
       { to: '/agenda',       icon: CalendarDays,    label: 'Agenda',          badge: null },
       { to: '/clientes',     icon: Users,           label: 'Clientes',        badge: null },
