@@ -380,6 +380,8 @@ function Mensajes({ dueno, puedeEditar }) {
 function Configuracion({ s }) {
   const qc = useQueryClient()
   const [c, setC] = useState(() => ({ ...s.config, smtp_pass: '' }))
+  const [verClave, setVerClave] = useState(false)
+  const [editClave, setEditClave] = useState(false)
   const segs = String(c.segmentos_activos || '').split(',').filter(Boolean)
   const guardar = useMutation({
     mutationFn: () => {
@@ -388,7 +390,11 @@ function Configuracion({ s }) {
       if (c.smtp_pass) body.smtp_pass = c.smtp_pass
       return api.put('/prospeccion-auto/config', body).then(r => r.data)
     },
-    onSuccess: (r) => { toast.success('Configuración guardada'); setC({ ...r, smtp_pass: '' }); qc.invalidateQueries({ queryKey: ['pauto-stats'] }) },
+    onSuccess: async (r) => {
+      const conClave = !!c.smtp_pass
+      toast.success('Configuración guardada'); setC({ ...r, smtp_pass: '' }); qc.invalidateQueries({ queryKey: ['pauto-stats'] })
+      if (conClave) probar.mutate()   // con clave nueva, se prueba sola al guardar
+    },
     onError: errMsg,
   })
   const probar = useMutation({
@@ -409,7 +415,21 @@ function Configuracion({ s }) {
         <div className="mb-3"><Chip ok={s.casilla?.ok && s.casilla?.verificada} si={`${s.casilla.email} verificada`} no={s.casilla?.motivo || 'Falta probar la casilla'} /></div>
         {inp('smtp_email', 'Correo')}
         {inp('smtp_nombre', 'Nombre visible')}
-        {inp('smtp_pass', s.config.smtp_clave_cargada ? 'Clave (cargada — escribe solo para cambiarla)' : 'Clave de la casilla', { type: 'password', autoComplete: 'new-password' })}
+        <div className="mb-3">
+          <label className="text-xs" style={{ color: 'var(--rmg-muted)', fontWeight: 700 }}>
+            {s.config.smtp_clave_cargada ? 'Clave (ya cargada — escribe solo para cambiarla)' : 'Clave de la casilla'}
+          </label>
+          <div className="flex gap-2">
+            {/* type=text + máscara CSS y readOnly hasta el foco: Chrome no autocompleta aquí su clave guardada. */}
+            <input className="rmg-input w-full" name="prospeccion-smtp-clave" autoComplete="off" data-lpignore="true" data-1p-ignore="true"
+              readOnly={!editClave} onFocus={() => setEditClave(true)}
+              type="text" style={verClave ? {} : { WebkitTextSecurity: 'disc' }}
+              placeholder={s.config.smtp_clave_cargada ? '(guardada)' : 'Escribe la clave a mano'}
+              value={c.smtp_pass || ''} onChange={e => setC({ ...c, smtp_pass: e.target.value })} />
+            <button type="button" className="btn-secondary" style={{ padding: '4px 10px' }} onClick={() => setVerClave(!verClave)}><Eye size={14} /></button>
+          </div>
+          {c.smtp_pass && <div style={{ fontSize: 11, color: 'var(--rmg-muted)' }}>{c.smtp_pass.length} caracteres. Guarda y luego prueba.</div>}
+        </div>
         <div className="grid gap-2" style={{ gridTemplateColumns: '2fr 1fr' }}>{inp('smtp_host', 'Servidor SMTP')}{inp('smtp_port', 'Puerto')}</div>
         <button className="btn-secondary" disabled={probar.isPending} onClick={() => probar.mutate()}><RefreshCw size={14} /> Probar casilla</button>
         <div className="text-xs mt-2" style={{ color: 'var(--rmg-muted)' }}>Guarda primero si cambiaste la clave.</div>
