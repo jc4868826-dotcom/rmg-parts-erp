@@ -229,4 +229,9 @@ async function leerFichaPublica(textoFicha) {
   return llamarAnthropicYParsear(content, 'leerFichaPublica')
 }
 
-module.exports = { leerAnexos, leerFichaPublica }
+// llamarAnthropicYParsear se exporta también (2026-09-15) para que
+// chilecompraMatchIA.js reutilice la MISMA llamada a Anthropic (mismo
+// ANTHROPIC_API_KEY/ANTHROPIC_MODEL, mismo manejo de error con detalle real
+// de la API) para el razonamiento sobre el archivo de conocimientos, en vez
+// de duplicar esta lógica de llamada HTTP en un segundo lugar.
+module.exports = { leerAnexos, leerFichaPublica, llamarAnthropicYParsear }

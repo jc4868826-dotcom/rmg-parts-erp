@@ -9,7 +9,7 @@ module.exports = {
   plasticos_quimica_alimentos: {
     nombre: 'Plásticos, química y alimentos (semana 1)',
     keywords: ['PLAST', 'POLIM', 'EXTRU', 'ENVASE', 'EMBALAJ', 'PACKAG', 'FILM', 'QUIM', 'RESINA', 'PINTURA',
-      'ALIMENT', 'FRIGOR', 'LACTE', 'BEBIDA', 'AGROIND', 'CONSERV'],
+      'ALIMENT', 'FRIGOR', 'LACTE', 'BEBIDA', 'AGROIND', 'CONSERVAS'],
     rubro_plural: 'plantas de producción',
     falla_wa: 'el desgaste en cajas reductoras de extrusoras',
     asunto: '{nombre}, ¿cuánto le cuesta una hora de línea detenida?',
@@ -32,7 +32,7 @@ module.exports = {
     variantes: [
       { keywords: ['PLAST', 'POLIM', 'EXTRU', 'ENVASE', 'EMBALAJ', 'PACKAG', 'FILM'], rubro_plural: 'plantas de plástico' },
       { keywords: ['QUIM', 'RESINA', 'PINTURA'], rubro_plural: 'plantas químicas' },
-      { keywords: ['ALIMENT', 'FRIGOR', 'LACTE', 'BEBIDA', 'AGROIND', 'CONSERV'], rubro_plural: 'plantas de alimentos',
+      { keywords: ['ALIMENT', 'FRIGOR', 'LACTE', 'BEBIDA', 'AGROIND', 'CONSERVAS'], rubro_plural: 'plantas de alimentos',
         falla_wa: 'el lavado de grasa en rodamientos de bombas y chillers', imagen_wa_archivo: '04_falla_02.jpg' },
     ],
   },

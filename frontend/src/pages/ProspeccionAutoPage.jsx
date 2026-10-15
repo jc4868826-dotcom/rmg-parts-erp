@@ -1,45 +1,61 @@
 /**
- * Prospección automática — panel (2026-10-13, pedido de JC)
- * Correo D0 (casilla de Abril) → WhatsApp D1 → WhatsApp D2 → dormido.
- * Abril trabaja la pestaña "Para llamar"; gerencia configura y ve el embudo.
+ * Prospección automática — panel (2026-10-14, pedido de JC)
+ * Correo D0 (casilla fija aquiroga@rmgautos.cl) → WhatsApp 1 (D1) → WhatsApp 2 (D2) → dormido.
+ * Orden tipo "Campañas" de Cruzeiro: tarjetas clicables → detalle; abajo la tabla de lotes.
+ * Mensajes por segmento editables con vista previa; activar / pausar solo el dueño.
  */
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@utils/api'
 import { useAuth } from '@context/AuthContext'
 import toast from 'react-hot-toast'
-import { Send, Play, Eye, PhoneCall, MessageCircle, Power, RefreshCw, AlertTriangle, CheckCircle2, X } from 'lucide-react'
+import { Send, Play, Pause, Eye, PhoneCall, RefreshCw, AlertTriangle, CheckCircle2, X, Save, ShieldCheck, Mail, MessageCircle, FlaskConical } from 'lucide-react'
 
-const SEQ = [
-  ['correo_enviado', 'Correo enviado'], ['wsp1_enviado', 'WhatsApp 1'], ['wsp2_enviado', 'WhatsApp 2'],
-  ['dormido', 'Dormido'], ['baja', 'Baja'], ['dato_erroneo', 'Dato erróneo'],
-]
+const SEGMENTOS = ['Industria', 'Construcción', 'Agrícola']
 const COM = {
   respondio_correo: 'Respondió correo', respondio_wsp: 'Respondió WhatsApp', abril_llamo: 'Abril llamó',
   coordinando_reunion: 'Coordinando reunión', visita_agendada: 'Visita agendada', visita_realizada: 'Visita realizada',
   pedido_tomado: 'Pedido tomado', cotizacion_enviada: 'Cotización enviada', no_interesa: 'No le interesa',
 }
+const SEQ = {
+  frio: 'Frío', correo_enviado: 'Correo enviado', wsp1_enviado: 'WhatsApp 1', wsp2_enviado: 'WhatsApp 2',
+  dormido: 'Dormido', baja: 'Baja', dato_erroneo: 'Dato erróneo',
+}
+const WA_EST = { enviado: 'Enviado', entregado: 'Entregado', leido: 'Leído', fallido: 'Fallido' }
 const MOTIVOS = { tiene_proveedor: 'Tiene proveedor', no_consume: 'No consume', no_es_momento: 'No es el momento', otro: 'Otro' }
 const ACCIONES = ['abril_llamo', 'coordinando_reunion', 'visita_agendada', 'visita_realizada', 'pedido_tomado', 'cotizacion_enviada', 'no_interesa']
 
-const fmt = (s) => s ? new Date(s.replace(' ', 'T') + (s.includes('Z') ? '' : 'Z')).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
-const horasDesde = (s) => s ? (Date.now() - new Date(s.replace(' ', 'T') + 'Z').getTime()) / 3600000 : null
+// Tarjetas en el orden del embudo: correo → wsp1 → wsp2 → llamado → cierre.
+const ETAPAS = [
+  { titulo: 'Base', tarjetas: [['base', 'Base disponible', null], ['todos', 'En campaña', null]] },
+  { titulo: 'Correo', tarjetas: [['correo', 'Correos enviados', null], ['rebote', 'Rebotados', 'bad'], ['pendientes', 'Esperando WSP 1', null]] },
+  { titulo: 'WhatsApp 1', tarjetas: [['wsp1', 'Enviados', null], ['wsp1_entregado', 'Recibidos', null], ['wsp1_leido', 'Leídos', null]] },
+  { titulo: 'WhatsApp 2', tarjetas: [['wsp2', 'Enviados', null]] },
+  { titulo: 'Llamado', tarjetas: [['contestados', 'Contestados', 'good'], ['llamar', 'Por llamar', 'good'], ['no_interesa', 'No le interesa', null]] },
+  { titulo: 'Cierre', tarjetas: [['sin_respuesta', 'Sin respuesta (dormido)', null], ['bajas', 'Pidieron baja', 'bad'], ['fallidos', 'Fallidos', 'bad']] },
+]
 
-function Kpi({ label, value, tone }) {
-  const color = tone === 'bad' ? '#b4402a' : tone === 'good' ? '#0b6b66' : 'var(--rmg-text)'
-  return (
-    <div className="rmg-card p-3" style={{ minWidth: 120 }}>
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--rmg-muted)' }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 900, color, fontFamily: 'Inter Tight, sans-serif' }}>{value ?? '—'}</div>
-    </div>
-  )
-}
+const fmt = (s) => s ? new Date(s.replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? '' : 'Z'))
+  .toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+const pct = (a, b) => b ? `${Math.round((a / b) * 100)}%` : '—'
+const errMsg = (e) => toast.error(e?.response?.data?.error || e.message)
 
-function Estado({ ok, si, no }) {
+function Chip({ ok, si, no }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: ok ? '#0b6b66' : '#b4402a' }}>
       {ok ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />} {ok ? si : no}
     </span>
+  )
+}
+
+function Tarjeta({ label, value, tone, activa, onClick }) {
+  const color = tone === 'bad' ? '#b4402a' : tone === 'good' ? '#0b6b66' : 'var(--rmg-text)'
+  return (
+    <button onClick={onClick} className="rmg-card p-3 text-left"
+      style={{ minWidth: 128, flex: '1 1 128px', outline: activa ? '2px solid #1d4ed8' : 'none', cursor: 'pointer' }}>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--rmg-muted)' }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 900, color, fontFamily: 'Inter Tight, sans-serif' }}>{value ?? '—'}</div>
+    </button>
   )
 }
 
@@ -55,319 +71,463 @@ function ModalAccion({ p, onClose, onSave }) {
           <div style={{ fontWeight: 800 }}>{p.empresa}</div>
           <button onClick={onClose}><X size={18} /></button>
         </div>
+        <div className="text-sm mb-3" style={{ color: 'var(--rmg-muted)' }}>
+          {p.nombre_contacto || '—'} · +{p.seq_wa_numero} · {p.email}
+          {p.seq_ultimo_mensaje && <div className="mt-2" style={{ color: 'var(--rmg-text)' }}>“{p.seq_ultimo_mensaje}”</div>}
+        </div>
         <label className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Resultado</label>
-        <select className="rmg-input mb-3" value={com_estado} onChange={e => setEstado(e.target.value)}>
+        <select className="rmg-input mb-3 w-full" value={com_estado} onChange={e => setEstado(e.target.value)}>
           {ACCIONES.map(a => <option key={a} value={a}>{COM[a]}</option>)}
         </select>
-        {com_estado === 'no_interesa' && (<>
-          <label className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Motivo</label>
-          <select className="rmg-input mb-3" value={com_motivo} onChange={e => setMotivo(e.target.value)}>
+        {com_estado === 'no_interesa' && (
+          <select className="rmg-input mb-3 w-full" value={com_motivo} onChange={e => setMotivo(e.target.value)}>
             {Object.entries(MOTIVOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-        </>)}
-        {com_estado === 'visita_agendada' && (<>
-          <label className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Fecha y hora de la visita</label>
-          <input type="datetime-local" className="rmg-input mb-3" value={visita_fecha} onChange={e => setFecha(e.target.value)} />
-        </>)}
-        <label className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Nota</label>
-        <textarea className="rmg-input mb-4" rows={3} value={nota} onChange={e => setNota(e.target.value)} placeholder="Qué equipos tienen, quién compra, a quién le compran…" />
+        )}
+        {['visita_agendada', 'visita_realizada'].includes(com_estado) && (
+          <input type="datetime-local" className="rmg-input mb-3 w-full" value={visita_fecha} onChange={e => setFecha(e.target.value)} />
+        )}
+        <textarea className="rmg-input w-full mb-4" rows={3} placeholder="Nota (opcional)" value={nota} onChange={e => setNota(e.target.value)} />
         <div className="flex justify-end gap-2">
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary" onClick={() => onSave({ com_estado, com_motivo: com_estado === 'no_interesa' ? com_motivo : undefined, visita_fecha: visita_fecha ? visita_fecha.replace('T', ' ') : undefined, nota })}>Guardar</button>
+          <button className="btn-primary" onClick={() => onSave({ com_estado, com_motivo, visita_fecha, nota })}>Guardar</button>
         </div>
       </div>
     </div>
   )
 }
 
-export default function ProspeccionAutoPage() {
-  const { user } = useAuth()
-  const gestion = ['gerente', 'administrador'].includes(user?.rol)
+function TablaDetalle({ filas, onAccion, cargando }) {
+  if (cargando) return <div className="p-4 text-sm" style={{ color: 'var(--rmg-muted)' }}>Cargando…</div>
+  if (!filas?.length) return <div className="p-4 text-sm" style={{ color: 'var(--rmg-muted)' }}>Sin registros.</div>
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="w-full text-sm">
+        <thead><tr style={{ textAlign: 'left', color: 'var(--rmg-muted)', fontSize: 11, textTransform: 'uppercase' }}>
+          <th className="p-2">Empresa</th><th className="p-2">Contacto</th><th className="p-2">Segmento</th><th className="p-2">Lote</th>
+          <th className="p-2">Correo</th><th className="p-2">WSP 1</th><th className="p-2">WSP 2</th><th className="p-2">Estado</th><th className="p-2"></th>
+        </tr></thead>
+        <tbody>
+          {filas.map(p => (
+            <tr key={p.id} style={{ borderTop: '1px solid var(--rmg-border, #e5e7eb)' }}>
+              <td className="p-2" style={{ fontWeight: 600 }}>{p.empresa}</td>
+              <td className="p-2">{p.nombre_contacto || '—'}<div style={{ fontSize: 11, color: 'var(--rmg-muted)' }}>{p.email}{p.seq_wa_numero ? ` · +${p.seq_wa_numero}` : ''}</div></td>
+              <td className="p-2">{p.seq_segmento}</td>
+              <td className="p-2">{p.seq_lote}</td>
+              <td className="p-2">{p.seq_correo_error ? <span style={{ color: '#b4402a' }} title={p.seq_correo_error}>Rebote</span> : fmt(p.seq_correo_at)}</td>
+              <td className="p-2">{p.seq_wsp1_at ? <>{fmt(p.seq_wsp1_at)}<div style={{ fontSize: 11, color: 'var(--rmg-muted)' }}>{WA_EST[p.seq_wsp1_estado] || ''}</div></> : '—'}</td>
+              <td className="p-2">{p.seq_wsp2_at ? <>{fmt(p.seq_wsp2_at)}<div style={{ fontSize: 11, color: 'var(--rmg-muted)' }}>{WA_EST[p.seq_wsp2_estado] || ''}</div></> : '—'}</td>
+              <td className="p-2">{p.com_estado ? <strong>{COM[p.com_estado]}{p.com_motivo ? ` (${MOTIVOS[p.com_motivo] || p.com_motivo})` : ''}</strong> : SEQ[p.seq_estado] || p.seq_estado}
+                {p.seq_ultimo_mensaje && <div style={{ fontSize: 11, color: 'var(--rmg-muted)', maxWidth: 260 }}>“{p.seq_ultimo_mensaje}”</div>}</td>
+              <td className="p-2">{onAccion && <button className="btn-secondary" style={{ padding: '4px 10px' }} onClick={() => onAccion(p)}><PhoneCall size={14} /></button>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ─── Pestaña Pipeline ─────────────────────────────────────────────────────────
+function Pipeline({ s, dueno, onAccion }) {
+  const [filtro, setFiltro] = useState('todos')
+  const [lote, setLote] = useState(null)
+  const [verLote, setVerLote] = useState(false)
   const qc = useQueryClient()
-  const [tab, setTab] = useState('llamar')
-  const [accion, setAccion] = useState(null)
-  const [verCorreo, setVerCorreo] = useState(null)
-
-  const stats = useQuery({ queryKey: ['pauto-stats'], queryFn: () => api.get('/prospeccion-auto/stats').then(r => r.data), refetchInterval: 60000 })
-  const llamar = useQuery({ queryKey: ['pauto-llamar'], queryFn: () => api.get('/prospeccion-auto/para-llamar').then(r => r.data), refetchInterval: 60000 })
-  const enSeq = useQuery({ queryKey: ['pauto-seq'], queryFn: () => api.get('/prospeccion-auto/en-secuencia').then(r => r.data), enabled: tab === 'secuencia' })
-  const preview = useQuery({ queryKey: ['pauto-preview'], queryFn: () => api.get('/prospeccion-auto/preview').then(r => r.data), enabled: gestion && tab === 'config' })
-
-  const refrescar = () => ['pauto-stats', 'pauto-llamar', 'pauto-seq', 'pauto-preview'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
-  const err = (e) => toast.error(e.response?.data?.error || e.message)
-
-  const guardarConfig = useMutation({ mutationFn: (b) => api.put('/prospeccion-auto/config', b).then(r => r.data), onSuccess: () => { toast.success('Guardado'); refrescar() }, onError: err })
-  const prueba = useMutation({
-    mutationFn: () => api.post('/prospeccion-auto/enviar-prueba').then(r => r.data),
-    onSuccess: (r) => {
-      toast[r.correo?.ok ? 'success' : 'error'](`Correo: ${r.correo?.ok ? `enviado a ${r.correo.a}` : r.correo?.motivo}`, { duration: 8000 })
-      toast[r.whatsapp?.ok ? 'success' : 'error'](`WhatsApp: ${r.whatsapp?.ok ? `enviado a +${r.whatsapp.a}` : r.whatsapp?.motivo}`, { duration: 8000 })
-    }, onError: err,
+  const det = useQuery({
+    queryKey: ['pauto-detalle', filtro, lote],
+    queryFn: () => api.get('/prospeccion-auto/detalle', { params: { filtro, lote: lote || undefined } }).then(r => r.data),
+    enabled: filtro !== 'base',
   })
+  const prev = useQuery({ queryKey: ['pauto-preview'], queryFn: () => api.get('/prospeccion-auto/preview').then(r => r.data), enabled: verLote || filtro === 'base' })
   const ejecutar = useMutation({
     mutationFn: (paso) => api.post(`/prospeccion-auto/ejecutar/${paso}`).then(r => r.data),
-    onSuccess: (r) => { toast.success(r.en_segundo_plano ? 'Envío de correos iniciado (tarda unos minutos)' : JSON.stringify(r)); setTimeout(refrescar, 1500) }, onError: err,
+    onSuccess: (r, paso) => { toast.success(r.en_segundo_plano ? 'Envío de correos iniciado (corre en segundo plano)' : `${paso}: ${JSON.stringify(r)}`); qc.invalidateQueries({ queryKey: ['pauto-stats'] }) },
+    onError: errMsg,
   })
-  const cambiar = useMutation({
-    mutationFn: ({ id, body }) => api.put(`/prospeccion-auto/prospecto/${id}/estado`, body).then(r => r.data),
-    onSuccess: () => { toast.success('Registrado'); setAccion(null); refrescar() }, onError: err,
-  })
-  const abrirCorreo = async () => {
-    try { setVerCorreo((await api.get('/prospeccion-auto/preview-correo')).data) } catch (e) { err(e) }
-  }
-
-  const s = stats.data
-  const c = s?.config || {}
-  const seq = s?.secuencia || {}
-  const com = s?.comercial || {}
-  const respondieron = Object.entries(com).reduce((a, [k, n]) => a + (k === 'no_interesa' ? 0 : n), 0)
-  const pendientes = (llamar.data || []).filter(p => ['respondio_wsp', 'respondio_correo'].includes(p.com_estado))
-
-  const tabs = [['llamar', `Para llamar${pendientes.length ? ` (${pendientes.length})` : ''}`], ['secuencia', 'En secuencia'], ['embudo', 'Embudo'], ...(gestion ? [['config', 'Configuración']] : [])]
-
+  const t = s.tarjetas || {}
+  const etiqueta = ETAPAS.flatMap(e => e.tarjetas).find(x => x[0] === filtro)?.[1]
   return (
-    <div className="space-y-5 animate-fade-in">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-black" style={{ fontFamily: 'Inter Tight, sans-serif' }}>Prospección automática</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rmg-muted)' }}>Correo → WhatsApp día 1 → WhatsApp día 2 → dormido. Quien responde pasa a Abril.</p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Estado ok={!!c.activo} si="Sistema activo" no="Sistema apagado" />
-          <Estado ok={!!c.wsp_activo && s?.wa_configurado} si="WhatsApp activo" no="WhatsApp apagado" />
-          <Estado ok={!!s?.remitente?.ok} si={`Casilla: ${s?.remitente?.usuario?.email || ''}`} no="Casilla sin configurar" />
-          <button className="btn-secondary flex items-center gap-1.5" onClick={refrescar}><RefreshCw size={13} /> Actualizar</button>
-        </div>
-      </div>
-
-      {c.pausa_motivo && (
-        <div className="rmg-card p-3" style={{ borderColor: '#b4402a', color: '#b4402a', fontWeight: 600 }}>
-          <AlertTriangle size={15} style={{ display: 'inline', marginRight: 6 }} /> Pausa automática: {c.pausa_motivo}. Revisa el lote antes de volver a activar.
-        </div>
-      )}
-      {!s?.remitente?.ok && s && (
-        <div className="rmg-card p-3" style={{ color: '#8a5607', fontWeight: 600 }}>{s.remitente.motivo}</div>
-      )}
-
-      <div className="flex gap-3 flex-wrap">
-        <Kpi label="Disponibles (tema)" value={s?.disponibles} />
-        {SEQ.map(([k, l]) => <Kpi key={k} label={l} value={seq[k] || 0} tone={(k === 'baja' || k === 'dato_erroneo') && seq[k] ? 'bad' : undefined} />)}
-        <Kpi label="Respondieron" value={respondieron} tone={respondieron ? 'good' : undefined} />
-        <Kpi label="Visitas agendadas" value={(com.visita_agendada || 0) + (com.visita_realizada || 0)} tone="good" />
-        <Kpi label="Pedidos tomados" value={(com.pedido_tomado || 0) + (com.cotizacion_enviada || 0)} tone="good" />
-      </div>
-
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {tabs.map(([v, l]) => (
-          <button key={v} onClick={() => setTab(v)} style={{
-            fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 20, cursor: 'pointer',
-            border: tab === v ? '1px solid rgba(27,143,212,0.4)' : '1px solid rgba(15,35,60,0.08)',
-            background: tab === v ? 'rgba(27,143,212,0.15)' : 'transparent', color: tab === v ? 'var(--rmg-blue)' : 'var(--rmg-muted)',
-          }}>{l}</button>
+    <>
+      <div className="flex flex-wrap gap-4 mb-4">
+        {ETAPAS.map(e => (
+          <div key={e.titulo} style={{ flex: '1 1 auto' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--rmg-muted)', marginBottom: 6 }}>{e.titulo}</div>
+            <div className="flex flex-wrap gap-2">
+              {e.tarjetas.map(([k, label, tone]) => (
+                <Tarjeta key={k} label={label} value={t[k]} tone={tone} activa={filtro === k} onClick={() => { setFiltro(k); setLote(null) }} />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 
-      {tab === 'llamar' && (
-        <div className="rmg-card overflow-x-auto">
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900, fontSize: 13 }}>
-            <thead><tr style={{ textAlign: 'left', color: 'var(--rmg-muted)', fontSize: 11, textTransform: 'uppercase' }}>
-              {['Empresa', 'Contacto', 'Celular', 'Respondió', 'Mensaje', 'Estado', ''].map(h => <th key={h} style={{ padding: '10px 12px' }}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {(llamar.data || []).map(p => {
-                const h = horasDesde(p.seq_respuesta_at)
-                const urgente = ['respondio_wsp', 'respondio_correo'].includes(p.com_estado) && h > 2
-                return (
-                  <tr key={p.id} style={{ borderTop: '1px solid var(--rmg-border)', background: urgente ? 'rgba(180,64,42,.06)' : undefined }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 700 }}>{p.empresa}</td>
-                    <td style={{ padding: '10px 12px' }}>{p.nombre_contacto || '—'}{p.cargo ? <div style={{ color: 'var(--rmg-muted)', fontSize: 12 }}>{p.cargo}</div> : null}</td>
-                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                      {p.seq_wa_numero ? <>
-                        <a href={`tel:+${p.seq_wa_numero}`} style={{ color: 'var(--rmg-blue)', marginRight: 8 }}><PhoneCall size={14} style={{ display: 'inline' }} /> +{p.seq_wa_numero}</a>
-                        <a href={`https://wa.me/${p.seq_wa_numero}`} target="_blank" rel="noreferrer" style={{ color: '#1f9d55' }}><MessageCircle size={14} style={{ display: 'inline' }} /></a>
-                      </> : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: urgente ? '#b4402a' : undefined, fontWeight: urgente ? 700 : 400 }}>{fmt(p.seq_respuesta_at)}</td>
-                    <td style={{ padding: '10px 12px', maxWidth: 240 }}>{p.seq_ultimo_mensaje || (p.seq_canal_respuesta === 'correo' ? 'Respondió por correo' : '—')}</td>
-                    <td style={{ padding: '10px 12px' }}>{COM[p.com_estado]}{p.com_motivo ? ` · ${MOTIVOS[p.com_motivo]}` : ''}{p.visita_fecha ? <div style={{ fontSize: 12, color: 'var(--rmg-muted)' }}>{p.visita_fecha}</div> : null}</td>
-                    <td style={{ padding: '10px 12px' }}><button className="btn-secondary" style={{ padding: '4px 10px' }} onClick={() => setAccion(p)}>Registrar</button></td>
-                  </tr>
-                )
-              })}
-              {!llamar.data?.length && <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--rmg-muted)' }}>Nadie ha respondido todavía.</td></tr>}
-            </tbody>
-          </table>
+      <div className="rmg-card mb-4">
+        <div className="flex items-center justify-between p-3" style={{ borderBottom: '1px solid var(--rmg-border, #e5e7eb)' }}>
+          <div style={{ fontWeight: 800 }}>{filtro === 'base' ? `Próximo lote (${prev.data?.lote?.length ?? '…'} de ${s.config?.lote_diario})` : `${etiqueta}${lote ? ` · lote ${lote}` : ''}`}</div>
+          {lote && <button className="btn-secondary" onClick={() => setLote(null)}>Quitar filtro de lote</button>}
         </div>
-      )}
+        {filtro === 'base'
+          ? <LotePreview data={prev.data} cargando={prev.isLoading} />
+          : <TablaDetalle filas={det.data} cargando={det.isLoading} onAccion={onAccion} />}
+      </div>
 
-      {tab === 'secuencia' && (
-        <div className="rmg-card overflow-x-auto">
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900, fontSize: 13 }}>
+      <div className="rmg-card mb-4">
+        <div className="flex items-center justify-between p-3" style={{ borderBottom: '1px solid var(--rmg-border, #e5e7eb)' }}>
+          <div style={{ fontWeight: 800 }}>Lotes</div>
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={() => { setFiltro('base'); setVerLote(true) }}><Eye size={14} /> Ver próximo lote</button>
+            {dueno && ['correo', 'wsp1', 'wsp2', 'dormido'].map(p => (
+              <button key={p} className="btn-secondary" disabled={ejecutar.isPending}
+                onClick={() => window.confirm(`¿Ejecutar ahora el paso "${p}"? Envía de verdad.`) && ejecutar.mutate(p)}>
+                <Play size={14} /> {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="w-full text-sm">
             <thead><tr style={{ textAlign: 'left', color: 'var(--rmg-muted)', fontSize: 11, textTransform: 'uppercase' }}>
-              {['Empresa', 'Contacto', 'Paso', 'Correo', 'WSP 1', 'WSP 2', ''].map(h => <th key={h} style={{ padding: '10px 12px' }}>{h}</th>)}
+              <th className="p-2">Lote</th><th className="p-2">Segmentos</th><th className="p-2">Base</th><th className="p-2">Correos</th>
+              <th className="p-2">WSP 1</th><th className="p-2">Recibidos</th><th className="p-2">Leídos</th><th className="p-2">WSP 2</th>
+              <th className="p-2">Contestados (bajas)</th><th className="p-2">% resp</th><th className="p-2">Pendientes</th><th className="p-2">Visitas</th><th className="p-2">Pedidos</th>
             </tr></thead>
             <tbody>
-              {(enSeq.data || []).map(p => (
-                <tr key={p.id} style={{ borderTop: '1px solid var(--rmg-border)' }}>
-                  <td style={{ padding: '10px 12px', fontWeight: 700 }}>{p.empresa}</td>
-                  <td style={{ padding: '10px 12px' }}>{p.nombre_contacto || '—'}<div style={{ fontSize: 12, color: 'var(--rmg-muted)' }}>{p.email}</div></td>
-                  <td style={{ padding: '10px 12px' }}>{SEQ.find(x => x[0] === p.seq_estado)?.[1]}</td>
-                  <td style={{ padding: '10px 12px' }}>{fmt(p.seq_correo_at)}</td>
-                  <td style={{ padding: '10px 12px' }}>{fmt(p.seq_wsp1_at)}</td>
-                  <td style={{ padding: '10px 12px' }}>{fmt(p.seq_wsp2_at)}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <button className="btn-secondary" style={{ padding: '4px 10px' }}
-                      onClick={() => cambiar.mutate({ id: p.id, body: { com_estado: 'respondio_correo' } })}>Respondió por correo</button>
-                  </td>
+              {(s.lotes || []).map(l => (
+                <tr key={l.lote} onClick={() => { setLote(l.lote); setFiltro('todos') }} style={{ borderTop: '1px solid var(--rmg-border, #e5e7eb)', cursor: 'pointer', background: lote === l.lote ? 'rgba(29,78,216,.06)' : undefined }}>
+                  <td className="p-2" style={{ fontWeight: 700 }}>{l.lote}</td>
+                  <td className="p-2">{l.segmentos}</td>
+                  <td className="p-2">{l.total}</td>
+                  <td className="p-2">{l.correos}{l.fallidos ? <span style={{ color: '#b4402a' }}> · {l.fallidos} fall.</span> : ''}</td>
+                  <td className="p-2">{l.wsp1}</td><td className="p-2">{l.wsp1_entregados}</td><td className="p-2">{l.wsp1_leidos}</td>
+                  <td className="p-2">{l.wsp2}</td>
+                  <td className="p-2">{l.contestados} ({l.bajas})</td>
+                  <td className="p-2">{pct(l.contestados, l.total)}</td>
+                  <td className="p-2">{l.pendientes_wsp}</td><td className="p-2">{l.visitas}</td><td className="p-2">{l.pedidos}</td>
                 </tr>
               ))}
-              {!enSeq.data?.length && <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--rmg-muted)' }}>No hay prospectos en secuencia.</td></tr>}
+              {!s.lotes?.length && <tr><td className="p-4" colSpan={13} style={{ color: 'var(--rmg-muted)' }}>Todavía no sale ningún lote.</td></tr>}
             </tbody>
           </table>
         </div>
-      )}
+      </div>
 
-      {tab === 'embudo' && (
-        <div className="space-y-4">
-          <div className="rmg-card overflow-x-auto">
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900, fontSize: 13 }}>
-              <thead><tr style={{ textAlign: 'left', color: 'var(--rmg-muted)', fontSize: 11, textTransform: 'uppercase' }}>
-                {['Lote', 'Enviados', 'WSP 1', 'WSP 2', 'Respondieron', 'No interesa', 'Visitas', 'Pedidos', 'Dormidos', 'Bajas', 'Erróneos'].map(h => <th key={h} style={{ padding: '10px 12px' }}>{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {(s?.lotes || []).map(l => (
-                  <tr key={l.lote + l.tema} style={{ borderTop: '1px solid var(--rmg-border)' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 700 }}>{l.lote}</td>
-                    {['total', 'wsp1', 'wsp2', 'respondieron', 'no_interesa', 'visitas', 'pedidos', 'dormidos', 'bajas', 'erroneos'].map(k => (
-                      <td key={k} style={{ padding: '10px 12px' }}>{l[k] || 0}{k === 'respondieron' && l.total ? <span style={{ color: 'var(--rmg-muted)' }}> · {Math.round(100 * l[k] / l.total)}%</span> : null}</td>
-                    ))}
-                  </tr>
-                ))}
-                {!s?.lotes?.length && <tr><td colSpan={11} style={{ padding: 24, textAlign: 'center', color: 'var(--rmg-muted)' }}>Todavía no sale ningún lote.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>
-            Aperturas de correo: {s?.aperturas || 0} (referencial: muchos clientes de correo bloquean el pixel) · Clicks: {s?.clicks || 0}
-            {s?.atrasados ? ` · ${s.atrasados} prospectos con correo enviado hace más de 4 días sin WhatsApp (revisar número del bot)` : ''}
-          </div>
-          <div className="rmg-card p-4">
-            <div style={{ fontWeight: 800, marginBottom: 8 }}>Últimos eventos</div>
-            {(s?.ultimos || []).map((e, i) => (
-              <div key={i} style={{ fontSize: 12, padding: '4px 0', borderTop: i ? '1px solid var(--rmg-border)' : 'none' }}>
-                <span style={{ color: 'var(--rmg-muted)' }}>{fmt(e.created_at)}</span> · <b>{e.tipo}</b> {e.empresa ? `· ${e.empresa}` : ''} {e.detalle ? <span style={{ color: 'var(--rmg-muted)' }}>· {String(e.detalle).slice(0, 140)}</span> : null}
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+        <div className="rmg-card p-3">
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Base por segmento (correo + celular)</div>
+          {SEGMENTOS.map(seg => <div key={seg} className="flex justify-between text-sm py-1"><span>{seg}</span><strong>{s.disponibles?.[seg] ?? 0}</strong></div>)}
+          <div style={{ fontWeight: 700, marginTop: 10, fontSize: 12, color: 'var(--rmg-muted)' }}>Fuera de la base ({s.revisados} revisados)</div>
+          {Object.entries(s.descartes || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => <div key={k} className="flex justify-between text-xs py-0.5" style={{ color: 'var(--rmg-muted)' }}><span>{k}</span><span>{v}</span></div>)}
+        </div>
+        <div className="rmg-card p-3">
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Últimos eventos</div>
+          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+            {(s.ultimos || []).map((e, i) => (
+              <div key={i} className="text-xs py-1" style={{ borderTop: i ? '1px solid var(--rmg-border, #eee)' : 'none' }}>
+                <span style={{ color: 'var(--rmg-muted)' }}>{fmt(e.created_at)}</span> · <strong>{e.tipo}</strong>{e.empresa ? ` · ${e.empresa}` : ''}
+                {e.detalle && <div style={{ color: 'var(--rmg-muted)', wordBreak: 'break-word' }}>{String(e.detalle).slice(0, 160)}</div>}
               </div>
             ))}
           </div>
         </div>
-      )}
+      </div>
+    </>
+  )
+}
 
-      {tab === 'config' && gestion && (
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
-          <div className="rmg-card p-4 space-y-3">
-            <div style={{ fontWeight: 800 }}>Operación</div>
-            <div className="flex gap-2 flex-wrap">
-              <button className={c.activo ? 'btn-secondary' : 'btn-primary'} onClick={() => guardarConfig.mutate({ activo: !c.activo })}>
-                <Power size={13} style={{ display: 'inline', marginRight: 6 }} />{c.activo ? 'Apagar sistema' : 'Activar sistema'}
-              </button>
-              <button className="btn-secondary" onClick={() => guardarConfig.mutate({ wsp_activo: !c.wsp_activo })}>
-                {c.wsp_activo ? 'Apagar WhatsApp' : 'Activar WhatsApp'}
-              </button>
-            </div>
-            {!s?.wa_configurado && <div className="text-xs" style={{ color: '#8a5607' }}>Faltan PROSPECCION_WA_PHONE_ID y PROSPECCION_WA_TOKEN en Render: mientras tanto los prospectos esperan con el correo enviado.</div>}
-            <ConfigForm c={c} temas={s?.temas || []} onSave={(b) => guardarConfig.mutate(b)} />
+function LotePreview({ data, cargando }) {
+  if (cargando || !data) return <div className="p-4 text-sm" style={{ color: 'var(--rmg-muted)' }}>Calculando…</div>
+  return (
+    <>
+      {data.segmentos_sin_validar?.length > 0 && (
+        <div className="p-3 text-sm" style={{ color: '#b4402a' }}>Sin validar (no entran al lote): {data.segmentos_sin_validar.join(', ')}</div>
+      )}
+      <div style={{ overflowX: 'auto' }}>
+        <table className="w-full text-sm">
+          <thead><tr style={{ textAlign: 'left', color: 'var(--rmg-muted)', fontSize: 11, textTransform: 'uppercase' }}>
+            <th className="p-2">Empresa</th><th className="p-2">Contacto</th><th className="p-2">Segmento</th><th className="p-2">Correo</th><th className="p-2">Celular</th><th className="p-2">Prioridad</th>
+          </tr></thead>
+          <tbody>{data.lote.map(p => (
+            <tr key={p.id} style={{ borderTop: '1px solid var(--rmg-border, #e5e7eb)' }}>
+              <td className="p-2" style={{ fontWeight: 600 }}>{p.empresa}{p.reintento && <span style={{ fontSize: 11, color: 'var(--rmg-muted)' }}> (reintento)</span>}</td>
+              <td className="p-2">{p.nombre_contacto || '—'}</td><td className="p-2">{p.segmento}</td>
+              <td className="p-2">{p.email}</td><td className="p-2">+{p.celular}</td><td className="p-2">{p.prioridad || '—'}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── Pestaña Mensajes ─────────────────────────────────────────────────────────
+function Mensajes({ dueno, puedeEditar }) {
+  const qc = useQueryClient()
+  const [seg, setSeg] = useState('Industria')
+  const lista = useQuery({ queryKey: ['pauto-mensajes'], queryFn: () => api.get('/prospeccion-auto/mensajes').then(r => r.data) })
+  const original = useMemo(() => lista.data?.find(m => m.segmento === seg), [lista.data, seg])
+  const [b, setB] = useState(null)
+  useEffect(() => { if (original) setB({ ...original, fallas: original.fallas.join('\n') }) }, [original])
+  const sucio = b && original && ['asunto', 'asunto_sin_nombre', 'parrafo1', 'parrafo2', 'parrafo3', 'wa_falla', 'wa_rubro', 'imagen_correo', 'imagen_wa']
+    .some(k => (b[k] || '') !== (original[k] || '')) || (b && original && b.fallas !== original.fallas.join('\n'))
+
+  // Vista previa en vivo (con lo que se está escribiendo, sin guardar).
+  const [prev, setPrev] = useState(null)
+  useEffect(() => {
+    if (!b) return
+    const t = setTimeout(() => {
+      api.post(`/prospeccion-auto/mensajes/${encodeURIComponent(seg)}/preview`, b).then(r => setPrev(r.data)).catch(() => {})
+    }, 400)
+    return () => clearTimeout(t)
+  }, [b, seg])
+
+  const guardar = useMutation({
+    mutationFn: () => api.put(`/prospeccion-auto/mensajes/${encodeURIComponent(seg)}`, b).then(r => r.data),
+    onSuccess: () => { toast.success('Guardado. Queda pendiente de validar.'); qc.invalidateQueries({ queryKey: ['pauto-mensajes'] }); qc.invalidateQueries({ queryKey: ['pauto-stats'] }) },
+    onError: errMsg,
+  })
+  const validar = useMutation({
+    mutationFn: () => api.post(`/prospeccion-auto/mensajes/${encodeURIComponent(seg)}/validar`).then(r => r.data),
+    onSuccess: () => { toast.success(`Mensaje de ${seg} validado`); qc.invalidateQueries({ queryKey: ['pauto-mensajes'] }); qc.invalidateQueries({ queryKey: ['pauto-stats'] }) },
+    onError: errMsg,
+  })
+  const prueba = useMutation({
+    mutationFn: () => api.post(`/prospeccion-auto/mensajes/${encodeURIComponent(seg)}/prueba`).then(r => r.data),
+    onSuccess: (r) => {
+      toast[r.correo?.ok ? 'success' : 'error'](r.correo?.ok ? `Correo de prueba a ${r.correo.a}` : `Correo: ${r.correo?.motivo}`)
+      if (r.whatsapp) toast[r.whatsapp.ok ? 'success' : 'error'](r.whatsapp.ok ? `WhatsApp de prueba a +${r.whatsapp.a}` : `WhatsApp: ${r.whatsapp.motivo}`)
+    },
+    onError: errMsg,
+  })
+
+  if (!b) return <div className="p-4">Cargando…</div>
+  const campo = (k, label, rows = 1, ayuda) => (
+    <div className="mb-3">
+      <label className="text-xs" style={{ color: 'var(--rmg-muted)', fontWeight: 700 }}>{label}</label>
+      {rows === 1
+        ? <input className="rmg-input w-full" value={b[k] || ''} disabled={!puedeEditar} onChange={e => setB({ ...b, [k]: e.target.value })} />
+        : <textarea className="rmg-input w-full" rows={rows} value={b[k] || ''} disabled={!puedeEditar} onChange={e => setB({ ...b, [k]: e.target.value })} />}
+      {ayuda && <div style={{ fontSize: 11, color: 'var(--rmg-muted)' }}>{ayuda}</div>}
+    </div>
+  )
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {(lista.data || []).map(m => (
+          <button key={m.segmento} onClick={() => setSeg(m.segmento)} className={seg === m.segmento ? 'btn-primary' : 'btn-secondary'}>
+            {m.nombre} {m.validado_at ? '✓' : '•'}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))' }}>
+        <div className="rmg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div style={{ fontWeight: 800 }}>Correo · {original.nombre}</div>
+            <Chip ok={!!original.validado_at && !sucio}
+              si={`Validado ${fmt(original.validado_at)}`}
+              no={sucio ? 'Cambios sin guardar' : 'Sin validar: este segmento no envía'} />
           </div>
-          <div className="rmg-card p-4 space-y-3">
-            <div style={{ fontWeight: 800 }}>Pruebas y ejecución manual</div>
-            <div className="flex gap-2 flex-wrap">
-              <button className="btn-secondary flex items-center gap-1.5" onClick={abrirCorreo}><Eye size={13} /> Ver correo</button>
-              <button className="btn-secondary flex items-center gap-1.5" onClick={() => prueba.mutate()} disabled={prueba.isPending}><Send size={13} /> {prueba.isPending ? 'Enviando…' : 'Enviar prueba'}</button>
-            </div>
-            <div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>La prueba va solo al correo y celular de prueba; no toca prospectos.</div>
-            <div className="flex gap-2 flex-wrap pt-2">
-              {[['correo', 'Enviar lote de correos ahora'], ['wsp1', 'WhatsApp 1 ahora'], ['wsp2', 'WhatsApp 2 ahora'], ['dormido', 'Pasar a dormido']].map(([k, l]) => (
-                <button key={k} className="btn-secondary flex items-center gap-1.5" disabled={ejecutar.isPending}
-                  onClick={() => window.confirm(`¿Ejecutar "${l}"? Esto escribe a prospectos reales.`) && ejecutar.mutate(k)}><Play size={13} /> {l}</button>
+          {campo('asunto', 'Asunto (con nombre)', 1, 'Variables: {nombre} primer nombre, {empresa} razón social')}
+          {campo('asunto_sin_nombre', 'Asunto (si no hay nombre)')}
+          {campo('parrafo1', 'Párrafo de apertura', 3)}
+          {campo('fallas', 'Fallas (una por línea)', 4)}
+          {campo('parrafo2', 'Párrafo bajo la imagen', 2)}
+          {campo('parrafo3', 'Cierre / llamado a la acción', 2)}
+          <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            {campo('imagen_correo', 'Imagen correo')}
+            {campo('imagen_wa', 'Imagen WhatsApp')}
+          </div>
+          <div style={{ fontWeight: 800, margin: '10px 0 8px' }}>WhatsApp (variables de la plantilla aprobada)</div>
+          {campo('wa_falla', 'Falla que se menciona', 1, '“Ayer le enviamos un correo sobre …”')}
+          {campo('wa_rubro', 'Rubro', 1, '“…detenciones no programadas en …”')}
+          <div className="flex flex-wrap gap-2 mt-3">
+            {puedeEditar && <button className="btn-primary" disabled={!sucio || guardar.isPending} onClick={() => guardar.mutate()}><Save size={14} /> Guardar</button>}
+            {dueno && <button className="btn-primary" disabled={sucio || !!original.validado_at || validar.isPending} onClick={() => validar.mutate()} style={{ background: '#0b6b66' }}><ShieldCheck size={14} /> Validar</button>}
+            {puedeEditar && <button className="btn-secondary" disabled={sucio || prueba.isPending} onClick={() => prueba.mutate()}><FlaskConical size={14} /> Enviarme una prueba</button>}
+          </div>
+          {sucio && <div className="text-xs mt-2" style={{ color: 'var(--rmg-muted)' }}>Guarda los cambios para validar o enviar una prueba. Todo cambio guardado obliga a validar de nuevo.</div>}
+        </div>
+
+        <div>
+          <div className="rmg-card p-3 mb-4">
+            <div className="flex items-center gap-2 mb-2" style={{ fontWeight: 800 }}><Mail size={16} /> Vista previa del correo</div>
+            {prev ? <>
+              <div className="text-sm mb-2"><span style={{ color: 'var(--rmg-muted)' }}>De:</span> casilla de prospección · <span style={{ color: 'var(--rmg-muted)' }}>Ejemplo con:</span> {prev.empresa}</div>
+              <div className="text-sm mb-2"><span style={{ color: 'var(--rmg-muted)' }}>Asunto:</span> <strong>{prev.asunto}</strong></div>
+              <iframe title="correo" srcDoc={prev.html} style={{ width: '100%', height: 640, border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff' }} />
+            </> : <div className="text-sm">Cargando…</div>}
+          </div>
+          {prev?.whatsapp && (
+            <div className="rmg-card p-3" style={{ background: '#efeae2' }}>
+              <div className="flex items-center gap-2 mb-2" style={{ fontWeight: 800 }}><MessageCircle size={16} /> WhatsApp 1 (día siguiente) y 2 (si no responde)</div>
+              {[[prev.whatsapp.imagen, prev.whatsapp.texto, prev.whatsapp.botones], [null, prev.whatsapp.texto2, prev.whatsapp.botones2]].map(([img, txt, bts], i) => (
+                <div key={i} style={{ maxWidth: 340, background: '#fff', borderRadius: 8, padding: 6, marginBottom: 12, boxShadow: '0 1px 1px rgba(0,0,0,.1)' }}>
+                  {img && <img src={img} alt="" style={{ width: '100%', borderRadius: 6, display: 'block' }} />}
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, padding: '6px 4px', color: '#111' }}>{txt}</div>
+                  {bts.map(x => <div key={x} style={{ borderTop: '1px solid #eee', textAlign: 'center', color: '#0a7cff', fontSize: 14, padding: '7px 0' }}>{x}</div>)}
+                </div>
               ))}
+              <div className="text-xs" style={{ color: '#555' }}>El texto fijo es el de las plantillas aprobadas por Meta; solo cambian nombre, falla, rubro e imagen.</div>
             </div>
-            {s?.envio_en_curso && <div className="text-xs" style={{ color: 'var(--rmg-blue)', fontWeight: 600 }}>Envío de correos en curso…</div>}
-          </div>
-          <div className="rmg-card p-4" style={{ gridColumn: '1 / -1' }}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Lote que saldría hoy ({preview.data?.lote?.length ?? '…'} de {preview.data?.disponibles ?? '…'} disponibles)</div>
-            {preview.data?.descartes && <div className="text-xs mb-2" style={{ color: 'var(--rmg-muted)' }}>
-              Revisados {preview.data.revisados}. Descartados: {Object.entries(preview.data.descartes).map(([k, v]) => `${k} ${v}`).join(' · ')}
-            </div>}
-            <div className="overflow-x-auto">
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 800 }}>
-                <tbody>
-                  {(preview.data?.lote || []).map(p => (
-                    <tr key={p.id} style={{ borderTop: '1px solid var(--rmg-border)' }}>
-                      <td style={{ padding: '8px 10px', fontWeight: 700 }}>{p.empresa}{p.reintento ? ' (reintento)' : ''}</td>
-                      <td style={{ padding: '8px 10px' }}>{p.nombre_contacto || '—'}</td>
-                      <td style={{ padding: '8px 10px' }}>{p.email}</td>
-                      <td style={{ padding: '8px 10px' }}>+{p.celular}</td>
-                      <td style={{ padding: '8px 10px', color: 'var(--rmg-muted)' }}>{p.rubro}</td>
-                      <td style={{ padding: '8px 10px' }}>{p.prioridad}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
+    </>
+  )
+}
 
-      {accion && <ModalAccion p={accion} onClose={() => setAccion(null)} onSave={(body) => cambiar.mutate({ id: accion.id, body })} />}
-      {verCorreo && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,35,60,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="rmg-card p-4" style={{ width: 'min(680px, 94vw)', maxHeight: '90vh', overflow: 'auto' }}>
-            <div className="flex items-center justify-between mb-2">
-              <div><div style={{ fontWeight: 800 }}>{verCorreo.asunto}</div><div className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Ejemplo con {verCorreo.empresa}</div></div>
-              <button onClick={() => setVerCorreo(null)}><X size={18} /></button>
-            </div>
-            <iframe title="correo" srcDoc={verCorreo.html} style={{ width: '100%', height: '70vh', border: '1px solid var(--rmg-border)', borderRadius: 8 }} />
-          </div>
+// ─── Pestaña Configuración (dueño) ───────────────────────────────────────────
+function Configuracion({ s }) {
+  const qc = useQueryClient()
+  const [c, setC] = useState(() => ({ ...s.config, smtp_pass: '' }))
+  const segs = String(c.segmentos_activos || '').split(',').filter(Boolean)
+  const guardar = useMutation({
+    mutationFn: () => {
+      const body = Object.fromEntries(['smtp_email', 'smtp_nombre', 'smtp_host', 'smtp_port', 'lote_diario', 'hora_correo', 'hora_wsp1', 'hora_wsp2', 'hora_dormido',
+        'segmentos_activos', 'wa_numero_bot', 'test_email', 'test_celular', 'notificar_emails', 'wsp_activo'].map(k => [k, c[k] ?? '']))
+      if (c.smtp_pass) body.smtp_pass = c.smtp_pass
+      return api.put('/prospeccion-auto/config', body).then(r => r.data)
+    },
+    onSuccess: (r) => { toast.success('Configuración guardada'); setC({ ...r, smtp_pass: '' }); qc.invalidateQueries({ queryKey: ['pauto-stats'] }) },
+    onError: errMsg,
+  })
+  const probar = useMutation({
+    mutationFn: () => api.post('/prospeccion-auto/probar-casilla').then(r => r.data),
+    onSuccess: (r) => { r.ok ? toast.success('Casilla OK: conecta y autentica') : toast.error(r.motivo, { duration: 9000 }); qc.invalidateQueries({ queryKey: ['pauto-stats'] }) },
+    onError: errMsg,
+  })
+  const inp = (k, label, props = {}) => (
+    <div className="mb-3">
+      <label className="text-xs" style={{ color: 'var(--rmg-muted)', fontWeight: 700 }}>{label}</label>
+      <input className="rmg-input w-full" value={c[k] ?? ''} onChange={e => setC({ ...c, [k]: e.target.value })} {...props} />
+    </div>
+  )
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+      <div className="rmg-card p-4">
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Casilla de envío (fija, para todos)</div>
+        <div className="mb-3"><Chip ok={s.casilla?.ok && s.casilla?.verificada} si={`${s.casilla.email} verificada`} no={s.casilla?.motivo || 'Falta probar la casilla'} /></div>
+        {inp('smtp_email', 'Correo')}
+        {inp('smtp_nombre', 'Nombre visible')}
+        {inp('smtp_pass', s.config.smtp_clave_cargada ? 'Clave (cargada — escribe solo para cambiarla)' : 'Clave de la casilla', { type: 'password', autoComplete: 'new-password' })}
+        <div className="grid gap-2" style={{ gridTemplateColumns: '2fr 1fr' }}>{inp('smtp_host', 'Servidor SMTP')}{inp('smtp_port', 'Puerto')}</div>
+        <button className="btn-secondary" disabled={probar.isPending} onClick={() => probar.mutate()}><RefreshCw size={14} /> Probar casilla</button>
+        <div className="text-xs mt-2" style={{ color: 'var(--rmg-muted)' }}>Guarda primero si cambiaste la clave.</div>
+      </div>
+      <div className="rmg-card p-4">
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Ritmo y horarios (días hábiles, hora Chile)</div>
+        {inp('lote_diario', 'Correos por día (máx. 100)', { type: 'number', min: 1, max: 100 })}
+        <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          {inp('hora_correo', 'Correo', { type: 'time' })}{inp('hora_wsp1', 'WhatsApp 1 (día siguiente)', { type: 'time' })}
+          {inp('hora_wsp2', 'WhatsApp 2 (día siguiente)', { type: 'time' })}{inp('hora_dormido', 'Pasa a dormido', { type: 'time' })}
         </div>
-      )}
+        <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--rmg-muted)', margin: '6px 0' }}>Segmentos activos</div>
+        <div className="flex gap-3 mb-3">
+          {SEGMENTOS.map(x => (
+            <label key={x} className="text-sm flex items-center gap-1">
+              <input type="checkbox" checked={segs.includes(x)} onChange={e => setC({ ...c, segmentos_activos: (e.target.checked ? [...segs, x] : segs.filter(y => y !== x)).join(',') })} /> {x}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="rmg-card p-4">
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>WhatsApp y avisos</div>
+        <div className="mb-3"><Chip ok={s.wa_configurado} si="Número de WhatsApp conectado (Render)" no="Faltan PROSPECCION_WA_PHONE_ID / PROSPECCION_WA_TOKEN en Render" /></div>
+        <label className="text-sm flex items-center gap-2 mb-3">
+          <input type="checkbox" checked={!!c.wsp_activo} onChange={e => setC({ ...c, wsp_activo: e.target.checked ? 1 : 0 })} /> Enviar WhatsApp 1 y 2
+        </label>
+        {inp('wa_numero_bot', 'Número del bot (botón del correo)', { placeholder: '569XXXXXXXX' })}
+        {inp('test_email', 'Correo para pruebas')}
+        {inp('test_celular', 'Celular para pruebas', { placeholder: '569XXXXXXXX' })}
+        {inp('notificar_emails', 'Avisar respuestas a (correos separados por coma)')}
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <button className="btn-primary" disabled={guardar.isPending} onClick={() => guardar.mutate()}><Save size={14} /> Guardar configuración</button>
+      </div>
     </div>
   )
 }
 
-function ConfigForm({ c, temas, onSave }) {
-  const [f, setF] = useState(null)
-  const v = f || c
-  const set = (k) => (e) => setF({ ...v, [k]: e.target.value })
-  const campo = (k, l, props = {}) => (
-    <div>
-      <label className="text-xs" style={{ color: 'var(--rmg-muted)' }}>{l}</label>
-      <input className="rmg-input" value={v[k] ?? ''} onChange={set(k)} {...props} />
-    </div>
-  )
+// ─── Página ──────────────────────────────────────────────────────────────────
+export default function ProspeccionAutoPage() {
+  const { user } = useAuth()
+  const qc = useQueryClient()
+  const [tab, setTab] = useState('pipeline')
+  const [accion, setAccion] = useState(null)
+  const stats = useQuery({ queryKey: ['pauto-stats'], queryFn: () => api.get('/prospeccion-auto/stats').then(r => r.data), refetchInterval: 60000 })
+  const s = stats.data
+  const dueno = !!s && String(user?.email || '').toLowerCase() === s.config?.owner_email
+  const puedeEditar = dueno || ['gerente', 'administrador'].includes(user?.rol)
+  const refrescar = () => { qc.invalidateQueries({ queryKey: ['pauto-stats'] }); qc.invalidateQueries({ queryKey: ['pauto-detalle'] }) }
+
+  const activar = useMutation({ mutationFn: () => api.post('/prospeccion-auto/activar').then(r => r.data), onSuccess: () => { toast.success('Campaña activada'); refrescar() }, onError: errMsg })
+  const pausar = useMutation({ mutationFn: () => api.post('/prospeccion-auto/pausar').then(r => r.data), onSuccess: () => { toast.success('Campaña pausada'); refrescar() }, onError: errMsg })
+  const cambiar = useMutation({
+    mutationFn: ({ id, body }) => api.put(`/prospeccion-auto/prospecto/${id}/estado`, body).then(r => r.data),
+    onSuccess: () => { toast.success('Registrado'); setAccion(null); refrescar() }, onError: errMsg,
+  })
+  const llamar = useQuery({
+    queryKey: ['pauto-detalle', 'llamar-tab'],
+    queryFn: () => api.get('/prospeccion-auto/detalle', { params: { filtro: 'contestados' } }).then(r => r.data),
+    enabled: tab === 'llamar', refetchInterval: 60000,
+  })
+
+  if (stats.isLoading) return <div className="p-6">Cargando…</div>
+  if (stats.error) return <div className="p-6" style={{ color: '#b4402a' }}>{stats.error?.response?.data?.error || stats.error.message}</div>
+
+  const activo = !!s.config.activo
+  const sinValidar = s.mensajes.filter(m => String(s.config.segmentos_activos || '').split(',').includes(m.segmento) && !m.validado_at)
+  const TABS = [['pipeline', 'Pipeline'], ['llamar', `Para llamar (${s.tarjetas?.llamar ?? 0})`], ['mensajes', 'Mensajes'], ...(dueno ? [['config', 'Configuración']] : [])]
+
   return (
-    <div className="space-y-2">
-      <div>
-        <label className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Tema de la semana</label>
-        <select className="rmg-input" value={v.tema_activo || ''} onChange={set('tema_activo')}>
-          {temas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-        </select>
+    <div className="p-4 md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 900, fontFamily: 'Inter Tight, sans-serif' }} className="flex items-center gap-2"><Send size={22} /> Prospección automática</h1>
+          <div className="text-sm" style={{ color: 'var(--rmg-muted)' }}>
+            Correo {s.config.hora_correo} → WhatsApp 1 {s.config.hora_wsp1} (D+1) → WhatsApp 2 {s.config.hora_wsp2} (D+2) → dormido · {s.config.lote_diario} por día · desde {s.casilla.email}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span style={{ padding: '6px 12px', borderRadius: 999, fontWeight: 800, fontSize: 13, background: activo ? '#dcfce7' : '#fee2e2', color: activo ? '#166534' : '#991b1b' }}>
+            {activo ? `ACTIVA${s.envio_en_curso ? ' · enviando…' : ''}` : 'PAUSADA'}
+          </span>
+          {dueno && (activo
+            ? <button className="btn-secondary" disabled={pausar.isPending} onClick={() => pausar.mutate()}><Pause size={14} /> Pausar</button>
+            : <button className="btn-primary" disabled={activar.isPending} onClick={() => window.confirm(`¿Activar? Desde hoy salen ${s.config.lote_diario} correos diarios a las ${s.config.hora_correo}.`) && activar.mutate()}><Play size={14} /> Activar</button>)}
+          <button className="btn-secondary" onClick={refrescar}><RefreshCw size={14} /></button>
+        </div>
       </div>
-      <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        {campo('lote_diario', 'Correos por día', { type: 'number', min: 1, max: 100 })}
-        {campo('hora_correo', 'Hora correo (HH:MM)')}
-        {campo('hora_wsp1', 'Hora WhatsApp 1')}
-        {campo('hora_wsp2', 'Hora WhatsApp 2')}
+
+      {!activo && s.config.pausa_motivo && <div className="rmg-card p-3 mb-3 text-sm" style={{ color: '#b4402a' }}>{s.config.pausa_motivo}</div>}
+
+      <div className="rmg-card p-3 mb-4 flex flex-wrap gap-x-6 gap-y-2">
+        <Chip ok={s.casilla.ok && s.casilla.verificada} si="Casilla verificada" no={s.casilla.ok ? 'Falta probar la casilla' : s.casilla.motivo} />
+        <Chip ok={!sinValidar.length} si="Mensajes validados" no={`Validar: ${sinValidar.map(m => m.segmento).join(', ')}`} />
+        <Chip ok={s.wa_configurado && !!s.config.wsp_activo} si="WhatsApp listo" no={s.wa_configurado ? 'WhatsApp apagado' : 'WhatsApp sin número'} />
+        <Chip ok={(s.tarjetas?.base || 0) > 0} si={`${s.tarjetas?.base} en la base`} no="Base vacía" />
+        {s.atrasados > 0 && <Chip ok={false} no={`${s.atrasados} correos de hace más de 4 días sin WhatsApp`} />}
       </div>
-      {campo('wa_numero_bot', 'Número del bot (para el botón del correo)', { placeholder: '+56 9 …' })}
-      {campo('notificar_emails', 'Avisar respuestas a (correos separados por coma)')}
-      <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        {campo('test_email', 'Correo de prueba')}
-        {campo('test_celular', 'Celular de prueba')}
+
+      <div className="flex gap-2 mb-4" style={{ borderBottom: '1px solid var(--rmg-border, #e5e7eb)' }}>
+        {TABS.map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} style={{ padding: '8px 14px', fontWeight: 700, borderBottom: tab === k ? '3px solid #1d4ed8' : '3px solid transparent', color: tab === k ? 'var(--rmg-text)' : 'var(--rmg-muted)' }}>{l}</button>
+        ))}
       </div>
-      <button className="btn-primary" disabled={!f} onClick={() => { onSave({
-        tema_activo: v.tema_activo, lote_diario: Number(v.lote_diario), hora_correo: v.hora_correo, hora_wsp1: v.hora_wsp1,
-        hora_wsp2: v.hora_wsp2, wa_numero_bot: v.wa_numero_bot || null, notificar_emails: v.notificar_emails,
-        test_email: v.test_email || null, test_celular: v.test_celular || null,
-      }); setF(null) }}>Guardar configuración</button>
+
+      {tab === 'pipeline' && <Pipeline s={s} dueno={dueno} onAccion={setAccion} />}
+      {tab === 'llamar' && (
+        <div className="rmg-card">
+          <div className="p-3 text-sm" style={{ color: 'var(--rmg-muted)', borderBottom: '1px solid var(--rmg-border, #e5e7eb)' }}>
+            Respondieron por correo o WhatsApp. Llamar el mismo día y registrar el resultado (botón del teléfono).
+          </div>
+          <TablaDetalle filas={llamar.data} cargando={llamar.isLoading} onAccion={setAccion} />
+        </div>
+      )}
+      {tab === 'mensajes' && <Mensajes dueno={dueno} puedeEditar={puedeEditar} />}
+      {tab === 'config' && dueno && <Configuracion s={s} />}
+
+      {accion && <ModalAccion p={accion} onClose={() => setAccion(null)} onSave={(body) => cambiar.mutate({ id: accion.id, body })} />}
     </div>
   )
 }

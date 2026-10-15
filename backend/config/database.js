@@ -3438,6 +3438,57 @@ Saludos,`
     }
   }
 
+  // Migración: prospeccion_auto_v2 (2026-10-14, pedido de JC) — casilla de envío
+  // fija (aquiroga@rmgautos.cl, independiente de quién esté conectado), mensajes
+  // por segmento editables y validados antes de activar, y estado de entrega de
+  // WhatsApp (enviado / entregado / leído / fallido) como en Campañas de Cruzeiro.
+  const mAuto2 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('prospeccion_auto_v2')
+  if (!mAuto2) {
+    try {
+      const colsC = db.prepare('PRAGMA table_info(prospeccion_auto_config)').all().map(c => c.name)
+      const nuevasC = [
+        ['smtp_email', "TEXT DEFAULT 'aquiroga@rmgautos.cl'"], ['smtp_nombre', "TEXT DEFAULT 'Abril Quiroga · RMG Parts'"],
+        ['smtp_pass_enc', 'TEXT'], ['smtp_host', "TEXT DEFAULT 'mail.rmgautos.cl'"], ['smtp_port', 'INTEGER DEFAULT 465'],
+        ['smtp_verificado_at', 'TEXT'], ['segmentos_activos', "TEXT DEFAULT 'Industria,Construcción,Agrícola'"],
+        ['activado_por', 'TEXT'], ['activado_at', 'TEXT'],
+      ]
+      for (const [n, t] of nuevasC) if (!colsC.includes(n)) db.exec(`ALTER TABLE prospeccion_auto_config ADD COLUMN ${n} ${t}`)
+      db.exec("UPDATE prospeccion_auto_config SET smtp_email = COALESCE(smtp_email, 'aquiroga@rmgautos.cl'), smtp_nombre = COALESCE(smtp_nombre, 'Abril Quiroga · RMG Parts'), smtp_host = COALESCE(smtp_host, 'mail.rmgautos.cl'), smtp_port = COALESCE(smtp_port, 465), segmentos_activos = COALESCE(segmentos_activos, 'Industria,Construcción,Agrícola') WHERE id = 1")
+
+      const colsP = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+      for (const [n, t] of [['seq_segmento', 'TEXT'], ['seq_wsp1_id', 'TEXT'], ['seq_wsp1_estado', 'TEXT'],
+        ['seq_wsp2_id', 'TEXT'], ['seq_wsp2_estado', 'TEXT'], ['seq_correo_error', 'TEXT']]) {
+        if (!colsP.includes(n)) db.exec(`ALTER TABLE pipeline_contactos ADD COLUMN ${n} ${t}`)
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_pc_seq_wsp1_id ON pipeline_contactos(seq_wsp1_id);
+        CREATE INDEX IF NOT EXISTS idx_pc_seq_wsp2_id ON pipeline_contactos(seq_wsp2_id);
+        CREATE TABLE IF NOT EXISTS prospeccion_auto_mensajes (
+          segmento TEXT PRIMARY KEY,
+          nombre TEXT,
+          asunto TEXT, asunto_sin_nombre TEXT,
+          parrafo1 TEXT, fallas TEXT, parrafo2 TEXT, parrafo3 TEXT,
+          imagen_correo TEXT, imagen_wa TEXT,
+          wa_falla TEXT, wa_rubro TEXT,
+          activo INTEGER DEFAULT 1,
+          validado_at TEXT, validado_por TEXT,
+          updated_at TEXT DEFAULT (datetime('now')), updated_por TEXT
+        );
+      `)
+      const seed = require('../src/services/prospeccionMensajesSeed')
+      const ins = db.prepare(`INSERT OR IGNORE INTO prospeccion_auto_mensajes
+        (segmento, nombre, asunto, asunto_sin_nombre, parrafo1, fallas, parrafo2, parrafo3, imagen_correo, imagen_wa, wa_falla, wa_rubro)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      for (const m of seed) ins.run(m.segmento, m.nombre, m.asunto, m.asunto_sin_nombre, m.parrafo1, m.fallas.join('\n'),
+        m.parrafo2, m.parrafo3, m.imagen_correo, m.imagen_wa, m.wa_falla, m.wa_rubro)
+
+      db.prepare("INSERT INTO _migrations (id) VALUES ('prospeccion_auto_v2')").run()
+      console.log('✅ Migración prospeccion_auto_v2 — casilla fija, mensajes por segmento, estado WhatsApp')
+    } catch (e) {
+      console.error('❌ Migración prospeccion_auto_v2 falló:', e.message)
+    }
+  }
+
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

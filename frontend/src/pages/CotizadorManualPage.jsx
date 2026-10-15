@@ -20,10 +20,50 @@ export default function CotizadorManualPage() {
   const [archivos, setArchivos] = useState([])
   const [seleccionada, setSeleccionada] = useState(null)
 
+  // ── Resultado del proceso / Análisis de Adjudicación (2026-09-28) ────────
+  const [resultadoForm, setResultadoForm] = useState({ resultado: 'perdido', competidor_nombre: '', competidor_monto_neto: '', competidor_monto_civa: '' })
+  const [archivoCompetidor, setArchivoCompetidor] = useState(null)
+
   const { data: lista } = useQuery({
     queryKey: ['cotizador-manual'],
     queryFn: () => api.get('/cotizador-manual').then(r => r.data),
   })
+
+  const { data: analisisAdjudicacion, refetch: refetchAnalisis } = useQuery({
+    queryKey: ['cotizador-manual-resultado', seleccionada?.id],
+    queryFn: () => api.get(`/cotizador-manual/${seleccionada.id}/resultado`).then(r => r.data).catch(() => null),
+    enabled: !!seleccionada?.id,
+    retry: false,
+  })
+
+  const analizarResultadoMut = useMutation({
+    mutationFn: () => {
+      const fd = new FormData()
+      fd.append('resultado', resultadoForm.resultado)
+      if (resultadoForm.competidor_nombre) fd.append('competidor_nombre', resultadoForm.competidor_nombre)
+      if (resultadoForm.competidor_monto_neto) fd.append('competidor_monto_neto', resultadoForm.competidor_monto_neto)
+      if (resultadoForm.competidor_monto_civa) fd.append('competidor_monto_civa', resultadoForm.competidor_monto_civa)
+      if (archivoCompetidor) fd.append('documento', archivoCompetidor)
+      return api.post(`/cotizador-manual/${seleccionada.id}/resultado`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }).then(r => r.data)
+    },
+    onSuccess: () => {
+      refetchAnalisis()
+      toast.success('Análisis de Adjudicación listo')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al analizar el resultado'),
+  })
+
+  const descargarExcelAdjudicacion = async () => {
+    const res = await api.get(`/cotizador-manual/${seleccionada.id}/resultado/excel`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Adjudicacion_${seleccionada.codigo_externo}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const subirMut = useMutation({
     mutationFn: () => {
@@ -153,6 +193,109 @@ export default function CotizadorManualPage() {
                 </div>
               )
             })}
+          </div>
+
+          {/* Resultado del proceso — Análisis de Adjudicación */}
+          <div className="border-t px-4 py-4 space-y-3" style={{ borderColor: 'var(--rmg-border)' }}>
+            <div className="text-sm font-semibold" style={{ color: 'var(--rmg-text)' }}>Resultado del proceso</div>
+            <div className="flex gap-2 flex-wrap items-center">
+              <select
+                value={resultadoForm.resultado}
+                onChange={e => setResultadoForm(f => ({ ...f, resultado: e.target.value }))}
+                className="px-3 py-2 rounded-lg border text-sm"
+                style={{ borderColor: 'var(--rmg-border)' }}
+              >
+                <option value="perdido">Perdido</option>
+                <option value="ganado">Ganado</option>
+                <option value="desierto">Desierto</option>
+              </select>
+              <input
+                type="text" placeholder="Competidor (ej. Velora)"
+                value={resultadoForm.competidor_nombre}
+                onChange={e => setResultadoForm(f => ({ ...f, competidor_nombre: e.target.value }))}
+                className="px-3 py-2 rounded-lg border text-sm w-44"
+                style={{ borderColor: 'var(--rmg-border)' }}
+              />
+              <input
+                type="number" placeholder="Monto neto"
+                value={resultadoForm.competidor_monto_neto}
+                onChange={e => setResultadoForm(f => ({ ...f, competidor_monto_neto: e.target.value }))}
+                className="px-3 py-2 rounded-lg border text-sm w-32"
+                style={{ borderColor: 'var(--rmg-border)' }}
+              />
+              <input
+                type="number" placeholder="Monto c/IVA"
+                value={resultadoForm.competidor_monto_civa}
+                onChange={e => setResultadoForm(f => ({ ...f, competidor_monto_civa: e.target.value }))}
+                className="px-3 py-2 rounded-lg border text-sm w-32"
+                style={{ borderColor: 'var(--rmg-border)' }}
+              />
+              <label className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer" style={{ borderColor: 'var(--rmg-border)', color: 'var(--rmg-muted)' }}>
+                <Upload size={14} />
+                {archivoCompetidor ? archivoCompetidor.name : 'Oferta rival (PDF/Word, opcional)'}
+                <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
+                  onChange={e => setArchivoCompetidor(e.target.files?.[0] || null)} />
+              </label>
+              <button
+                onClick={() => analizarResultadoMut.mutate()}
+                disabled={analizarResultadoMut.isPending}
+                className="text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-50"
+                style={{ background: 'var(--rmg-blue)' }}
+              >
+                {analizarResultadoMut.isPending ? 'Analizando…' : 'Analizar resultado'}
+              </button>
+            </div>
+
+            {analisisAdjudicacion && (
+              <div className="space-y-3 pt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="p-2 rounded-lg" style={{ background: 'var(--rmg-bg)' }}>
+                    <div style={{ color: 'var(--rmg-muted)' }}>Oferta RMG</div>
+                    <div className="font-bold" style={{ color: 'var(--rmg-text)' }}>${Number(analisisAdjudicacion.resumen.civa_rmg || 0).toLocaleString('es-CL')}</div>
+                  </div>
+                  <div className="p-2 rounded-lg" style={{ background: 'var(--rmg-bg)' }}>
+                    <div style={{ color: 'var(--rmg-muted)' }}>Competidor</div>
+                    <div className="font-bold" style={{ color: 'var(--rmg-text)' }}>${Number(analisisAdjudicacion.resumen.civa_competidor || 0).toLocaleString('es-CL')}</div>
+                  </div>
+                  <div className="p-2 rounded-lg" style={{ background: 'var(--rmg-bg)' }}>
+                    <div style={{ color: 'var(--rmg-muted)' }}>Brecha</div>
+                    <div className="font-bold" style={{ color: (analisisAdjudicacion.resumen.brecha_civa || 0) > 0 ? '#9C0006' : '#1F5C3D' }}>
+                      ${Number(analisisAdjudicacion.resumen.brecha_civa || 0).toLocaleString('es-CL')}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg" style={{ background: 'var(--rmg-bg)' }}>
+                    <div style={{ color: 'var(--rmg-muted)' }}>Oferta óptima</div>
+                    <div className="font-bold" style={{ color: 'var(--rmg-text)' }}>${Number(analisisAdjudicacion.oferta_optima?.total_civa || 0).toLocaleString('es-CL')}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  {analisisAdjudicacion.lineas.map((l, idx) => (
+                    <div key={idx} className="text-xs px-3 py-2 rounded-lg" style={l.alerta_normativa ? { background: 'rgba(192,0,0,0.06)' } : { background: 'var(--rmg-bg)' }}>
+                      <div className="flex justify-between gap-2">
+                        <span className="font-medium" style={{ color: 'var(--rmg-text)' }}>{l.descripcion_solicitada}</span>
+                        <span style={{ color: (l.diferencia_civa || 0) > 0 ? '#9C0006' : '#1F5C3D' }}>
+                          {l.diferencia_civa != null ? `${l.diferencia_civa > 0 ? '+' : ''}$${l.diferencia_civa.toLocaleString('es-CL')}` : '—'}
+                        </span>
+                      </div>
+                      {l.alerta_normativa && (
+                        <div className="italic mt-1" style={{ color: '#9C0006' }}>⚠ {l.detalle_alerta}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="text-xs space-y-1">
+                  {analisisAdjudicacion.causas.map((c, idx) => (
+                    <div key={idx} style={{ color: 'var(--rmg-muted)' }}>• {c}</div>
+                  ))}
+                </div>
+
+                <button onClick={descargarExcelAdjudicacion} className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: 'var(--rmg-teal)' }}>
+                  <Download size={14} /> Descargar Excel del análisis
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

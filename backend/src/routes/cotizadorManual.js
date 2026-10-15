@@ -1,5 +1,5 @@
 /**
- * RMG Parts — Rutas Cotizador Manual (2026-09-15, v2)
+ * RMG Parts — Rutas Cotizador Manual (2026-09-15, v2 · 2026-09-28 Análisis de Adjudicación)
  *
  * GET    /api/cotizador-manual                pega el código y sale — solo fuente='cotizador_manual'
  * POST   /api/cotizador-manual/subir          multipart: { codigo, documentos[] (PDF/imagen/Word) }
@@ -7,6 +7,11 @@
  * GET    /api/cotizador-manual/:id            detalle + ítems
  * GET    /api/cotizador-manual/:id/excel      descarga el Excel de cruce (mismo formato de siempre)
  * DELETE /api/cotizador-manual/:id            elimina
+ * POST   /api/cotizador-manual/:id/resultado          multipart: { resultado, competidor_nombre,
+ *                                                      competidor_monto_neto, competidor_monto_civa,
+ *                                                      documento (opcional) } → Análisis de Adjudicación
+ * GET    /api/cotizador-manual/:id/resultado          último Análisis de Adjudicación guardado
+ * GET    /api/cotizador-manual/:id/resultado/excel    descarga el Excel del Análisis de Adjudicación
  */
 const router = require('express').Router()
 const c = require('../controllers/cotizadorManualController')
@@ -18,5 +23,9 @@ router.post('/subir',      authenticate, uploadDocumento.array('documentos', 5),
 router.get('/:id',         authenticate, c.getDetalle)
 router.get('/:id/excel',   authenticate, c.descargarExcel)
 router.delete('/:id',      authenticate, c.eliminar)
+
+router.post('/:id/resultado',       authenticate, uploadDocumento.single('documento'), c.registrarResultado)
+router.get('/:id/resultado',        authenticate, c.getResultado)
+router.get('/:id/resultado/excel',  authenticate, c.descargarExcelResultado)
 
 module.exports = router

@@ -502,4 +502,148 @@ async function generarExcelCruce(oportunidadId) {
   return Buffer.from(buffer)
 }
 
-module.exports = { generarExcelCruce, construirCrucePreview }
+/**
+ * 2026-09-28 — Excel del Análisis de Adjudicación (Cotizador Manual): recibe
+ * el objeto que devuelve `analisisAdjudicacion.registrarYAnalizar` /
+ * `obtenerUltimoAnalisis` y lo vuelca en el mismo estilo visual del resto de
+ * los Excel del sistema (Arial, encabezados azules, filas con alerta en
+ * rojo) — mismo formato que el análisis hecho a mano para Cerrillos
+ * (324-521-COT26).
+ */
+async function generarExcelAdjudicacion(analisis) {
+  const NCOLS_ADJ = 7
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'RMG Auto Parts — Asistente ChileCompra'
+  wb.created = new Date()
+  const ws = wb.addWorksheet('Analisis Adjudicacion')
+
+  let r = 1
+  ws.mergeCells(r, 1, r, NCOLS_ADJ)
+  const title = ws.getCell(r, 1)
+  title.value = `Análisis de Adjudicación — ${analisis.oportunidad?.codigo_externo || ''}`
+  title.font = STYLE.title
+  title.fill = FILL.navy
+  title.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
+  ws.getRow(r).height = 22
+  r++
+
+  ws.mergeCells(r, 1, r, NCOLS_ADJ)
+  const sub = ws.getCell(r, 1)
+  sub.value = `${analisis.oportunidad?.organismo_nombre || ''} · Resultado: ${(analisis.resultado || '').toUpperCase()}` +
+    (analisis.competidor_nombre ? ` · Competidor: ${analisis.competidor_nombre}` : '')
+  sub.font = STYLE.subtitle
+  sub.fill = FILL.navy
+  sub.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
+  ws.getRow(r).height = 16
+  r += 2
+
+  // ---- Resumen ----
+  const addResumen = (label, value, numFmt) => {
+    ws.getCell(r, 1).value = label
+    ws.getCell(r, 1).font = { name: FONT, size: 10, bold: true }
+    const c = ws.getCell(r, 3)
+    c.value = value
+    c.font = STYLE.boldCalc
+    if (numFmt) c.numFmt = numFmt
+    r++
+  }
+  const { resumen } = analisis
+  addResumen('Presupuesto (c/IVA)', resumen.presupuesto_civa || 0, MONEY_FMT)
+  addResumen('Oferta RMG (c/IVA)', resumen.civa_rmg || 0, MONEY_FMT)
+  addResumen('Oferta competidor (c/IVA)', resumen.civa_competidor || 0, MONEY_FMT)
+  addResumen('Brecha (RMG − competidor)', resumen.brecha_civa || 0, '$#,##0;[RED]-$#,##0')
+  addResumen('Brecha %', resumen.brecha_pct || 0, '0.0%')
+  r++
+
+  // ---- Tabla línea por línea ----
+  const headerRow = r
+  const headers = ['Producto exigido', 'SKU RMG', 'Costo RMG', 'Precio RMG c/IVA', 'Precio competidor c/IVA', 'Diferencia', 'Alerta normativa']
+  headers.forEach((h, i) => {
+    const c = ws.getCell(headerRow, i + 1)
+    c.value = h
+    c.font = STYLE.header
+    c.fill = FILL.header
+    c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    c.border = BORDER
+  })
+  ws.getRow(headerRow).height = 26
+  r++
+
+  for (const linea of analisis.lineas) {
+    const fill = linea.alerta_normativa ? FILL.gapRow : FILL.white
+    const vals = [
+      linea.descripcion_solicitada, linea.sku_rmg || '—', linea.costo_rmg,
+      linea.precio_rmg_civa, linea.precio_competidor_civa, linea.diferencia_civa,
+      linea.alerta_normativa ? `⚠ ${linea.detalle_alerta}` : '',
+    ]
+    vals.forEach((v, i) => {
+      const c = ws.getCell(r, i + 1)
+      c.value = v
+      c.font = linea.alerta_normativa ? STYLE.gap : STYLE.normal
+      c.fill = fill
+      c.border = BORDER
+      c.alignment = { horizontal: [2].includes(i) ? 'center' : (i >= 2 && i <= 5) ? 'right' : 'left', vertical: 'top', wrapText: true }
+      if (i >= 2 && i <= 5 && typeof v === 'number') c.numFmt = MONEY_FMT
+    })
+    ws.getRow(r).height = 40
+    r++
+  }
+  r++
+
+  // ---- Causas ----
+  ws.mergeCells(r, 1, r, NCOLS_ADJ)
+  ws.getCell(r, 1).value = 'Causas'
+  ws.getCell(r, 1).font = { name: FONT, size: 10, bold: true }
+  ws.getCell(r, 1).fill = FILL.cat
+  r++
+  for (const causa of analisis.causas || []) {
+    ws.mergeCells(r, 1, r, NCOLS_ADJ)
+    const c = ws.getCell(r, 1)
+    c.value = `• ${causa}`
+    c.font = STYLE.note
+    c.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+    ws.getRow(r).height = 22
+    r++
+  }
+  r++
+
+  // ---- Oferta óptima ----
+  ws.mergeCells(r, 1, r, NCOLS_ADJ)
+  ws.getCell(r, 1).value = 'Oferta óptima (SKU corregidos, precio de lista)'
+  ws.getCell(r, 1).font = { name: FONT, size: 10, bold: true }
+  ws.getCell(r, 1).fill = FILL.cat
+  r++
+  const headersOpt = ['Producto', 'SKU sugerido', 'Costo', 'Precio de lista', '', '', '']
+  headersOpt.forEach((h, i) => {
+    const c = ws.getCell(r, i + 1)
+    c.value = h
+    c.font = STYLE.header
+    c.fill = FILL.priceHeader
+    c.border = BORDER
+  })
+  r++
+  for (const l of analisis.oferta_optima?.lineas || []) {
+    const fill = l.reemplazado ? FILL.gapRow : FILL.white
+    const vals = [l.descripcion, l.sku, l.costo, l.precio_lista]
+    vals.forEach((v, i) => {
+      const c = ws.getCell(r, i + 1)
+      c.value = v
+      c.font = STYLE.normal
+      c.fill = fill
+      c.border = BORDER
+      if (i >= 2 && typeof v === 'number') c.numFmt = MONEY_FMT
+    })
+    r++
+  }
+  addResumen('Total oferta óptima (c/IVA)', analisis.oferta_optima?.total_civa || 0, MONEY_FMT)
+  addResumen('vs. competidor', analisis.oferta_optima?.vs_competidor || 0, '$#,##0;[RED]-$#,##0')
+  addResumen('% del presupuesto', analisis.oferta_optima?.vs_presupuesto_pct || 0, '0.0%')
+
+  const widths = { 1: 40, 2: 13, 3: 14, 4: 16, 5: 18, 6: 14, 7: 40 }
+  for (const [col, w] of Object.entries(widths)) ws.getColumn(Number(col)).width = w
+
+  const buffer = await wb.xlsx.writeBuffer()
+  return Buffer.from(buffer)
+}
+
+module.exports = { generarExcelCruce, construirCrucePreview, generarExcelAdjudicacion }

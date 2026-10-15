@@ -23,7 +23,7 @@ const login = (req, res) => {
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   )
 
-  const { password_hash, ...publicUser } = user
+  const { password_hash, smtp_pass_enc, ...publicUser } = user
   return res.json({ token, user: publicUser })
 }
 

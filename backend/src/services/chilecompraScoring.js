@@ -1052,4 +1052,10 @@ module.exports = {
   inferirTipoEnvaseSolicitado,
   volumenTotalSolicitado,
   esMarcaCompetencia,
+  // 2026-09-28 — reutilizadas por analisisAdjudicacion.js (verificación de
+  // norma exigida vs. norma declarada por el SKU ofertado, y emparejamiento
+  // por texto contra las líneas de la oferta rival). Sin cambios de lógica.
+  extraerAtributosTecnicos,
+  normalizarAtributo,
+  mejorPorSolapamiento,
 }

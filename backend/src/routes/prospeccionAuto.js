@@ -2,13 +2,13 @@
  * /api/prospeccion-auto — Prospección automática (correo + WhatsApp).
  * Públicos (sin JWT): o/:token.png (apertura), c/:token (click), baja/:token.
  * Servidor a servidor (header x-prospeccion-key = PROSPECCION_CRON_KEY): tick, evento.
- * Panel: autenticado; configuración y ejecución manual solo gerente/administrador.
+ * Panel: autenticado. Activar, pausar, configurar, validar y ejecutar a mano:
+ * solo el dueño (PROSPECCION_OWNER_EMAIL) — se valida en el servicio.
  */
 const router = require('express').Router()
 const s = require('../services/prospeccionAuto')
-const { authenticate, requireRole } = require('../middleware/auth')
+const { authenticate } = require('../middleware/auth')
 
-const gestion = [authenticate, requireRole(['gerente', 'administrador'])]
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
 
 function claveServidor(req, res, next) {
@@ -48,44 +48,33 @@ router.post('/evento', claveServidor, manejar((req) => s.registrarRespuesta(req.
 
 // ── Panel ───────────────────────────────────────────────────────────────────
 router.get('/stats', authenticate, manejar(() => s.stats()))
-router.get('/para-llamar', authenticate, manejar(() => s.paraLlamar()))
-router.get('/en-secuencia', authenticate, manejar(() => s.enSecuencia()))
+router.get('/detalle', authenticate, manejar((req) => s.detalle(req.query)))
 router.put('/prospecto/:id/estado', authenticate, manejar((req) => s.cambiarComEstado(req.params.id, req.body || {}, req.user)))
 
-router.get('/config', ...gestion, manejar(() => s.getConfig()))
-router.put('/config', ...gestion, manejar((req) => s.setConfig(req.body || {})))
-router.get('/preview', ...gestion, manejar(() => {
-  const c = s.getConfig()
-  const r = s.seleccionarLote(c.lote_diario || 20, c.tema_activo)
-  return {
-    ...r,
-    lote: r.lote.map(p => ({
-      id: p.id, empresa: p.empresa, nombre_contacto: p.nombre_contacto, email: p.email, rubro: p.rubro || p.rubro_especialidad,
-      prioridad: p.prioridad, comuna: p.comuna, celular: s.normalizarCelular(p.celular, p.telefono_contacto, p.telefono_empresa),
-      reintento: p.seq_estado === 'dormido',
-    })),
-  }
-}))
-router.get('/preview-correo', ...gestion, (req, res) => {
-  try {
-    const c = s.getConfig()
-    const temas = require('../services/prospeccionTemas')
-    const p = s.seleccionarLote(1, c.tema_activo).lote[0] || { empresa: 'EMPRESA DE PRUEBA SPA', nombre_contacto: 'Juan Prueba', rubro: 'PLASTICOS' }
-    const { asunto, html } = s.armarCorreo(p, temas[c.tema_activo], c, 'prueba')
-    res.json({ asunto, html, empresa: p.empresa })
-  } catch (e) { res.status(400).json({ error: e.message }) }
-})
-router.post('/enviar-prueba', ...gestion, manejar(() => s.enviarPrueba()))
-router.post('/ejecutar/:paso', ...gestion, (req, res) => {
+router.get('/config', authenticate, manejar(() => s.configPublica()))
+router.put('/config', authenticate, manejar((req) => s.setConfig(req.body || {}, req.user)))
+router.post('/probar-casilla', authenticate, manejar((req) => s.probarCasilla(req.user)))
+router.post('/activar', authenticate, manejar((req) => s.activar(req.user)))
+router.post('/pausar', authenticate, manejar((req) => s.pausar(req.user, req.body?.motivo)))
+
+router.get('/mensajes', authenticate, manejar(() => s.mensajes()))
+router.put('/mensajes/:segmento', authenticate, manejar((req) => s.guardarMensaje(req.params.segmento, req.body || {}, req.user)))
+router.post('/mensajes/:segmento/validar', authenticate, manejar((req) => s.validarMensaje(req.params.segmento, req.user)))
+router.post('/mensajes/:segmento/preview', authenticate, manejar((req) => s.previsualizar(req.params.segmento, req.body || {})))
+router.post('/mensajes/:segmento/prueba', authenticate, manejar((req) => s.enviarPrueba(req.params.segmento, req.user)))
+
+router.get('/preview', authenticate, manejar(() => s.previewLote()))
+router.post('/ejecutar/:paso', authenticate, (req, res) => {
   const paso = req.params.paso
   if (!['correo', 'wsp1', 'wsp2', 'dormido'].includes(paso)) return res.status(400).json({ error: 'paso inválido' })
+  if (!s.esDueno(req.user)) return res.status(403).json({ error: 'Solo el dueño de la campaña puede ejecutar pasos a mano' })
   // El correo tarda varios minutos (pausa entre envíos): se responde de inmediato y sigue en segundo plano.
   if (paso === 'correo') {
-    s.ejecutarPaso('correo').then(r => console.log('[PROSP-AUTO] correo manual:', JSON.stringify(r)))
+    s.ejecutarPaso('correo', req.user).then(r => console.log('[PROSP-AUTO] correo manual:', JSON.stringify(r)))
       .catch(e => console.error('[PROSP-AUTO] correo manual:', e.message))
     return res.json({ ok: true, en_segundo_plano: true })
   }
-  s.ejecutarPaso(paso).then(r => res.json(r)).catch(e => res.status(400).json({ error: e.message }))
+  s.ejecutarPaso(paso, req.user).then(r => res.json(r)).catch(e => res.status(400).json({ error: e.message }))
 })
 
 module.exports = router
