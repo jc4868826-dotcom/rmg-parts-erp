@@ -368,7 +368,7 @@ async function enviarCorreos({ forzar = false } = {}) {
       try {
         await rem.transporter.sendMail({
           from: rem.from, replyTo: rem.replyTo, to: p.email.trim(), subject: asunto, html, text: texto,
-          headers: { 'List-Unsubscribe': `<${API}/api/prospeccion-auto/baja/${token}>` },
+          headers: { 'List-Unsubscribe': `<${API}/api/prospeccion-auto/baja/${token}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
         })
         const wa = normalizarCelular(p.celular, p.telefono_contacto, p.telefono_empresa)
         db.prepare(`UPDATE pipeline_contactos SET seq_estado = 'correo_enviado', seq_correo_at = datetime('now'),

@@ -30,16 +30,29 @@ router.get('/c/:token', (req, res) => {
   try { destino = s.registrarClick(req.params.token, req.query.u) } catch (_) {}
   res.redirect(302, destino || 'https://rmg-parts-frontend.onrender.com')
 })
+// La baja se confirma con un botón (POST). Los filtros de seguridad de correo
+// corporativo abren cada link apenas llega el mensaje (GET): si el GET diera de
+// baja, cada correo revisado quedaría dado de baja sin que nadie lo pida.
+const paginaBaja = (cuerpo) => `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>RMG Parts</title></head>
+<body style="font-family:Arial,sans-serif;background:#f4f6f9;color:#1a2233;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<div style="background:#fff;padding:32px 28px;border-radius:10px;max-width:420px;text-align:center">${cuerpo}
+<p style="margin:18px 0 0;color:#5c6577;font-size:13px">RMG Parts</p></div></body></html>`
 router.get('/baja/:token', (req, res) => {
+  const valido = /^[a-f0-9]{24}$/.test(req.params.token)
+  res.set('Content-Type', 'text/html; charset=utf-8').send(paginaBaja(valido
+    ? `<h2 style="margin:0 0 10px">¿Dejar de recibir correos?</h2>
+<p style="margin:0 0 20px;line-height:1.5">Confirme y no le volveremos a escribir.</p>
+<form method="post"><button type="submit" style="background:#1a2233;color:#fff;border:0;border-radius:6px;padding:12px 22px;font-size:15px;font-weight:bold;cursor:pointer">Confirmar baja</button></form>`
+    : '<h2 style="margin:0 0 10px">Enlace no válido</h2><p style="margin:0;line-height:1.5">Si quiere dejar de recibir correos, responda el último correo con la palabra BAJA.</p>'))
+})
+// POST: botón de la página y baja de un clic de Gmail/Outlook (List-Unsubscribe-Post, RFC 8058).
+router.post('/baja/:token', (req, res) => {
   let ok = false
   try { ok = s.darDeBaja(req.params.token) } catch (_) {}
-  res.set('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>RMG Parts</title></head>
-<body style="font-family:Arial,sans-serif;background:#f4f6f9;color:#1a2233;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
-<div style="background:#fff;padding:32px 28px;border-radius:10px;max-width:420px;text-align:center">
-<h2 style="margin:0 0 10px">${ok ? 'Listo' : 'Enlace no válido'}</h2>
-<p style="margin:0;line-height:1.5">${ok ? 'No le volveremos a escribir. Gracias por avisarnos.' : 'Este enlace ya no es válido. Si quiere dejar de recibir correos, responda el último correo con la palabra BAJA.'}</p>
-<p style="margin:18px 0 0;color:#5c6577;font-size:13px">RMG Parts</p></div></body></html>`)
+  res.set('Content-Type', 'text/html; charset=utf-8').send(paginaBaja(ok
+    ? '<h2 style="margin:0 0 10px">Listo</h2><p style="margin:0;line-height:1.5">No le volveremos a escribir. Gracias por avisarnos.</p>'
+    : '<h2 style="margin:0 0 10px">Enlace no válido</h2><p style="margin:0;line-height:1.5">Si quiere dejar de recibir correos, responda el último correo con la palabra BAJA.</p>'))
 })
 
 // ── Servidor a servidor ─────────────────────────────────────────────────────

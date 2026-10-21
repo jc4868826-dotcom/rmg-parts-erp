@@ -3489,6 +3489,27 @@ Saludos,`
     }
   }
 
+  // Migración: prospeccion_bajas_falsas_v1 (2026-10-19) — el link de baja era GET y
+  // los filtros de seguridad de correo corporativo lo abrían segundos después de
+  // llegar el mensaje. Se restauran las bajas registradas a menos de 3 minutos del envío.
+  const mBF = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('prospeccion_bajas_falsas_v1')
+  if (!mBF) {
+    try {
+      const falsas = db.prepare(`SELECT p.id FROM pipeline_contactos p
+        JOIN prospeccion_auto_eventos e ON e.prospecto_id = p.id AND e.tipo = 'baja' AND e.detalle = 'link del correo'
+        WHERE p.seq_estado = 'baja' AND p.seq_correo_at IS NOT NULL
+          AND (julianday(e.created_at) - julianday(p.seq_correo_at)) * 86400 < 180`).all()
+      for (const f of falsas) {
+        db.prepare(`UPDATE pipeline_contactos SET seq_estado = CASE WHEN seq_wsp1_at IS NOT NULL THEN 'wsp1_enviado' ELSE 'correo_enviado' END,
+            estado = 'activo', fecha_ultima_actualizacion = datetime('now') WHERE id = ?`).run(f.id)
+        db.prepare("INSERT INTO prospeccion_auto_eventos (id, prospecto_id, tipo, detalle) VALUES (?,?,?,?)")
+          .run(uuidv4(), f.id, 'baja_revertida', 'abierta por filtro de seguridad del correo, no por la persona')
+      }
+      db.prepare("INSERT INTO _migrations (id) VALUES ('prospeccion_bajas_falsas_v1')").run()
+      console.log(`✅ Migración prospeccion_bajas_falsas_v1 — ${falsas.length} bajas falsas restauradas`)
+    } catch (e) { console.error('❌ prospeccion_bajas_falsas_v1:', e.message) }
+  }
+
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────
