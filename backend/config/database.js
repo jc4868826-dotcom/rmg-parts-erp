@@ -3510,6 +3510,34 @@ Saludos,`
     } catch (e) { console.error('❌ prospeccion_bajas_falsas_v1:', e.message) }
   }
 
+  // Migración: prospeccion_bot_v1 (2026-10-21) — bot de WhatsApp del número de prospección
+  // con el conocimiento técnico del cotizador. Conversación por prospecto + resumen para Abril.
+  const mBot = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('prospeccion_bot_v1')
+  if (!mBot) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS prospeccion_auto_conversacion (
+          id           TEXT PRIMARY KEY,
+          prospecto_id TEXT NOT NULL,
+          rol          TEXT NOT NULL,          -- cliente | bot | abril
+          texto        TEXT,
+          tipo         TEXT,                   -- texto | boton | estado ...
+          wamid        TEXT UNIQUE,            -- id de Meta del mensaje entrante (evita responder dos veces)
+          created_at   TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_pac_prospecto ON prospeccion_auto_conversacion(prospecto_id, created_at);
+      `)
+      const cfgCols = db.prepare('PRAGMA table_info(prospeccion_auto_config)').all().map(c => c.name)
+      if (!cfgCols.includes('bot_activo')) db.exec('ALTER TABLE prospeccion_auto_config ADD COLUMN bot_activo INTEGER DEFAULT 0')
+      const pcCols = db.prepare('PRAGMA table_info(pipeline_contactos)').all().map(c => c.name)
+      for (const [c, t] of [['seq_resumen_bot', 'TEXT'], ['seq_bot_pidio_cotizacion', 'INTEGER DEFAULT 0'], ['seq_bot_quiere_llamada', 'INTEGER DEFAULT 0']]) {
+        if (!pcCols.includes(c)) db.exec(`ALTER TABLE pipeline_contactos ADD COLUMN ${c} ${t}`)
+      }
+      db.prepare("INSERT INTO _migrations (id) VALUES ('prospeccion_bot_v1')").run()
+      console.log('✅ Migración prospeccion_bot_v1 — conversación del bot de prospección')
+    } catch (e) { console.error('❌ prospeccion_bot_v1:', e.message) }
+  }
+
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

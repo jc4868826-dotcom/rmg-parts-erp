@@ -63,6 +63,8 @@ router.post('/evento', claveServidor, manejar((req) => s.registrarRespuesta(req.
 router.get('/stats', authenticate, manejar(() => s.stats()))
 router.get('/detalle', authenticate, manejar((req) => s.detalle(req.query)))
 router.put('/prospecto/:id/estado', authenticate, manejar((req) => s.cambiarComEstado(req.params.id, req.body || {}, req.user)))
+router.get('/prospecto/:id/conversacion', authenticate, manejar((req) => s.conversacion(req.params.id)))
+router.post('/bot/simular', authenticate, manejar((req) => s.simularBot(req.body || {})))
 
 router.get('/config', authenticate, manejar(() => s.configPublica()))
 router.put('/config', authenticate, manejar((req) => s.setConfig(req.body || {}, req.user)))

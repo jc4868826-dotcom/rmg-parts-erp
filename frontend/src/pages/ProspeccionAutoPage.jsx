@@ -59,6 +59,28 @@ function Tarjeta({ label, value, tone, activa, onClick }) {
   )
 }
 
+function Burbuja({ rol, texto, hora }) {
+  const cliente = rol === 'cliente'
+  return (
+    <div style={{ display: 'flex', justifyContent: cliente ? 'flex-start' : 'flex-end', margin: '4px 0' }}>
+      <div style={{ maxWidth: '85%', background: cliente ? '#fff' : '#d9fdd3', borderRadius: 8, padding: '6px 9px', fontSize: 13, whiteSpace: 'pre-wrap', boxShadow: '0 1px 1px rgba(0,0,0,.08)' }}>
+        {texto}
+        {hora && <div style={{ fontSize: 10, color: '#667', textAlign: 'right' }}>{rol === 'bot' ? 'Bot · ' : ''}{fmt(hora)}</div>}
+      </div>
+    </div>
+  )
+}
+
+function Conversacion({ id }) {
+  const q = useQuery({ queryKey: ['pauto-conv', id], queryFn: () => api.get(`/prospeccion-auto/prospecto/${id}/conversacion`).then(r => r.data), refetchInterval: 15000 })
+  if (!q.data?.length) return null
+  return (
+    <div className="mb-3 p-2" style={{ background: '#efeae2', borderRadius: 8, maxHeight: 260, overflowY: 'auto' }}>
+      {q.data.map((m, i) => <Burbuja key={i} rol={m.rol} texto={m.texto} hora={m.created_at} />)}
+    </div>
+  )
+}
+
 function ModalAccion({ p, onClose, onSave }) {
   const [com_estado, setEstado] = useState('abril_llamo')
   const [com_motivo, setMotivo] = useState('tiene_proveedor')
@@ -73,8 +95,13 @@ function ModalAccion({ p, onClose, onSave }) {
         </div>
         <div className="text-sm mb-3" style={{ color: 'var(--rmg-muted)' }}>
           {p.nombre_contacto || '—'} · +{p.seq_wa_numero} · {p.email}
-          {p.seq_ultimo_mensaje && <div className="mt-2" style={{ color: 'var(--rmg-text)' }}>“{p.seq_ultimo_mensaje}”</div>}
         </div>
+        {p.seq_resumen_bot && (
+          <div className="text-sm mb-3 p-2" style={{ background: '#eef6ff', borderRadius: 6 }}>
+            <strong>Resumen del bot:</strong> {p.seq_resumen_bot}
+          </div>
+        )}
+        <Conversacion id={p.id} />
         <label className="text-xs" style={{ color: 'var(--rmg-muted)' }}>Resultado</label>
         <select className="rmg-input mb-3 w-full" value={com_estado} onChange={e => setEstado(e.target.value)}>
           {ACCIONES.map(a => <option key={a} value={a}>{COM[a]}</option>)}
@@ -118,7 +145,11 @@ function TablaDetalle({ filas, onAccion, cargando }) {
               <td className="p-2">{p.seq_wsp1_at ? <>{fmt(p.seq_wsp1_at)}<div style={{ fontSize: 11, color: 'var(--rmg-muted)' }}>{WA_EST[p.seq_wsp1_estado] || ''}</div></> : '—'}</td>
               <td className="p-2">{p.seq_wsp2_at ? <>{fmt(p.seq_wsp2_at)}<div style={{ fontSize: 11, color: 'var(--rmg-muted)' }}>{WA_EST[p.seq_wsp2_estado] || ''}</div></> : '—'}</td>
               <td className="p-2">{p.com_estado ? <strong>{COM[p.com_estado]}{p.com_motivo ? ` (${MOTIVOS[p.com_motivo] || p.com_motivo})` : ''}</strong> : SEQ[p.seq_estado] || p.seq_estado}
-                {p.seq_ultimo_mensaje && <div style={{ fontSize: 11, color: 'var(--rmg-muted)', maxWidth: 260 }}>“{p.seq_ultimo_mensaje}”</div>}</td>
+                {(p.seq_bot_pidio_cotizacion || p.seq_bot_quiere_llamada) ? (
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#0b6b66' }}>
+                    {p.seq_bot_pidio_cotizacion ? 'Pidió cotización' : ''}{p.seq_bot_pidio_cotizacion && p.seq_bot_quiere_llamada ? ' · ' : ''}{p.seq_bot_quiere_llamada ? 'Quiere llamado' : ''}
+                  </div>) : null}
+                {(p.seq_resumen_bot || p.seq_ultimo_mensaje) && <div style={{ fontSize: 11, color: 'var(--rmg-muted)', maxWidth: 300 }}>{p.seq_resumen_bot || `“${p.seq_ultimo_mensaje}”`}</div>}</td>
               <td className="p-2">{onAccion && <button className="btn-secondary" style={{ padding: '4px 10px' }} onClick={() => onAccion(p)}><PhoneCall size={14} /></button>}</td>
             </tr>
           ))}
@@ -376,6 +407,66 @@ function Mensajes({ dueno, puedeEditar }) {
   )
 }
 
+// ─── Pestaña Bot: simulador (no envía nada) ──────────────────────────────────
+function SimuladorBot({ s }) {
+  const [seg, setSeg] = useState('Industria')
+  const [msgs, setMsgs] = useState([])
+  const [txt, setTxt] = useState('')
+  const [info, setInfo] = useState(null)
+  const enviar = useMutation({
+    mutationFn: (lista) => api.post('/prospeccion-auto/bot/simular', { segmento: seg, mensajes: lista }).then(r => r.data),
+    onSuccess: (r) => { setMsgs(m => [...m, { rol: 'bot', texto: r.respuesta }]); setInfo(r) },
+    onError: errMsg,
+  })
+  const mandar = (t) => {
+    const v = String(t || '').trim(); if (!v || enviar.isPending) return
+    const lista = [...msgs, { rol: 'cliente', texto: v }]
+    setMsgs(lista); setTxt(''); enviar.mutate(lista)
+  }
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))' }}>
+      <div className="rmg-card p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div style={{ fontWeight: 800 }}>Probar el bot</div>
+          <div className="flex gap-2">
+            <select className="rmg-input" value={seg} onChange={e => { setSeg(e.target.value); setMsgs([]); setInfo(null) }}>
+              {SEGMENTOS.map(x => <option key={x}>{x}</option>)}
+            </select>
+            <button className="btn-secondary" onClick={() => { setMsgs([]); setInfo(null) }}>Reiniciar</button>
+          </div>
+        </div>
+        <div className="text-xs mb-2" style={{ color: 'var(--rmg-muted)' }}>Escribe como si fueras el prospecto. Aquí no se envía nada a WhatsApp.</div>
+        <div className="p-2 mb-2" style={{ background: '#efeae2', borderRadius: 8, height: 380, overflowY: 'auto' }}>
+          {!msgs.length && <div className="text-xs p-2" style={{ color: '#555' }}>Prueba con: "Sí, envíenmela" · "¿Qué aceite usan para una caja reductora con carga pesada?" · "¿Cuánto vale el tambor?" · "Tenemos 4 retroexcavadoras CAT 420"</div>}
+          {msgs.map((m, i) => <Burbuja key={i} rol={m.rol} texto={m.texto} />)}
+          {enviar.isPending && <Burbuja rol="bot" texto="escribiendo…" />}
+        </div>
+        <div className="flex gap-2">
+          {['Sí, envíenmela', 'Ahora no'].map(b => <button key={b} className="btn-secondary" style={{ padding: '4px 10px' }} onClick={() => mandar(b)}>{b}</button>)}
+          <input className="rmg-input w-full" value={txt} placeholder="Mensaje del prospecto…" onChange={e => setTxt(e.target.value)} onKeyDown={e => e.key === 'Enter' && mandar(txt)} />
+          <button className="btn-primary" onClick={() => mandar(txt)}><Send size={14} /></button>
+        </div>
+      </div>
+      <div className="rmg-card p-4">
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Lo que vería Abril</div>
+        {info ? <>
+          <div className="text-sm mb-2"><strong>Resumen:</strong> {info.resumen || '—'}</div>
+          <div className="text-sm mb-1">Pidió cotización: <strong>{info.pidio_cotizacion ? 'Sí' : 'No'}</strong></div>
+          <div className="text-sm mb-1">Quiere llamado: <strong>{info.quiere_llamada ? 'Sí' : 'No'}</strong></div>
+          <div className="text-sm mb-1">Horario: <strong>{info.horario || '—'}</strong></div>
+          <div className="text-sm mb-1">Otro contacto: <strong>{info.contacto_alternativo || '—'}</strong></div>
+          <div className="text-xs mt-3" style={{ color: 'var(--rmg-muted)' }}>Ejemplo con {info.empresa}{info.contacto ? ` · ${info.contacto}` : ''}.</div>
+        </> : <div className="text-sm" style={{ color: 'var(--rmg-muted)' }}>Aparece después del primer mensaje.</div>}
+        <div className="text-xs mt-4" style={{ color: 'var(--rmg-muted)', lineHeight: 1.5 }}>
+          Conocimiento: {s.bot?.fichas} fichas técnicas verificadas + {s.bot?.productos} productos del sitio Vistony + catálogo. Sin precios ni stock.
+          Estado: <strong>{s.bot?.activo ? 'respondiendo a prospectos' : 'apagado (solo simulador y celular de pruebas)'}</strong>.
+          Con tu celular de pruebas también puedes conversar con el bot real por WhatsApp escribiéndole al número de prospección.
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Pestaña Configuración (dueño) ───────────────────────────────────────────
 function Configuracion({ s }) {
   const qc = useQueryClient()
@@ -386,7 +477,7 @@ function Configuracion({ s }) {
   const guardar = useMutation({
     mutationFn: () => {
       const body = Object.fromEntries(['smtp_email', 'smtp_nombre', 'smtp_host', 'smtp_port', 'lote_diario', 'hora_correo', 'hora_wsp1', 'hora_wsp2', 'hora_dormido',
-        'segmentos_activos', 'wa_numero_bot', 'test_email', 'test_celular', 'notificar_emails', 'wsp_activo'].map(k => [k, c[k] ?? '']))
+        'segmentos_activos', 'wa_numero_bot', 'test_email', 'test_celular', 'notificar_emails', 'wsp_activo', 'bot_activo'].map(k => [k, c[k] ?? '']))
       if (c.smtp_pass) body.smtp_pass = c.smtp_pass
       return api.put('/prospeccion-auto/config', body).then(r => r.data)
     },
@@ -456,6 +547,10 @@ function Configuracion({ s }) {
         <label className="text-sm flex items-center gap-2 mb-3">
           <input type="checkbox" checked={!!c.wsp_activo} onChange={e => setC({ ...c, wsp_activo: e.target.checked ? 1 : 0 })} /> Enviar WhatsApp 1 y 2
         </label>
+        <label className="text-sm flex items-center gap-2 mb-1">
+          <input type="checkbox" checked={!!c.bot_activo} onChange={e => setC({ ...c, bot_activo: e.target.checked ? 1 : 0 })} /> El bot responde a los prospectos
+        </label>
+        <div className="mb-3"><Chip ok={!!s.bot?.openai} si={`IA lista (${s.bot?.modelo}) · ${s.bot?.fichas} fichas · ${s.bot?.productos} productos`} no="Falta OPENAI_API_KEY en Render" /></div>
         {inp('wa_numero_bot', 'Número del bot (botón del correo)', { placeholder: '569XXXXXXXX' })}
         {inp('test_email', 'Correo para pruebas')}
         {inp('test_celular', 'Celular para pruebas', { placeholder: '569XXXXXXXX' })}
@@ -497,7 +592,7 @@ export default function ProspeccionAutoPage() {
 
   const activo = !!s.config.activo
   const sinValidar = s.mensajes.filter(m => String(s.config.segmentos_activos || '').split(',').includes(m.segmento) && !m.validado_at)
-  const TABS = [['pipeline', 'Pipeline'], ['llamar', `Para llamar (${s.tarjetas?.llamar ?? 0})`], ['mensajes', 'Mensajes'], ...(dueno ? [['config', 'Configuración']] : [])]
+  const TABS = [['pipeline', 'Pipeline'], ['llamar', `Para llamar (${s.tarjetas?.llamar ?? 0})`], ['mensajes', 'Mensajes'], ['bot', 'Bot'], ...(dueno ? [['config', 'Configuración']] : [])]
 
   return (
     <div className="p-4 md:p-6">
@@ -545,6 +640,7 @@ export default function ProspeccionAutoPage() {
         </div>
       )}
       {tab === 'mensajes' && <Mensajes dueno={dueno} puedeEditar={puedeEditar} />}
+      {tab === 'bot' && <SimuladorBot s={s} />}
       {tab === 'config' && dueno && <Configuracion s={s} />}
 
       {accion && <ModalAccion p={accion} onClose={() => setAccion(null)} onSave={(body) => cambiar.mutate({ id: accion.id, body })} />}

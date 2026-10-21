@@ -27,6 +27,7 @@ const axios = require('axios')
 const nodemailer = require('nodemailer')
 const { db, uuidv4 } = require('../../config/database')
 const { cifrar, descifrar } = require('./correoUsuario')
+const bot = require('./prospeccionBot')
 
 const FRONT = process.env.FRONTEND_URL || 'https://rmg-parts-frontend.onrender.com'
 const API = process.env.API_PUBLIC_URL || 'https://rmg-parts-erp.onrender.com'
@@ -96,7 +97,7 @@ function configPublica() {
   const { smtp_pass_enc, ...resto } = c
   return { ...resto, smtp_clave_cargada: !!smtp_pass_enc, owner_email: OWNER }
 }
-const CAMPOS_CONFIG = ['wsp_activo', 'lote_diario', 'hora_correo', 'hora_wsp1', 'hora_wsp2', 'hora_dormido',
+const CAMPOS_CONFIG = ['wsp_activo', 'bot_activo', 'lote_diario', 'hora_correo', 'hora_wsp1', 'hora_wsp2', 'hora_dormido',
   'wa_numero_bot', 'test_email', 'test_celular', 'notificar_emails', 'smtp_email', 'smtp_nombre', 'smtp_host',
   'smtp_port', 'segmentos_activos']
 function setConfig(cambios, usuario) {
@@ -104,7 +105,7 @@ function setConfig(cambios, usuario) {
   const campos = CAMPOS_CONFIG.filter(k => cambios[k] !== undefined)
   const valores = campos.map(k => {
     let v = cambios[k]
-    if (k === 'wsp_activo') v = v ? 1 : 0
+    if (k === 'wsp_activo' || k === 'bot_activo') v = v ? 1 : 0
     if (k === 'lote_diario') v = Math.max(1, Math.min(100, Number(v) || 20))
     if (k === 'smtp_port') v = Number(v) || 465
     if (k === 'wa_numero_bot' || k === 'test_celular') v = v ? normalizarCelular(v) : null
@@ -568,38 +569,100 @@ async function notificar(p, texto, canal) {
   } catch (e) { console.error('[PROSP-AUTO] notificar:', e.message) }
 }
 
-/** Evento entrante del bot: { telefono, tipo: 'boton'|'texto', texto } o { tipo: 'estado', wamid, estado }. */
+/** Evento entrante (reenviado por el webhook de Cata): { telefono, tipo: 'boton'|'texto', texto, nombre?, wamid? }
+ *  o { tipo: 'estado', wamid, estado }. Responde rápido: el bot contesta en segundo plano. */
 async function registrarRespuesta(body) {
   if (body.tipo === 'estado') return registrarEstadoWa(body)
-  const { telefono, tipo, texto } = body
+  const { telefono, tipo, texto, wamid } = body
   const numero = normalizarCelular(telefono)
   if (!numero) return { ok: false, motivo: 'teléfono inválido' }
-  const p = db.prepare('SELECT * FROM pipeline_contactos WHERE seq_wa_numero = ? ORDER BY seq_correo_at DESC LIMIT 1').get(numero)
-  if (!p) return { ok: false, motivo: 'no es un prospecto de la campaña' }
+  if (bot.yaRecibido(wamid)) return { ok: true, accion: 'duplicado' }
   const t = String(texto || '').trim()
   const norm = sinTildes(t)
+  const config = getConfig()
+  const p = db.prepare('SELECT * FROM pipeline_contactos WHERE seq_wa_numero = ? ORDER BY seq_correo_at DESC LIMIT 1').get(numero)
+
+  // Celular de pruebas de Configuración: conversa con el bot como si fuera un prospecto de Industria.
+  if (!p) {
+    if (config.test_celular && numero === config.test_celular) {
+      const ej = { ...ejemploDe('Industria'), id: `prueba:${numero}`, seq_segmento: 'Industria' }
+      bot.guardar(ej.id, 'cliente', t, { wamid, tipo })
+      segundoPlano(() => bot.responder({ p: ej, m: mensajeDe('Industria'), numero }), 'prueba')
+      return { ok: true, accion: 'prueba_bot' }
+    }
+    return { ok: false, motivo: 'no es un prospecto de la campaña' }
+  }
+
+  bot.guardar(p.id, 'cliente', t, { wamid, tipo })
   evento(p.id, tipo === 'boton' ? 'boton' : 'respuesta', t)
-  bitacora(p.id, 'whatsapp', `[Respuesta ${tipo}] ${t}`, null)
+  bitacora(p.id, 'whatsapp', `[WhatsApp ${tipo === 'boton' ? 'botón' : 'cliente'}] ${t}`, null)
   db.prepare("UPDATE pipeline_contactos SET seq_ultimo_mensaje = ?, fecha_ultima_actualizacion = datetime('now') WHERE id = ?").run(t.slice(0, 500), p.id)
+
   if (norm.includes('NO VOLVER A CONTACTAR') || norm === 'BAJA') {
     db.prepare(`UPDATE pipeline_contactos SET seq_estado = 'baja', estado = 'descartado', seq_respuesta_at = COALESCE(seq_respuesta_at, datetime('now')),
         fecha_ultima_actualizacion = datetime('now') WHERE id = ?`).run(p.id)
     evento(p.id, 'baja', 'WhatsApp')
     revisarSalud()
+    segundoPlano(() => responderFijo(p, numero, 'Entendido, no le volveremos a escribir. Que tenga un buen día.'), 'baja')
     return { ok: true, accion: 'baja', prospecto_id: p.id }
   }
   if (tipo === 'boton' && norm === 'AHORA NO') {
     db.prepare(`UPDATE pipeline_contactos SET com_estado = 'no_interesa', com_motivo = 'no_es_momento', com_actualizado_at = datetime('now'),
         seq_respuesta_at = COALESCE(seq_respuesta_at, datetime('now')), seq_canal_respuesta = 'wsp', seq_reintento_at = ?,
         fecha_ultima_actualizacion = datetime('now') WHERE id = ?`).run(sumarDias(ahoraSantiago().fecha, 45), p.id)
+    segundoPlano(() => responderFijo(p, numero, 'Entendido, gracias por avisarnos. Si más adelante necesita apoyo con la lubricación de sus equipos, nos escribe por aquí.'), 'ahora_no')
     return { ok: true, accion: 'no_es_momento', prospecto_id: p.id }
   }
-  const yaRespondio = !!p.com_estado
-  db.prepare(`UPDATE pipeline_contactos SET com_estado = COALESCE(com_estado, 'respondio_wsp'), com_actualizado_at = datetime('now'),
+
+  // Respondió: pasa (o vuelve) a "Para llamar" de Abril.
+  const primeraVez = !p.com_estado || p.com_estado === 'no_interesa'
+  db.prepare(`UPDATE pipeline_contactos SET com_estado = CASE WHEN com_estado IS NULL OR com_estado = 'no_interesa' THEN 'respondio_wsp' ELSE com_estado END,
+      com_motivo = CASE WHEN com_estado = 'no_interesa' THEN NULL ELSE com_motivo END, com_actualizado_at = datetime('now'),
       seq_respuesta_at = COALESCE(seq_respuesta_at, datetime('now')), seq_canal_respuesta = COALESCE(seq_canal_respuesta, 'wsp'),
       fecha_ultima_actualizacion = datetime('now') WHERE id = ?`).run(p.id)
-  if (!yaRespondio) await notificar({ ...p, seq_wa_numero: numero }, t, `WhatsApp (${tipo})`)
-  return { ok: true, accion: 'respondio', prospecto_id: p.id }
+
+  const botActivo = !!config.bot_activo && !!process.env.OPENAI_API_KEY
+  segundoPlano(async () => {
+    let r = null
+    if (botActivo) {
+      const fila = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(p.id)
+      r = await bot.responder({ p: fila, m: mensajeDe(fila.seq_segmento || fila.segmento), numero })
+      if (r?.respuesta) bitacora(p.id, 'whatsapp', `[Bot] ${r.respuesta}`, null)
+    }
+    // Aviso a Abril: la primera vez que responde, y cuando el bot detecta que pide cotización o llamado.
+    const ahora = db.prepare('SELECT * FROM pipeline_contactos WHERE id = ?').get(p.id)
+    const hito = r && (r.pidio_cotizacion || r.quiere_llamada || r.horario)
+    if (primeraVez || hito) {
+      const detalle = [t, ahora.seq_resumen_bot ? `\nResumen del bot: ${ahora.seq_resumen_bot}` : ''].join('')
+      await notificar({ ...ahora, seq_wa_numero: numero }, detalle,
+        `WhatsApp (${tipo})${r?.pidio_cotizacion ? ' — PIDE COTIZACIÓN' : r?.quiere_llamada ? ' — QUIERE LLAMADO' : ''}`)
+    }
+  }, 'respuesta')
+  return { ok: true, accion: 'respondio', prospecto_id: p.id, bot: botActivo }
+}
+
+function segundoPlano(fn, etiqueta) {
+  setImmediate(() => Promise.resolve().then(fn).catch(e => {
+    console.error(`[PROSP-BOT] ${etiqueta}:`, e.response?.data?.error?.message || e.message)
+    evento(null, 'bot_error', `${etiqueta}: ${e.response?.data?.error?.message || e.message}`)
+  }))
+}
+async function responderFijo(p, numero, texto) {
+  if (!process.env.PROSPECCION_WA_PHONE_ID) return
+  await bot.enviarTexto(numero, texto)
+  bot.guardar(p.id, 'bot', texto)
+}
+
+/** Conversación de un prospecto (para el panel). */
+function conversacion(id) {
+  return bot.historial(id, 200)
+}
+/** Simulador del panel: conversa con el bot sin enviar nada. */
+async function simularBot({ segmento, mensajes }) {
+  const seg = SEGMENTOS.includes(segmento) ? segmento : 'Industria'
+  const p = { ...ejemploDe(seg), id: 'simulador', seq_segmento: seg }
+  const r = await bot.simular({ p, m: mensajeDe(seg), mensajes })
+  return { ...r, empresa: p.empresa, contacto: p.nombre_contacto }
 }
 
 const COM_ESTADOS = ['respondio_correo', 'respondio_wsp', 'abril_llamo', 'coordinando_reunion', 'visita_agendada',
@@ -729,7 +792,8 @@ function stats() {
     disponibles: sel?.disponibles || {}, descartes: sel?.descartes || {}, revisados: sel?.revisados || 0,
     lote_hoy: sel?.lote?.length || 0, segmentos_sin_validar: sel?.segmentos_sin_validar || [],
     casilla: { ok: rem.ok, motivo: rem.motivo || null, email: cfg.smtp_email, verificada: !!cfg.smtp_verificado_at },
-    wa_configurado: waConfigurado(), envio_en_curso: corriendo, lotes, atrasados, ultimos,
+    wa_configurado: waConfigurado(), envio_en_curso: corriendo,
+    bot: { activo: !!cfg.bot_activo, openai: !!process.env.OPENAI_API_KEY, modelo: bot.MODELO, fichas: bot.CONOCIMIENTO.fichas, productos: bot.CONOCIMIENTO.productos }, lotes, atrasados, ultimos,
     mensajes: mensajes().map(m => ({ segmento: m.segmento, nombre: m.nombre, validado_at: m.validado_at, validado_por: m.validado_por })),
     hoy: ahoraSantiago(),
   }
@@ -741,7 +805,7 @@ function detalle({ filtro, lote, segmento } = {}) {
   if (segmento) { where.push('seq_segmento = ?'); params.push(segmento) }
   return db.prepare(`SELECT id, empresa, nombre_contacto, cargo, email, seq_wa_numero, seq_segmento, seq_lote, seq_estado,
       seq_correo_at, seq_correo_error, seq_wsp1_at, seq_wsp1_estado, seq_wsp2_at, seq_wsp2_estado, seq_respuesta_at,
-      seq_canal_respuesta, seq_ultimo_mensaje, com_estado, com_motivo, visita_fecha, comuna
+      seq_canal_respuesta, seq_ultimo_mensaje, seq_resumen_bot, seq_bot_pidio_cotizacion, seq_bot_quiere_llamada, com_estado, com_motivo, visita_fecha, comuna
     FROM pipeline_contactos WHERE ${where.join(' AND ')}
     ORDER BY COALESCE(seq_respuesta_at, seq_wsp2_at, seq_wsp1_at, seq_correo_at) DESC LIMIT 500`).all(...params)
 }
@@ -762,5 +826,5 @@ module.exports = {
   getConfig, configPublica, setConfig, casilla, probarCasilla, mensajes, mensajeDe, guardarMensaje, validarMensaje,
   previsualizar, seleccionarLote, previewLote, candidatos, armarCorreo, enviarCorreos, enviarPrueba, pasoWhatsapp,
   pasoDormido, activar, pausar, tick, ejecutarPaso, registrarRespuesta, registrarEstadoWa, cambiarComEstado, darDeBaja,
-  registrarApertura, registrarClick, stats, detalle, normalizarCelular, ahoraSantiago, esDueno, COM_ESTADOS, MOTIVOS, SEGMENTOS,
+  registrarApertura, registrarClick, stats, detalle, conversacion, simularBot, normalizarCelular, ahoraSantiago, esDueno, COM_ESTADOS, MOTIVOS, SEGMENTOS,
 }
