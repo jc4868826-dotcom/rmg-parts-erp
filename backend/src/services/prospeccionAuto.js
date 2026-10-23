@@ -23,6 +23,7 @@
  * correo_enviado.
  */
 const crypto = require('crypto')
+let dns = require('dns').promises
 const axios = require('axios')
 const nodemailer = require('nodemailer')
 const { db, uuidv4 } = require('../../config/database')
@@ -355,15 +356,32 @@ async function enviarCorreos({ forzar = false } = {}) {
   if (!config.activo && !forzar) return { ok: false, motivo: 'Campaña pausada' }
   const rem = casilla(config)
   if (!rem.ok) { evento(null, 'correo_error', rem.motivo); return { ok: false, motivo: rem.motivo } }
+  // Si el servidor de correo no responde, no se gasta el lote: se reintenta en el próximo ciclo (cada 5 min).
+  try { await rem.transporter.verify() } catch (e) {
+    const motivo = `Servidor de correo no responde: ${e.code || ''} ${e.message}`.trim()
+    evento(null, 'correo_sin_conexion', motivo)
+    return { ok: false, motivo, reintentar: true }
+  }
   const { lote } = seleccionarLote(config.lote_diario || 20)
   const msgs = Object.fromEntries(mensajes().map(m => [m.segmento, m]))
   const { fecha: hoy } = ahoraSantiago()
   corriendo = true
-  const res = { ok: true, enviados: 0, errores: 0, erroneos: 0, total: lote.length }
+  const res = { ok: true, enviados: 0, errores: 0, erroneos: 0, sin_mx: 0, total: lote.length }
+  let fallasConexion = 0
   try {
     for (let i = 0; i < lote.length; i++) {
       if (!forzar && !getConfig().activo) { res.pausado = true; break }  // se pausó a mitad de envío
       const p = lote[i]
+      // Dominio sin servidor de correo (ej. "constructotapetra.cl", ".conm"): no se envía —
+      // un rebote más daña la reputación de la casilla— y se marca como dato erróneo.
+      const sinMx = await dominioSinCorreo(p.email)
+      if (sinMx) {
+        db.prepare(`UPDATE pipeline_contactos SET seq_estado = 'dato_erroneo', seq_lote = ?, seq_tema = ?, seq_segmento = ?,
+            seq_correo_error = ?, fecha_ultima_actualizacion = datetime('now') WHERE id = ?`).run(hoy, p.segmento, p.segmento, `Sin MX: ${sinMx}`, p.id)
+        evento(p.id, 'correo_sin_mx', `${p.email} — ${sinMx}`)
+        res.sin_mx++
+        continue
+      }
       const token = tokenDe(p)
       const { asunto, html, texto } = armarCorreo(p, msgs[p.segmento], config, token)
       try {
@@ -382,6 +400,7 @@ async function enviarCorreos({ forzar = false } = {}) {
         bitacora(p.id, 'email', `[Automático] Para: ${p.email}\nAsunto: ${asunto}\n\n${texto}`, null)
         evento(p.id, 'correo_ok', asunto)
         res.enviados++
+        fallasConexion = 0
       } catch (e) {
         const detalle = `${e.code || e.responseCode || ''} ${e.message}`.trim()
         if (errorPermanente(e)) {
@@ -390,12 +409,42 @@ async function enviarCorreos({ forzar = false } = {}) {
           res.erroneos++
         } else res.errores++
         evento(p.id, 'correo_error', detalle)
+        if (errorConexion(e) && ++fallasConexion >= 3) {
+          // El servidor dejó de responder a mitad del lote: se corta y se reintenta en el próximo ciclo.
+          evento(null, 'correo_sin_conexion', `Corte tras 3 fallas de conexión seguidas (${detalle})`)
+          res.cortado = true; res.reintentar = true
+          break
+        }
       }
       if (i < lote.length - 1) await esperar(PAUSA_MIN + Math.floor(Math.random() * PAUSA_MIN * 1.25))
     }
   } finally { corriendo = false }
-  revisarSalud()
+  revisarSalud(hoy)
   return res
+}
+
+const errorConexion = (e) => ['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ESOCKET', 'ECONNECTION', 'EDNS', 'EHOSTUNREACH'].includes(e.code)
+  || /timeout|ECONN/i.test(e.message || '')
+const mxCache = new Map()
+/** Devuelve el motivo si el dominio del correo no puede recibir correo; null si sí puede o si no se pudo verificar. */
+async function dominioSinCorreo(email) {
+  if (process.env.PROSPECCION_VERIFICAR_MX === '0') return null
+  const dominio = String(email || '').trim().split('@')[1]?.toLowerCase()
+  if (!dominio) return 'correo sin dominio'
+  if (mxCache.has(dominio)) return mxCache.get(dominio)
+  let motivo = null
+  try {
+    const mx = await dns.resolveMx(dominio)
+    if (!mx.length) motivo = 'el dominio no tiene servidor de correo'
+  } catch (e) {
+    if (['ENOTFOUND', 'ENODATA', 'ENONAME'].includes(e.code)) {
+      // Sin MX puede igual recibir por el registro A (RFC 5321); solo se descarta si tampoco existe.
+      try { await dns.resolve4(dominio) } catch (e2) { if (['ENOTFOUND', 'ENODATA', 'ENONAME'].includes(e2.code)) motivo = 'el dominio no existe' }
+    }
+    // Otros errores de DNS (timeout): no se descarta al prospecto por una falla nuestra.
+  }
+  mxCache.set(dominio, motivo)
+  return motivo
 }
 
 async function enviarPrueba(segmento, usuario) {
@@ -481,7 +530,6 @@ async function pasoWhatsapp(paso, { forzar = false } = {}) {
     }
     await esperar(Math.min(1500, PAUSA_MIN))
   }
-  revisarSalud()
   return res
 }
 
@@ -539,15 +587,21 @@ function pausar(usuario, motivo) {
 }
 
 // ─── Salud del canal ─────────────────────────────────────────────────────────
-function revisarSalud() {
+function revisarSalud(lote) {
+  // Mira SOLO el lote indicado (el que se acaba de enviar o el del prospecto que se dio de baja).
+  // Antes miraba siempre el último lote existente: un lote viejo con 3 correos mal escritos
+  // volvía a pausar la campaña en cada envío, aunque se reactivara.
   try {
-    const lote = db.prepare('SELECT seq_lote FROM pipeline_contactos WHERE seq_lote IS NOT NULL ORDER BY seq_lote DESC LIMIT 1').get()?.seq_lote
     if (!lote) return
-    const r = db.prepare(`SELECT COUNT(*) n, SUM(seq_estado='baja') bajas, SUM(seq_estado='dato_erroneo') err
+    const r = db.prepare(`SELECT
+        SUM(seq_correo_at IS NOT NULL OR (seq_estado = 'dato_erroneo' AND seq_correo_error IS NOT NULL AND seq_correo_error NOT LIKE 'Sin MX:%')) enviados,
+        SUM(seq_estado = 'baja') bajas,
+        SUM(seq_estado = 'dato_erroneo' AND seq_correo_error IS NOT NULL AND seq_correo_error NOT LIKE 'Sin MX:%') rebotes
       FROM pipeline_contactos WHERE seq_lote = ?`).get(lote)
-    if (!r || r.n < 10) return
-    const motivo = (r.bajas / r.n > 0.05) ? `Bajas ${r.bajas}/${r.n} en el lote ${lote} (>5%)`
-      : (r.err / r.n > 0.03) ? `Datos erróneos ${r.err}/${r.n} en el lote ${lote} (>3%)` : null
+    const n = r?.enviados || 0
+    if (n < 20) return   // con lotes chicos 2 o 3 casos no dicen nada
+    const motivo = (r.bajas / n > 0.05) ? `Bajas ${r.bajas}/${n} en el lote ${lote} (>5%)`
+      : (r.rebotes / n > 0.10) ? `Rebotes ${r.rebotes}/${n} en el lote ${lote} (>10%): revisar la calidad de la base` : null
     if (motivo && getConfig().activo) {
       db.prepare("UPDATE prospeccion_auto_config SET activo = 0, pausa_motivo = ?, updated_at = datetime('now') WHERE id = 1").run(`Pausa automática: ${motivo}`)
       evento(null, 'pausa_automatica', motivo)
@@ -602,7 +656,7 @@ async function registrarRespuesta(body) {
     db.prepare(`UPDATE pipeline_contactos SET seq_estado = 'baja', estado = 'descartado', seq_respuesta_at = COALESCE(seq_respuesta_at, datetime('now')),
         fecha_ultima_actualizacion = datetime('now') WHERE id = ?`).run(p.id)
     evento(p.id, 'baja', 'WhatsApp')
-    revisarSalud()
+    revisarSalud(p.seq_lote)
     segundoPlano(() => responderFijo(p, numero, 'Entendido, no le volveremos a escribir. Que tenga un buen día.'), 'baja')
     return { ok: true, accion: 'baja', prospecto_id: p.id }
   }
@@ -691,14 +745,14 @@ function cambiarComEstado(id, { com_estado, com_motivo, visita_fecha, nota }, us
 // ─── Públicos: baja, apertura, click ─────────────────────────────────────────
 function porToken(token) {
   if (!/^[a-f0-9]{24}$/.test(String(token || ''))) return null
-  return db.prepare('SELECT id, seq_estado, estado FROM pipeline_contactos WHERE seq_token = ?').get(token)
+  return db.prepare('SELECT id, seq_estado, estado, seq_lote FROM pipeline_contactos WHERE seq_token = ?').get(token)
 }
 function darDeBaja(token) {
   const p = porToken(token)
   if (!p) return false
   db.prepare("UPDATE pipeline_contactos SET seq_estado = 'baja', estado = 'descartado', fecha_ultima_actualizacion = datetime('now') WHERE id = ?").run(p.id)
   evento(p.id, 'baja', 'link del correo')
-  revisarSalud()
+  revisarSalud(p.seq_lote)
   return true
 }
 function registrarApertura(token) { const p = porToken(token); if (p) evento(p.id, 'apertura', null) }
@@ -729,6 +783,8 @@ async function tick() {
     db.prepare(`UPDATE prospeccion_auto_config SET ${paso.ult} = ? WHERE id = 1`).run(fecha)
     try {
       const r = await paso.fn()
+      // Servidor de correo caído: se libera el paso para reintentarlo en el próximo ciclo (cada 5 min, hasta las 13:59).
+      if (r?.reintentar) db.prepare(`UPDATE prospeccion_auto_config SET ${paso.ult} = NULL WHERE id = 1`).run()
       evento(null, `paso_${paso.id}`, JSON.stringify(r))
       ejecutados.push({ paso: paso.id, ...r })
     } catch (e) {
@@ -826,5 +882,5 @@ module.exports = {
   getConfig, configPublica, setConfig, casilla, probarCasilla, mensajes, mensajeDe, guardarMensaje, validarMensaje,
   previsualizar, seleccionarLote, previewLote, candidatos, armarCorreo, enviarCorreos, enviarPrueba, pasoWhatsapp,
   pasoDormido, activar, pausar, tick, ejecutarPaso, registrarRespuesta, registrarEstadoWa, cambiarComEstado, darDeBaja,
-  registrarApertura, registrarClick, stats, detalle, conversacion, simularBot, normalizarCelular, ahoraSantiago, esDueno, COM_ESTADOS, MOTIVOS, SEGMENTOS,
+  registrarApertura, registrarClick, revisarSalud, dominioSinCorreo, _setDns: (d) => { dns = d; mxCache.clear() }, stats, detalle, conversacion, simularBot, normalizarCelular, ahoraSantiago, esDueno, COM_ESTADOS, MOTIVOS, SEGMENTOS,
 }
