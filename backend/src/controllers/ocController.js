@@ -936,6 +936,54 @@ const deleteOC = (req, res) => {
   }
 }
 
+// POST /api/oc/:id/actualizar-precios — (2026-10-23, pedido de JC) re-precia una OC ya emitida con el
+// costo vigente de lista_precios (caso: lista PLATIN 01-10-2026 cargada después de emitir OC que ya
+// debían ir con ella). Sirve en cualquier estado ANTES de la factura del proveedor (incluso recibida:
+// la recepción no guarda costo, solo stock). Mantiene cantidades y lo ya recibido; recalcula neto/IVA/total,
+// ajusta la CxP pendiente de esa OC y deja el detalle en el historial. Body opcional { simular: true }.
+const ESTADOS_SIN_REPRECIO = ['facturada', 'pago_autorizado', 'pagada', 'anulada']
+const actualizarPreciosOC = (req, res) => {
+  try {
+    if (!['gerente', 'administrador'].includes(req.user?.rol)) return res.status(403).json({ error: 'Solo gerente o administrador' })
+    const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ? OR numero = ?').get(req.params.id, req.params.id)
+    if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
+    if (ESTADOS_SIN_REPRECIO.includes(oc.estado)) {
+      return res.status(400).json({ error: `La OC está ${oc.estado}: el precio ya lo fija la factura del proveedor` })
+    }
+    const items = db.prepare('SELECT * FROM oc_items WHERE oc_id = ?').all(oc.id)
+    const costoDe = db.prepare('SELECT MAX(costo_unidad_neto) c FROM lista_precios WHERE codigo_sku = ?')
+    const cambios = []
+    for (const it of items) {
+      const c = costoDe.get(it.codigo)?.c
+      if (!c || Number(c) === Number(it.precio_unitario)) continue
+      cambios.push({ item_id: it.id, codigo: it.codigo, cantidad: it.cantidad, antes: it.precio_unitario, ahora: Number(c) })
+    }
+    const nuevoNeto = items.reduce((s, it) => {
+      const ch = cambios.find(x => x.item_id === it.id)
+      return s + (ch ? ch.ahora : Number(it.precio_unitario || 0)) * Number(it.cantidad || 0)
+    }, 0)
+    const resumen = { oc: oc.numero, estado: oc.estado, neto_antes: oc.neto, total_antes: oc.total,
+      neto: nuevoNeto, iva: Math.round(nuevoNeto * 0.19), total: nuevoNeto + Math.round(nuevoNeto * 0.19), cambios }
+    if (req.body?.simular || !cambios.length) return res.json({ ...resumen, aplicado: false })
+
+    db.transaction(() => {
+      for (const ch of cambios) {
+        db.prepare('UPDATE oc_items SET precio_unitario = ?, subtotal = ? * cantidad WHERE id = ?').run(ch.ahora, ch.ahora, ch.item_id)
+      }
+      db.prepare("UPDATE ordenes_compra SET neto = ?, iva = ?, total = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(resumen.neto, resumen.iva, resumen.total, oc.id)
+      db.prepare("UPDATE facturas_cxp SET monto = ? WHERE oc_id = ? AND estado = 'pendiente'").run(resumen.total, oc.id)
+    })()
+    logEvento(oc.id, 'actualizacion_precios', {
+      usuario_id: req.user?.id, usuario_nombre: req.user?.nombre || req.user?.email,
+      detalle: `Precios a lista vigente: ${cambios.map(x => `${x.codigo} ${x.antes}→${x.ahora}`).join(', ')}. Total ${oc.total}→${resumen.total}`,
+    })
+    res.json({ ...resumen, aplicado: true, orden: withDetails(db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(oc.id)) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 module.exports = {
   TRANSICIONES, ROLES_REQUERIDOS,
   getOCs, getOC, createOC, updateOC, patchEstadoOC,
@@ -944,4 +992,5 @@ module.exports = {
   getImpactoEliminacion, deleteOC,
   createOCDesdeCotizacion,
   createOCDesdePedido,
+  actualizarPreciosOC,
 }
