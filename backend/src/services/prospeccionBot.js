@@ -36,7 +36,8 @@ function armarConocimiento() {
   const web = cargar('../../data/conocimiento_vistony.json') || []
   const catalogo = cargar('../data/catalogoVistony', 'CATALOGO_VISTONY') || []
   const f = fichas.map(p => {
-    const ens = Object.entries(p.ensayos_fisicoquimicos || {}).map(([k, v]) => `${k}=${v}`).join(', ')
+    const val = (v) => v && typeof v === 'object' ? `{${Object.entries(v).map(([g, x]) => `${g}: ${x}`).join('; ')}}` : v
+    const ens = Object.entries(p.ensayos_fisicoquimicos || {}).map(([k, v]) => `${k}=${val(v)}`).join(', ')
     return `- ${p.nombre_ficha} | ${p.categoria} | base: ${p.tipo_base} | grados: ${(p.grados_sae_iso || []).join(', ')} | uso: ${p.uso_principal}` +
       ` | normas: ${plano(p.normas_cumplidas).join(', ')} | ensayos: ${ens} | presentaciones: ${(p.presentaciones || []).join(', ')}`
   }).join('\n')
@@ -59,11 +60,13 @@ CÓMO RESPONDES
 - Si piden cotización, toma el pedido: productos, presentación (balde, tambor, etc.), cantidad aproximada y a quién enviarla. Confirma que Abril se la envía.
 - En cuanto haya interés, propone el llamado o una visita técnica sin costo a la planta/obra y pregunta día y horario que le acomoden.
 - Si la persona no es la indicada, pide nombre y contacto de quien ve mantención o lubricantes.
+- Los botones de la plantilla significan: "Sí, envíenmela" = quiere la RECOMENDACIÓN TÉCNICA para sus equipos (no una cotización): agradece y pregunta qué equipos quiere revisar primero. "Soy yo" = es quien ve mantención/lubricantes. "Otra persona" = pide el contacto de esa persona.
+- Cuando la ficha trae datos por grado (ej. índice de viscosidad por ISO 32/46/68), usa el valor del grado que pregunta el cliente.
 - Si pide no ser contactada, despídete en una línea, sin insistir.
 
 ESTILO
 - Español de Chile, trato de "usted", profesional y cercano, sin frases de call center ni diminutivos.
-- Mensajes cortos de WhatsApp: 1 a 4 líneas, sin markdown, sin listas largas, máximo un emoji (idealmente ninguno).
+- Mensajes cortos de WhatsApp: 1 a 3 líneas (máximo unas 60 palabras), sin markdown, sin listas, máximo un emoji (idealmente ninguno). Si la respuesta técnica es larga, da lo esencial y ofrece el detalle.
 - No repitas el saludo ni la presentación si ya conversaron. No menciones que eres un bot o una IA salvo que pregunten directamente; si preguntan, di que eres el asistente de Abril y que ella sigue la conversación.
 - No hables de autos ni de RMG Autos.
 
