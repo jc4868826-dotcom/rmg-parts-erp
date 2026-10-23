@@ -78,18 +78,24 @@ ${CONOCIMIENTO.texto}`
 
 // ─── Conversación ────────────────────────────────────────────────────────────
 function historial(prospectoId, limite = 20) {
-  return db.prepare(`SELECT rol, texto, created_at FROM prospeccion_auto_conversacion WHERE prospecto_id = ?
+  return db.prepare(`SELECT rol, texto, created_at, autor FROM prospeccion_auto_conversacion WHERE prospecto_id = ?
       ORDER BY created_at DESC, rowid DESC LIMIT ?`).all(prospectoId, limite).reverse()
 }
 function guardar(prospectoId, rol, texto, extra = {}) {
   try {
-    db.prepare(`INSERT INTO prospeccion_auto_conversacion (id, prospecto_id, rol, texto, wamid, tipo) VALUES (?,?,?,?,?,?)`)
-      .run(uuidv4(), prospectoId, rol, String(texto || '').slice(0, 4000), extra.wamid || null, extra.tipo || null)
+    db.prepare(`INSERT INTO prospeccion_auto_conversacion (id, prospecto_id, rol, texto, wamid, tipo, autor) VALUES (?,?,?,?,?,?,?)`)
+      .run(uuidv4(), prospectoId, rol, String(texto || '').slice(0, 4000), extra.wamid || null, extra.tipo || null, extra.autor || null)
     return true
   } catch (e) {
     if (/UNIQUE/i.test(e.message)) return false   // Meta reenvió el mismo mensaje: no responder dos veces
     throw e
   }
+}
+const botPausado = (prospectoId) => !!db.prepare('SELECT 1 FROM prospeccion_auto_bot_pausa WHERE prospecto_id = ?').get(prospectoId)
+function pausarBot(prospectoId, pausado, por) {
+  if (pausado) db.prepare('INSERT OR REPLACE INTO prospeccion_auto_bot_pausa (prospecto_id, pausado_por) VALUES (?, ?)').run(prospectoId, por || null)
+  else db.prepare('DELETE FROM prospeccion_auto_bot_pausa WHERE prospecto_id = ?').run(prospectoId)
+  return { pausado: botPausado(prospectoId) }
 }
 const yaRecibido = (wamid) => !!wamid && !!db.prepare('SELECT 1 FROM prospeccion_auto_conversacion WHERE wamid = ?').get(wamid)
 
@@ -176,4 +182,4 @@ async function simular({ p, m, mensajes }) {
   return generar(p, m, hist)
 }
 
-module.exports = { responder, simular, enviarTexto, historial, guardar, yaRecibido, CONOCIMIENTO, MODELO, MAX_TURNOS }
+module.exports = { responder, simular, enviarTexto, historial, guardar, yaRecibido, botPausado, pausarBot, CONOCIMIENTO, MODELO, MAX_TURNOS }

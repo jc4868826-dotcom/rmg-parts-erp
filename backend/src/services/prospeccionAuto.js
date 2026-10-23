@@ -641,7 +641,7 @@ async function registrarRespuesta(body) {
     if (config.test_celular && numero === config.test_celular) {
       const ej = { ...ejemploDe('Industria'), id: `prueba:${numero}`, seq_segmento: 'Industria' }
       bot.guardar(ej.id, 'cliente', t, { wamid, tipo })
-      segundoPlano(() => bot.responder({ p: ej, m: mensajeDe('Industria'), numero }), 'prueba')
+      if (!bot.botPausado(ej.id)) segundoPlano(() => bot.responder({ p: ej, m: mensajeDe('Industria'), numero }), 'prueba')
       return { ok: true, accion: 'prueba_bot' }
     }
     return { ok: false, motivo: 'no es un prospecto de la campaña' }
@@ -675,7 +675,7 @@ async function registrarRespuesta(body) {
       seq_respuesta_at = COALESCE(seq_respuesta_at, datetime('now')), seq_canal_respuesta = COALESCE(seq_canal_respuesta, 'wsp'),
       fecha_ultima_actualizacion = datetime('now') WHERE id = ?`).run(p.id)
 
-  const botActivo = !!config.bot_activo && !!process.env.OPENAI_API_KEY
+  const botActivo = !!config.bot_activo && !!process.env.OPENAI_API_KEY && !bot.botPausado(p.id)
   segundoPlano(async () => {
     let r = null
     if (botActivo) {
@@ -707,9 +707,52 @@ async function responderFijo(p, numero, texto) {
   bot.guardar(p.id, 'bot', texto)
 }
 
-/** Conversación de un prospecto (para el panel). */
+/** Conversación de un prospecto (para el panel). Marca como leídos los mensajes del cliente. */
 function conversacion(id) {
-  return bot.historial(id, 200)
+  db.prepare("UPDATE prospeccion_auto_conversacion SET leido_at = datetime('now') WHERE prospecto_id = ? AND rol = 'cliente' AND leido_at IS NULL").run(id)
+  return { mensajes: bot.historial(id, 300), bot_pausado: bot.botPausado(id), ...ventana(id) }
+}
+/** Ventana de 24 h de Meta: solo se puede escribir texto libre si el cliente escribió en las últimas 24 h. */
+function ventana(id) {
+  const u = db.prepare("SELECT MAX(created_at) t FROM prospeccion_auto_conversacion WHERE prospecto_id = ? AND rol = 'cliente'").get(id)?.t
+  const horas = u ? (Date.now() - new Date(u.replace(' ', 'T') + 'Z').getTime()) / 3600000 : null
+  return { ultimo_cliente_at: u || null, ventana_abierta: horas !== null && horas < 24, horas_restantes: horas !== null ? Math.max(0, Math.round((24 - horas) * 10) / 10) : 0 }
+}
+const numeroDe = (id) => String(id).startsWith('prueba:') ? String(id).slice(7)
+  : db.prepare('SELECT seq_wa_numero FROM pipeline_contactos WHERE id = ?').get(id)?.seq_wa_numero
+
+/** Bandeja: todos los chats del número de prospección, el más reciente primero. */
+function conversaciones() {
+  const filas = db.prepare(`SELECT c.prospecto_id, MAX(c.created_at) ultimo_at, COUNT(*) mensajes,
+      SUM(c.rol = 'cliente' AND c.leido_at IS NULL) sin_leer
+    FROM prospeccion_auto_conversacion c GROUP BY c.prospecto_id ORDER BY ultimo_at DESC LIMIT 300`).all()
+  const ult = db.prepare('SELECT rol, texto FROM prospeccion_auto_conversacion WHERE prospecto_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1')
+  const pc = db.prepare(`SELECT empresa, nombre_contacto, seq_wa_numero, seq_segmento, com_estado, seq_resumen_bot,
+      seq_bot_pidio_cotizacion, seq_bot_quiere_llamada FROM pipeline_contactos WHERE id = ?`)
+  return filas.map(f => {
+    const prueba = String(f.prospecto_id).startsWith('prueba:')
+    const p = prueba ? { empresa: 'Celular de pruebas', seq_wa_numero: numeroDe(f.prospecto_id), seq_segmento: 'Industria' } : (pc.get(f.prospecto_id) || {})
+    const u = ult.get(f.prospecto_id) || {}
+    return { id: f.prospecto_id, prueba, ...p, ultimo_at: f.ultimo_at, mensajes: f.mensajes, sin_leer: f.sin_leer || 0,
+      ultimo_rol: u.rol, ultimo_texto: String(u.texto || '').slice(0, 120), bot_pausado: bot.botPausado(f.prospecto_id) }
+  })
+}
+
+/** Abril (u otro usuario) responde desde el panel. Pausa el bot en ese chat para que no se pisen. */
+async function responderManual(id, texto, usuario) {
+  const t = String(texto || '').trim()
+  if (!t) throw new Error('Escribe un mensaje')
+  const numero = numeroDe(id)
+  if (!numero) throw new Error('Este chat no tiene número de WhatsApp')
+  if (!ventana(id).ventana_abierta) throw new Error('Pasaron más de 24 h desde el último mensaje del cliente: WhatsApp solo permite plantillas aprobadas. Llámalo o espera a que escriba.')
+  const wamid = await bot.enviarTexto(numero, t)
+  bot.guardar(id, 'abril', t, { autor: usuario?.nombre || usuario?.email || null })
+  bot.pausarBot(id, true, usuario?.email)
+  if (!String(id).startsWith('prueba:')) bitacora(id, 'whatsapp', `[${usuario?.nombre || 'Abril'} por WhatsApp] ${t}`, usuario?.id)
+  return { ok: true, wamid, bot_pausado: true }
+}
+function pausarBotChat(id, pausado, usuario) {
+  return bot.pausarBot(id, !!pausado, usuario?.email)
 }
 /** Simulador del panel: conversa con el bot sin enviar nada. */
 async function simularBot({ segmento, mensajes }) {
@@ -882,5 +925,5 @@ module.exports = {
   getConfig, configPublica, setConfig, casilla, probarCasilla, mensajes, mensajeDe, guardarMensaje, validarMensaje,
   previsualizar, seleccionarLote, previewLote, candidatos, armarCorreo, enviarCorreos, enviarPrueba, pasoWhatsapp,
   pasoDormido, activar, pausar, tick, ejecutarPaso, registrarRespuesta, registrarEstadoWa, cambiarComEstado, darDeBaja,
-  registrarApertura, registrarClick, revisarSalud, dominioSinCorreo, _setDns: (d) => { dns = d; mxCache.clear() }, stats, detalle, conversacion, simularBot, normalizarCelular, ahoraSantiago, esDueno, COM_ESTADOS, MOTIVOS, SEGMENTOS,
+  registrarApertura, registrarClick, revisarSalud, dominioSinCorreo, _setDns: (d) => { dns = d; mxCache.clear() }, stats, detalle, conversacion, conversaciones, responderManual, pausarBotChat, simularBot, normalizarCelular, ahoraSantiago, esDueno, COM_ESTADOS, MOTIVOS, SEGMENTOS,
 }

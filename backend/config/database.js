@@ -3538,6 +3538,24 @@ Saludos,`
     } catch (e) { console.error('❌ prospeccion_bot_v1:', e.message) }
   }
 
+  // Migración: prospeccion_bot_v2 (2026-10-23) — bandeja de conversaciones: Abril responde
+  // desde el panel y puede pausar el bot en un chat (al responder ella, el bot se pausa solo).
+  const mBot2 = db.prepare("SELECT id FROM _migrations WHERE id = ?").get('prospeccion_bot_v2')
+  if (!mBot2) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS prospeccion_auto_bot_pausa (
+          prospecto_id TEXT PRIMARY KEY,
+          pausado_at   TEXT DEFAULT (datetime('now')),
+          pausado_por  TEXT
+        );`)
+      const cols = db.prepare('PRAGMA table_info(prospeccion_auto_conversacion)').all().map(c => c.name)
+      if (!cols.includes('autor')) db.exec('ALTER TABLE prospeccion_auto_conversacion ADD COLUMN autor TEXT')
+      if (!cols.includes('leido_at')) db.exec('ALTER TABLE prospeccion_auto_conversacion ADD COLUMN leido_at TEXT')
+      db.prepare("INSERT INTO _migrations (id) VALUES ('prospeccion_bot_v2')").run()
+      console.log('✅ Migración prospeccion_bot_v2 — bandeja de conversaciones')
+    } catch (e) { console.error('❌ prospeccion_bot_v2:', e.message) }
+  }
+
 }
 
 // ─── Seed inicial (solo para bases de datos nuevas) ───────────────────────────

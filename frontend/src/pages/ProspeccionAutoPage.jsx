@@ -59,13 +59,15 @@ function Tarjeta({ label, value, tone, activa, onClick }) {
   )
 }
 
-function Burbuja({ rol, texto, hora }) {
+function Burbuja({ rol, texto, hora, autor }) {
   const cliente = rol === 'cliente'
+  const fondo = cliente ? '#fff' : rol === 'abril' ? '#cfe6ff' : '#d9fdd3'
+  const quien = rol === 'bot' ? 'Bot' : rol === 'abril' ? (autor || 'Abril') : ''
   return (
     <div style={{ display: 'flex', justifyContent: cliente ? 'flex-start' : 'flex-end', margin: '4px 0' }}>
-      <div style={{ maxWidth: '85%', background: cliente ? '#fff' : '#d9fdd3', borderRadius: 8, padding: '6px 9px', fontSize: 13, whiteSpace: 'pre-wrap', boxShadow: '0 1px 1px rgba(0,0,0,.08)' }}>
+      <div style={{ maxWidth: '85%', background: fondo, borderRadius: 8, padding: '6px 9px', fontSize: 13, whiteSpace: 'pre-wrap', boxShadow: '0 1px 1px rgba(0,0,0,.08)' }}>
         {texto}
-        {hora && <div style={{ fontSize: 10, color: '#667', textAlign: 'right' }}>{rol === 'bot' ? 'Bot · ' : ''}{fmt(hora)}</div>}
+        {hora && <div style={{ fontSize: 10, color: '#667', textAlign: 'right' }}>{quien ? `${quien} · ` : ''}{fmt(hora)}</div>}
       </div>
     </div>
   )
@@ -73,10 +75,94 @@ function Burbuja({ rol, texto, hora }) {
 
 function Conversacion({ id }) {
   const q = useQuery({ queryKey: ['pauto-conv', id], queryFn: () => api.get(`/prospeccion-auto/prospecto/${id}/conversacion`).then(r => r.data), refetchInterval: 15000 })
-  if (!q.data?.length) return null
+  const msgs = q.data?.mensajes || []
+  if (!msgs.length) return null
   return (
     <div className="mb-3 p-2" style={{ background: '#efeae2', borderRadius: 8, maxHeight: 260, overflowY: 'auto' }}>
-      {q.data.map((m, i) => <Burbuja key={i} rol={m.rol} texto={m.texto} hora={m.created_at} />)}
+      {msgs.map((m, i) => <Burbuja key={i} rol={m.rol} texto={m.texto} hora={m.created_at} autor={m.autor} />)}
+    </div>
+  )
+}
+
+// ─── Pestaña Conversaciones: bandeja del número de prospección ───────────────
+function Bandeja({ onAccion }) {
+  const qc = useQueryClient()
+  const [sel, setSel] = useState(null)
+  const [txt, setTxt] = useState('')
+  const lista = useQuery({ queryKey: ['pauto-bandeja'], queryFn: () => api.get('/prospeccion-auto/conversaciones').then(r => r.data), refetchInterval: 10000 })
+  const chat = useQuery({
+    queryKey: ['pauto-conv', sel?.id], enabled: !!sel,
+    queryFn: () => api.get(`/prospeccion-auto/prospecto/${encodeURIComponent(sel.id)}/conversacion`).then(r => r.data), refetchInterval: 5000,
+  })
+  useEffect(() => { const el = document.getElementById('pauto-chat'); if (el) el.scrollTop = el.scrollHeight }, [chat.data?.mensajes?.length, sel?.id])
+  const refrescar = () => { qc.invalidateQueries({ queryKey: ['pauto-conv', sel?.id] }); qc.invalidateQueries({ queryKey: ['pauto-bandeja'] }) }
+  const responder = useMutation({
+    mutationFn: () => api.post(`/prospeccion-auto/prospecto/${encodeURIComponent(sel.id)}/responder`, { texto: txt }).then(r => r.data),
+    onSuccess: () => { setTxt(''); toast.success('Enviado. El bot quedó en pausa en este chat.'); refrescar() }, onError: errMsg,
+  })
+  const pausa = useMutation({
+    mutationFn: (pausado) => api.post(`/prospeccion-auto/prospecto/${encodeURIComponent(sel.id)}/bot`, { pausado }).then(r => r.data),
+    onSuccess: (r) => { toast.success(r.pausado ? 'Bot en pausa en este chat' : 'El bot vuelve a responder este chat'); refrescar() }, onError: errMsg,
+  })
+  const c = chat.data
+  const actual = lista.data?.find(x => x.id === sel?.id) || sel
+  return (
+    <div className="rmg-card" style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 340px) 1fr', minHeight: 560 }}>
+      <div style={{ borderRight: '1px solid var(--rmg-border, #e5e7eb)', overflowY: 'auto', maxHeight: 640 }}>
+        <div className="p-3" style={{ fontWeight: 800, borderBottom: '1px solid var(--rmg-border, #e5e7eb)' }}>Chats · +56 9 7286 4315</div>
+        {lista.isLoading && <div className="p-3 text-sm">Cargando…</div>}
+        {!lista.isLoading && !lista.data?.length && <div className="p-3 text-sm" style={{ color: 'var(--rmg-muted)' }}>Todavía nadie ha escrito.</div>}
+        {(lista.data || []).map(x => (
+          <button key={x.id} onClick={() => setSel(x)} className="w-full text-left p-3"
+            style={{ borderBottom: '1px solid var(--rmg-border, #eee)', background: sel?.id === x.id ? 'rgba(29,78,216,.07)' : 'transparent' }}>
+            <div className="flex justify-between gap-2">
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{x.empresa || `+${x.seq_wa_numero}`}</div>
+              <div style={{ fontSize: 11, color: 'var(--rmg-muted)', whiteSpace: 'nowrap' }}>{fmt(x.ultimo_at)}</div>
+            </div>
+            <div className="flex justify-between gap-2 items-center">
+              <div style={{ fontSize: 12, color: 'var(--rmg-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {x.ultimo_rol === 'bot' ? 'Bot: ' : x.ultimo_rol === 'abril' ? 'Tú: ' : ''}{x.ultimo_texto}
+              </div>
+              {x.sin_leer > 0 && <span style={{ background: '#16a34a', color: '#fff', borderRadius: 999, fontSize: 11, padding: '0 7px', fontWeight: 700 }}>{x.sin_leer}</span>}
+            </div>
+            <div style={{ fontSize: 11, marginTop: 2 }}>
+              {x.prueba && <span style={{ color: '#7c3aed' }}>prueba · </span>}
+              {x.seq_bot_pidio_cotizacion ? <span style={{ color: '#0b6b66', fontWeight: 700 }}>pidió cotización · </span> : null}
+              {x.bot_pausado ? <span style={{ color: '#b45309' }}>bot en pausa</span> : <span style={{ color: 'var(--rmg-muted)' }}>bot activo</span>}
+            </div>
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {!sel ? <div className="p-6 text-sm" style={{ color: 'var(--rmg-muted)' }}>Elige un chat de la lista.</div> : <>
+          <div className="p-3 flex items-center justify-between gap-2" style={{ borderBottom: '1px solid var(--rmg-border, #e5e7eb)' }}>
+            <div>
+              <div style={{ fontWeight: 800 }}>{actual?.empresa}</div>
+              <div style={{ fontSize: 12, color: 'var(--rmg-muted)' }}>{actual?.nombre_contacto || ''}{actual?.seq_wa_numero ? ` · +${actual.seq_wa_numero}` : ''}{actual?.seq_segmento ? ` · ${actual.seq_segmento}` : ''}</div>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-secondary" disabled={pausa.isPending} onClick={() => pausa.mutate(!c?.bot_pausado)}>
+                {c?.bot_pausado ? <><Play size={14} /> Reactivar bot</> : <><Pause size={14} /> Pausar bot</>}
+              </button>
+              {!actual?.prueba && onAccion && <button className="btn-secondary" onClick={() => onAccion({ id: sel.id, ...actual })}><PhoneCall size={14} /> Registrar llamada</button>}
+            </div>
+          </div>
+          {actual?.seq_resumen_bot && <div className="px-3 py-2 text-sm" style={{ background: '#eef6ff' }}><strong>Resumen del bot:</strong> {actual.seq_resumen_bot}</div>}
+          <div id="pauto-chat" className="p-3" style={{ background: '#efeae2', flex: 1, overflowY: 'auto', maxHeight: 460 }}>
+            {(c?.mensajes || []).map((m, i) => <Burbuja key={i} rol={m.rol} texto={m.texto} hora={m.created_at} autor={m.autor} />)}
+          </div>
+          <div className="p-3" style={{ borderTop: '1px solid var(--rmg-border, #e5e7eb)' }}>
+            {c && !c.ventana_abierta
+              ? <div className="text-sm" style={{ color: '#b45309' }}>Pasaron más de 24 h desde el último mensaje del cliente: WhatsApp no deja escribirle texto libre. Llámalo o espera a que escriba.</div>
+              : <div className="flex gap-2">
+                  <input className="rmg-input w-full" value={txt} placeholder="Responder como Abril… (el bot se pausa en este chat)" onChange={e => setTxt(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && txt.trim() && !responder.isPending && responder.mutate()} />
+                  <button className="btn-primary" disabled={!txt.trim() || responder.isPending} onClick={() => responder.mutate()}><Send size={14} /></button>
+                </div>}
+            {c?.ventana_abierta && <div style={{ fontSize: 11, color: 'var(--rmg-muted)', marginTop: 4 }}>Ventana de WhatsApp abierta por {c.horas_restantes} h más.</div>}
+          </div>
+        </>}
+      </div>
     </div>
   )
 }
@@ -592,7 +678,7 @@ export default function ProspeccionAutoPage() {
 
   const activo = !!s.config.activo
   const sinValidar = s.mensajes.filter(m => String(s.config.segmentos_activos || '').split(',').includes(m.segmento) && !m.validado_at)
-  const TABS = [['pipeline', 'Pipeline'], ['llamar', `Para llamar (${s.tarjetas?.llamar ?? 0})`], ['mensajes', 'Mensajes'], ['bot', 'Bot'], ...(dueno ? [['config', 'Configuración']] : [])]
+  const TABS = [['pipeline', 'Pipeline'], ['conversaciones', 'Conversaciones'], ['llamar', `Para llamar (${s.tarjetas?.llamar ?? 0})`], ['mensajes', 'Mensajes'], ['bot', 'Bot'], ...(dueno ? [['config', 'Configuración']] : [])]
 
   return (
     <div className="p-4 md:p-6">
@@ -640,6 +726,7 @@ export default function ProspeccionAutoPage() {
         </div>
       )}
       {tab === 'mensajes' && <Mensajes dueno={dueno} puedeEditar={puedeEditar} />}
+      {tab === 'conversaciones' && <Bandeja onAccion={setAccion} />}
       {tab === 'bot' && <SimuladorBot s={s} />}
       {tab === 'config' && dueno && <Configuracion s={s} />}
 
