@@ -23,7 +23,10 @@ const IVA = 0.19
 // La autorización de la nota de venta es del ADMINISTRADOR (2026-09-24, JC).
 // El gerente valida pagos, no autoriza notas de venta.
 const ROLES_AUTORIZAN = ['administrador']
-const ESTADOS_OC_VIGENTES = ['borrador', 'enviada', 'confirmada', 'recibida']
+// OC vigente = no anulada ni rechazada (2026-11-14: antes se filtraba por una
+// lista de estados que no existen en el flujo de OC, y la nota de venta dejaba
+// de contar la OC apenas salía de borrador).
+const { coberturaPedido, lineasPendientesPorPedido, ocVigente } = require('../services/coberturaPedido')
 
 // Costo de lista para un SKU — mismo criterio que ventasController.getLp.
 const costoDeLista = (codigo) => {
@@ -56,16 +59,20 @@ const withDetalle = (p) => {
   }
   const items = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(p.id)
   const ocs = ocsDelPedido(p.id)
-  const vigentes = ocs.filter(o => ESTADOS_OC_VIGENTES.includes(o.estado))
+  const vigentes = ocs.filter(ocVigente)
   const netoCompra = vigentes.reduce((a, o) => a + (Number(o.neto) || 0), 0)
   const netoVenta = Number(p.neto) || 0
   const costoItems = items.reduce((a, i) => a + (Number(i.costo_unitario || 0) * Number(i.cantidad || 0)), 0)
-  const base = netoCompra || costoItems
+  // Con varias OC por venta, lo que aún no tiene OC se estima al costo de la línea.
+  const cobertura = coberturaPedido(p.id)
+  const costoPendiente = cobertura.lineas.reduce((a, l) => a + l.pendiente * l.costo_unitario, 0)
+  const base = netoCompra > 0 ? netoCompra + costoPendiente : costoItems
   const margen = netoVenta - base
   return {
     ...p,
     items,
     ocs,
+    cobertura,
     documentos: adjuntos('pedido', p.id),
     oc_cliente: p.oc_cliente_doc_id
       ? db.prepare('SELECT id, nombre_archivo, tipo, created_at FROM documentos_adjuntos WHERE id = ?').get(p.oc_cliente_doc_id) || null
@@ -122,9 +129,12 @@ const getAll = (req, res) => {
       }
     }
 
+    const sinOc = lineasPendientesPorPedido(pedidoIds)
+
     res.json(pedidos.map(p => ({
       ...p,
       ocs: ocsPorPedido[p.id] || [],
+      lineas_sin_oc: sinOc[p.id] || 0,
       cotizacion_numero: p.cotizacion_id ? (cotNumeroPorId[p.cotizacion_id] || null) : null,
     })))
   } catch (err) {
@@ -399,9 +409,21 @@ const validarOC = (req, res) => {
   try {
     const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id)
     if (!p) return res.status(404).json({ error: 'Nota de venta no encontrada' })
-    const ocs = ocsDelPedido(p.id).filter(o => ESTADOS_OC_VIGENTES.includes(o.estado))
+    const ocs = ocsDelPedido(p.id).filter(ocVigente)
     if (!ocs.length) {
       return res.status(400).json({ error: 'Emite primero la OC al proveedor desde esta nota de venta', codigo: 'SIN_OC' })
+    }
+    // 2026-11-14: con varias OC por venta, validar exige que todas las líneas
+    // estén cubiertas. Si el resto sale de stock propio, se confirma con
+    // permitir_parcial=true (no detiene el proceso, pero queda explícito).
+    const cob = coberturaPedido(p.id)
+    if (!cob.completa && !req.body?.permitir_parcial) {
+      const faltan = cob.lineas.filter(l => l.pendiente > 0)
+      return res.status(400).json({
+        codigo: 'COBERTURA_INCOMPLETA',
+        error: `Quedan ${faltan.length} línea(s) sin OC al proveedor: ${faltan.map(l => `${l.codigo} (${l.pendiente})`).join(', ')}`,
+        pendientes: faltan,
+      })
     }
     db.prepare(`UPDATE pedidos SET estado = 'oc_validada', validado_por = ?, validado_at = datetime('now'),
       updated_at = datetime('now') WHERE id = ?`).run(req.user?.id || null, p.id)

@@ -63,6 +63,7 @@ export default function PedidosPage() {
   const [editando, setEditando] = useState(null)
   const [ocModal, setOcModal] = useState(null)      // pedido al que se le emite la OC
   const [ocForm, setOcForm] = useState(OC_INIT)
+  const [ocLineas, setOcLineas] = useState([])      // líneas de la NV que van en esta OC
   const [rechazoModal, setRechazoModal] = useState(null)
   const [motivo, setMotivo] = useState('')
 
@@ -76,6 +77,25 @@ export default function PedidosPage() {
     queryFn: () => api.get('/compras/proveedores').then(r => r.data),
     enabled: Boolean(ocModal),
   })
+
+  // Una venta puede llevar más de una OC: el modal trae las líneas de la nota
+  // de venta con lo que ya está en otra OC y lo que falta por pedir.
+  const { data: ocDetalle, isFetching: cargandoLineas } = useQuery({
+    queryKey: ['pedido-detalle', 'oc-modal', ocModal?.id],
+    queryFn: () => api.get(`/pedidos/${ocModal.id}`).then(r => r.data),
+    enabled: Boolean(ocModal),
+  })
+  useEffect(() => {
+    if (!ocModal) { setOcLineas([]); return }
+    setOcLineas((ocDetalle?.cobertura?.lineas || []).map(l => ({
+      ...l, sel: l.pendiente > 0, cantidad_oc: l.pendiente, precio_oc: l.costo_unitario,
+    })))
+  }, [ocModal, ocDetalle])
+  const setLinea = (codigo, cambios) =>
+    setOcLineas(ls => ls.map(l => (l.codigo === codigo ? { ...l, ...cambios } : l)))
+  const lineasOc = ocLineas.filter(l => l.sel && Number(l.cantidad_oc) > 0)
+  const netoOc = lineasOc.reduce((a, l) => a + Number(l.cantidad_oc) * Number(l.precio_oc || 0), 0)
+  const excedeOc = lineasOc.some(l => Number(l.cantidad_oc) > l.pendiente)
 
   // Permite llegar a una nota específica desde otra pantalla: /pedidos?expand=<id>
   const [searchParams, setSearchParams] = useSearchParams()
@@ -115,7 +135,10 @@ export default function PedidosPage() {
 
   // Paso 7 — el proveedor confirmó precio y plazo.
   const validarMut = useMutation({
-    mutationFn: (id) => api.post(`/pedidos/${id}/validar-oc`).then(r => r.data),
+    mutationFn: (arg) => {
+      const id = arg?.id || arg
+      return api.post(`/pedidos/${id}/validar-oc`, arg?.permitir_parcial ? { permitir_parcial: true } : {}).then(r => r.data)
+    },
     onSuccess: (data) => {
       refrescar()
       qc.invalidateQueries({ queryKey: ['ventas'] })
@@ -123,7 +146,17 @@ export default function PedidosPage() {
         ? `OC validada — venta ${data.venta.numero_documento} enviada a facturación`
         : 'OC validada')
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al validar la OC'),
+    onError: (e, arg) => {
+      const d = e.response?.data
+      // Quedan líneas sin OC: se puede seguir si salen de stock propio.
+      if (d?.codigo === 'COBERTURA_INCOMPLETA' && !arg?.permitir_parcial) {
+        if (confirm(`${d.error}.\n\n¿Validar igual? (esas líneas se despachan con stock propio)`)) {
+          validarMut.mutate({ id: arg?.id || arg, permitir_parcial: true })
+        }
+        return
+      }
+      toast.error(d?.error || 'Error al validar la OC')
+    },
   })
 
   const enviarAutorizacionMut = useMutation({
@@ -178,15 +211,30 @@ export default function PedidosPage() {
   // Acción principal según el punto del flujo (2026-09-24):
   // creada → enviar a autorización → (admin) autoriza → OC al proveedor →
   // validar OC → nace la venta "por facturar".
+  // Emitir OC al proveedor: disponible mientras queden líneas de la nota de
+  // venta sin OC (2026-11-14: una venta puede llevar varias OC).
+  const BotonOC = ({ p, otra = false }) => (
+    <button onClick={() => { setOcModal(p); setOcForm(OC_INIT) }}
+      className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
+      style={{ background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)' }}
+      title={otra ? `Quedan ${p.lineas_sin_oc} línea(s) sin OC al proveedor` : 'Emitir la orden de compra al proveedor'}>
+      <Truck size={11}/> {otra ? `+ OC (${p.lineas_sin_oc})` : 'OC proveedor'}
+    </button>
+  )
+  const puedeOtraOC = (p) => ['autorizado', 'oc_emitida', 'oc_validada'].includes(p.estado) && p.lineas_sin_oc > 0
+
   const AccionFlujo = ({ p }) => {
     if (p.venta_id) {
       return (
-        <button onClick={() => navigate('/ventas')}
-          className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
-          style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}
-          title="Ver la venta generada">
-          <Link2 size={11}/> Ver venta
-        </button>
+        <div className="flex gap-1.5">
+          <button onClick={() => navigate('/ventas')}
+            className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
+            style={{ background: 'rgba(45,201,138,0.12)', color: 'var(--rmg-teal)' }}
+            title="Ver la venta generada">
+            <Link2 size={11}/> Ver venta
+          </button>
+          {puedeOtraOC(p) && <BotonOC p={p} otra />}
+        </div>
       )
     }
     if (p.estado === 'rechazado') {
@@ -232,12 +280,7 @@ export default function PedidosPage() {
     if (p.estado === 'autorizado') {
       return (
         <div className="flex gap-1.5">
-          <button onClick={() => { setOcModal(p); setOcForm(OC_INIT) }}
-            className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold"
-            style={{ background: 'rgba(244,162,60,0.14)', color: 'var(--rmg-gold)' }}
-            title="Emitir la orden de compra al proveedor">
-            <Truck size={11}/> OC proveedor
-          </button>
+          <BotonOC p={p} />
           <button onClick={() => { if (confirm('¿Generar la venta sin OC al proveedor? Se despacha con stock propio.')) sinOcMut.mutate(p.id) }}
             disabled={sinOcMut.isPending}
             className="btn-secondary text-xs px-2 py-1 flex items-center gap-1 disabled:opacity-50"
@@ -250,12 +293,15 @@ export default function PedidosPage() {
     // 4) OC emitida → validar; al validar nace la venta
     if (p.estado === 'oc_emitida') {
       return (
-        <button onClick={() => validarMut.mutate(p.id)} disabled={validarMut.isPending}
-          className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold disabled:opacity-50"
-          style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}
-          title="El proveedor confirmó precio y plazo — genera la venta">
-          <Check size={11}/> Validar OC
-        </button>
+        <div className="flex gap-1.5">
+          <button onClick={() => validarMut.mutate(p.id)} disabled={validarMut.isPending}
+            className="text-xs px-2 py-1 rounded-lg flex items-center gap-1 font-semibold disabled:opacity-50"
+            style={{ background: 'rgba(56,182,255,0.12)', color: 'var(--rmg-blue)' }}
+            title="El proveedor confirmó precio y plazo — genera la venta">
+            <Check size={11}/> Validar OC
+          </button>
+          {puedeOtraOC(p) && <BotonOC p={p} otra />}
+        </div>
       )
     }
     return null
@@ -417,7 +463,7 @@ export default function PedidosPage() {
       {/* Modal: emitir OC al proveedor */}
       {ocModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,35,60,0.45)' }}>
-          <div className="rmg-card p-6 w-full max-w-md animate-fade-in space-y-3">
+          <div className="rmg-card p-6 w-full max-w-2xl animate-fade-in space-y-3" style={{ maxHeight: '92vh', overflowY: 'auto' }}>
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-bold">OC al proveedor</h2>
@@ -432,11 +478,71 @@ export default function PedidosPage() {
               style={{ background: 'rgba(56,182,255,0.06)', border: '1px solid rgba(56,182,255,0.2)' }}>
               <AlertTriangle size={13} style={{ color: 'var(--rmg-blue)', flexShrink: 0, marginTop: 1 }}/>
               <span style={{ color: 'var(--rmg-off)' }}>
-                Las líneas se copian de la nota de venta con el costo
+                Elige qué líneas de la nota de venta van en esta OC: una venta puede llevar más de una
+                (un proveedor por línea). El costo sugerido viene
                 {ocModal.origen_costos === 'respaldo' ? ' del respaldo del proveedor' : ' de la lista de precios'}.
-                Los precios se ajustan después en la OC.
               </span>
             </div>
+
+            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--rmg-border, rgba(148,163,184,0.25))' }}>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ color: 'var(--rmg-muted)' }}>
+                    {['', 'SKU', 'Venta', 'En OC', 'Cantidad', 'Costo neto', 'Subtotal'].map((h, i) => (
+                      <th key={i} className={`px-2 py-1.5 font-semibold ${i >= 2 ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cargandoLineas && !ocLineas.length ? (
+                    <tr><td colSpan={7} className="px-2 py-4 text-center" style={{ color: 'var(--rmg-muted)' }}>Cargando líneas…</td></tr>
+                  ) : ocLineas.map(l => {
+                    const cubierta = l.pendiente <= 0
+                    const excede = l.sel && Number(l.cantidad_oc) > l.pendiente
+                    return (
+                      <tr key={l.codigo} style={{ opacity: cubierta ? 0.5 : 1, borderTop: '1px solid var(--rmg-border, rgba(148,163,184,0.18))' }}>
+                        <td className="px-2 py-1.5">
+                          <input type="checkbox" checked={l.sel} disabled={cubierta}
+                            onChange={e => setLinea(l.codigo, { sel: e.target.checked })} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <div className="font-mono font-semibold">{l.codigo}</div>
+                          <div className="truncate" style={{ color: 'var(--rmg-muted)', maxWidth: 220 }} title={l.descripcion}>{l.descripcion}</div>
+                        </td>
+                        <td className="px-2 py-1.5 text-right">{formatCantidad(l.cantidad)}</td>
+                        <td className="px-2 py-1.5 text-right" style={{ color: cubierta ? 'var(--rmg-teal)' : undefined }}>
+                          {cubierta ? 'cubierta' : formatCantidad(l.en_oc)}
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          <input type="number" min="0" max={l.pendiente} step="any" disabled={!l.sel}
+                            className="rmg-input text-right" style={{ width: 72, padding: '2px 6px', borderColor: excede ? 'var(--rmg-red)' : undefined }}
+                            value={l.cantidad_oc} onChange={e => setLinea(l.codigo, { cantidad_oc: e.target.value })} />
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          <input type="number" min="0" step="any" disabled={!l.sel}
+                            className="rmg-input text-right" style={{ width: 96, padding: '2px 6px' }}
+                            value={l.precio_oc} onChange={e => setLinea(l.codigo, { precio_oc: e.target.value })} />
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-semibold">
+                          {l.sel ? formatCLP(Number(l.cantidad_oc) * Number(l.precio_oc || 0)) : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '1px solid var(--rmg-border, rgba(148,163,184,0.25))' }}>
+                    <td colSpan={6} className="px-2 py-1.5 text-right font-semibold">Neto de esta OC</td>
+                    <td className="px-2 py-1.5 text-right font-bold">{formatCLP(netoOc)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {excedeOc && (
+              <p className="text-xs" style={{ color: 'var(--rmg-red)' }}>
+                Hay cantidades mayores a lo que queda por pedir de la nota de venta.
+              </p>
+            )}
 
             <div>
               <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--rmg-muted)' }}>Proveedor</label>
@@ -475,8 +581,14 @@ export default function PedidosPage() {
             </div>
             <div className="flex gap-3 justify-end pt-1">
               <button onClick={() => { setOcModal(null); setOcForm(OC_INIT) }} className="btn-secondary">Cancelar</button>
-              <button disabled={!ocForm.proveedor || emitirOcMut.isPending}
-                onClick={() => emitirOcMut.mutate({ pedidoId: ocModal.id, data: ocForm })}
+              <button disabled={!ocForm.proveedor || !lineasOc.length || excedeOc || emitirOcMut.isPending}
+                onClick={() => emitirOcMut.mutate({ pedidoId: ocModal.id, data: {
+                  ...ocForm,
+                  items: lineasOc.map(l => ({
+                    codigo: l.codigo, descripcion: l.descripcion,
+                    cantidad: Number(l.cantidad_oc), precio_unitario: Number(l.precio_oc || 0),
+                  })),
+                } })}
                 className="btn-primary disabled:opacity-40 flex items-center gap-2">
                 <Truck size={14}/> {emitirOcMut.isPending ? 'Emitiendo…' : 'Emitir OC'}
               </button>

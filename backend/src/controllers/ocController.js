@@ -8,6 +8,7 @@
 const { db, uuidv4 } = require('../../config/database')
 const nodemailer = require('nodemailer')
 const { cruceParaCotizacion } = require('../services/cruceOcCotizacion')
+const { coberturaPedido, norm } = require('../services/coberturaPedido')
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,11 @@ function generarNumeroOC() {
 }
 
 // State machine — estados en snake_case, únicos en todo el sistema.
+// Desde el pago autorizado en adelante, eliminar la OC es solo del gerente (2026-10-26, pedido de JC):
+// borrarla deshace la CxP, la factura del proveedor y su egreso en caja.
+const ESTADOS_ELIMINA_SOLO_GERENTE = ['pago_autorizado', 'pagada']
+const puedeEliminar = (oc, user) => !ESTADOS_ELIMINA_SOLO_GERENTE.includes(oc.estado) || user?.rol === 'gerente'
+
 const TRANSICIONES = {
   borrador:               ['pendiente_autorizacion', 'anulada'],
   pendiente_autorizacion: ['autorizada', 'rechazada'],
@@ -280,14 +286,56 @@ const createOCDesdePedido = (req, res) => {
     const pedItems = db.prepare('SELECT * FROM pedido_items WHERE pedido_id = ?').all(pedido.id)
     if (!pedItems.length) return res.status(400).json({ error: 'La nota de venta no tiene ítems' })
 
-    const items = (Array.isArray(req.body?.items) && req.body.items.length)
-      ? req.body.items
-      : pedItems.map(i => ({
-          codigo: i.codigo_sku, descripcion: i.descripcion, cantidad: i.cantidad,
-          // Costo de compra sugerido: el respaldo del proveedor si se adjuntó,
-          // si no el precio de lista que ya quedó guardado en la línea.
-          precio_unitario: Number(i.costo_unitario) || 0,
-        }))
+    // 2026-11-14 (JC): una venta puede abastecerse con más de una OC. La OC
+    // puede traer solo ALGUNAS líneas de la nota de venta (items); si no trae
+    // ninguna, toma lo que aún no está cubierto por otra OC vigente. Nunca se
+    // puede pedir más de lo pendiente — así no nacen OC duplicadas.
+    const cob = coberturaPedido(pedido.id)
+    const porCodigo = new Map(cob.lineas.map(l => [norm(l.codigo), l]))
+    let items = []
+    if (Array.isArray(req.body?.items) && req.body.items.length) {
+      const pedidoEnEstaOc = new Map()
+      for (const it of req.body.items) {
+        const k = norm(it.codigo || it.sku)
+        const qty = Number(it.cantidad) || 0
+        if (qty <= 0) continue
+        const linea = porCodigo.get(k)
+        if (!linea) {
+          return res.status(400).json({
+            codigo: 'LINEA_AJENA',
+            error: `El SKU ${it.codigo || it.sku} no es parte de la nota de venta ${pedido.numero}`,
+          })
+        }
+        const acumulado = (pedidoEnEstaOc.get(k) || 0) + qty
+        if (acumulado > linea.pendiente + 1e-9) {
+          return res.status(400).json({
+            codigo: 'EXCEDE_PENDIENTE',
+            error: `${linea.codigo}: la nota de venta pide ${linea.cantidad}, ya hay ${linea.en_oc} en OC vigentes y quedan ${linea.pendiente} por pedir (se intentó ${acumulado})`,
+            cobertura: cob,
+          })
+        }
+        pedidoEnEstaOc.set(k, acumulado)
+        const precio = (it.precio_unitario ?? it.precio_compra_neto)
+        items.push({
+          codigo: linea.codigo, descripcion: it.descripcion || linea.descripcion, cantidad: qty,
+          precio_unitario: (precio === undefined || precio === null || precio === '') ? linea.costo_unitario : Number(precio) || 0,
+        })
+      }
+      if (!items.length) return res.status(400).json({ error: 'Ninguna línea tiene cantidad mayor a 0' })
+    } else {
+      // Costo de compra sugerido: el respaldo del proveedor si se adjuntó,
+      // si no el precio de lista que ya quedó guardado en la línea.
+      items = cob.lineas.filter(l => l.pendiente > 0).map(l => ({
+        codigo: l.codigo, descripcion: l.descripcion, cantidad: l.pendiente, precio_unitario: l.costo_unitario,
+      }))
+      if (!items.length) {
+        return res.status(400).json({
+          codigo: 'SIN_PENDIENTE',
+          error: `Todas las líneas de ${pedido.numero} ya están cubiertas por una OC vigente`,
+          cobertura: cob,
+        })
+      }
+    }
 
     req.body = { proveedor_id, proveedor, fecha_requerida, medio_pago, observaciones, notas,
                  cliente_id: pedido.cliente_id, cotizacion_id: pedido.cotizacion_id || null,
@@ -321,6 +369,27 @@ const updateOC = (req, res) => {
     const { proveedor_id, proveedor, fecha_requerida, medio_pago, notas, observaciones, items } = req.body
     const usuario_id = req.user?.id
     const usuario_nombre = req.user?.nombre || req.user?.email
+
+    // OC calzada a una nota de venta: al editar, las líneas que son de la venta
+    // no pueden exceder lo pendiente (sin contar esta misma OC).
+    if (items && oc.pedido_id) {
+      const cob = coberturaPedido(oc.pedido_id, { excluirOcId: oc.id })
+      const porCodigo = new Map(cob.lineas.map(l => [norm(l.codigo), l]))
+      const enEstaOc = new Map()
+      for (const it of items) {
+        const k = norm(it.codigo)
+        const linea = porCodigo.get(k)
+        if (!linea) continue
+        const acumulado = (enEstaOc.get(k) || 0) + (Number(it.cantidad) || 0)
+        if (acumulado > linea.pendiente + 1e-9) {
+          return res.status(400).json({
+            codigo: 'EXCEDE_PENDIENTE',
+            error: `${linea.codigo}: la nota de venta pide ${linea.cantidad} y otras OC vigentes ya cubren ${linea.en_oc}; esta OC puede llevar hasta ${linea.pendiente}`,
+          })
+        }
+        enEstaOc.set(k, acumulado)
+      }
+    }
 
     let neto = oc.neto, iva = oc.iva, total = oc.total
     if (items) {
@@ -433,6 +502,11 @@ const patchEstadoOC = (req, res) => {
 
     const ejecutar = db.transaction(() => {
       db.prepare(`UPDATE ordenes_compra SET ${cols.join(', ')} WHERE id = ?`).run(...vals)
+
+      // Al autorizar el pago, la CxP de esta OC pasa a "pago_autorizado" (antes quedaba "pendiente").
+      if (nuevo_estado === 'pago_autorizado') {
+        db.prepare("UPDATE facturas_cxp SET estado = 'pago_autorizado' WHERE oc_id = ? AND estado != 'pagada'").run(oc.id)
+      }
 
       // Al autorizar el pago se registra el egreso y se cierra la CxP asociada.
       //
@@ -854,7 +928,8 @@ const getImpactoEliminacion = (req, res) => {
       compra_id: compraVinculada?.id || null,
       tiene_factura_vinculada: !!facturaVinculada,
       factura_id: facturaVinculada?.id || null,
-      puede_eliminar: true,
+      puede_eliminar: puedeEliminar(oc, req.user),
+      motivo_no_eliminar: puedeEliminar(oc, req.user) ? null : 'Con el pago autorizado, solo el gerente puede eliminar esta OC',
       advertencias,
     })
   } catch (err) {
@@ -869,6 +944,9 @@ const deleteOC = (req, res) => {
 
     const oc = db.prepare('SELECT * FROM ordenes_compra WHERE id = ?').get(req.params.id)
     if (!oc) return res.status(404).json({ error: 'OC no encontrada' })
+    if (!puedeEliminar(oc, req.user)) {
+      return res.status(403).json({ error: `La OC ${oc.numero} tiene el pago autorizado: solo el gerente puede eliminarla` })
+    }
 
     const movimientosEntrada = db.prepare(
       "SELECT * FROM movimientos_stock WHERE referencia = ? AND motivo = 'recepcion_oc' AND tipo = 'entrada'"
@@ -985,7 +1063,7 @@ const actualizarPreciosOC = (req, res) => {
 }
 
 module.exports = {
-  TRANSICIONES, ROLES_REQUERIDOS,
+  TRANSICIONES, ROLES_REQUERIDOS, ESTADOS_ELIMINA_SOLO_GERENTE,
   getOCs, getOC, createOC, updateOC, patchEstadoOC,
   registrarRecepcionOC, getRecepcionesOC, getPendientesFacturar, registrarFactura,
   generarPdfOC, enviarEmailOC,
