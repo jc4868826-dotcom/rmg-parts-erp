@@ -2,6 +2,7 @@
  * RMG Parts — Rutas de documentos adjuntos
  * GET    /api/documentos/:entidad/:entidadId   listar
  * POST   /api/documentos/:entidad/:entidadId   subir (multipart, campo "archivo")
+ * POST   /api/documentos/:entidad/:entidadId/json  subir (JSON, contenido en base64)
  * GET    /api/documentos/archivo/:id           descargar/ver
  * DELETE /api/documentos/:id                   eliminar
  */
@@ -15,6 +16,8 @@ const { uploadDocumento } = require('../middleware/documentos')
 router.get('/archivo/:id', c.descargar)
 router.get('/:entidad/:entidadId', authenticate, c.listar)
 router.post('/:entidad/:entidadId', authenticate, uploadDocumento.single('archivo'), c.subir)
+// Misma alta, sin multipart — para clientes que solo pueden mandar JSON (conector MCP).
+router.post('/:entidad/:entidadId/json', authenticate, c.subirJson)
 router.delete('/:id', authenticate, c.eliminar)
 
 module.exports = router
